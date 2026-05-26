@@ -1,0 +1,330 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_game"
+    android:orientation="vertical">
+
+    <!-- Top Bar: Timer + Stars + Difficulty -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="@dimen/spacing_md"
+        android:background="@color/white">
+
+        <!-- Back button -->
+        <ImageButton
+            android:id="@+id/btnBack"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_menu_revert"
+            android:contentDescription="Back"
+            android:scaleType="centerInside" />
+
+        <!-- Timer -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="⏱️"
+                android:textSize="18sp" />
+
+            <TextView
+                android:id="@+id/tvTimer"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:fontFamily="sans-serif-bold"
+                android:text="00:00"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_md" />
+
+        </LinearLayout>
+
+        <!-- Stars -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:background="@drawable/bg_card_rounded"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="⭐"
+                android:textSize="16sp" />
+
+            <TextView
+                android:id="@+id/tvStars"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:fontFamily="sans-serif-bold"
+                android:text="+0"
+                android:textColor="@color/star_gold"
+                android:textSize="@dimen/text_sm" />
+
+        </LinearLayout>
+
+        <!-- Difficulty badge -->
+        <TextView
+            android:id="@+id/tvDifficulty"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_card_rounded"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp"
+            android:fontFamily="sans-serif-medium"
+            android:text="Easy"
+            android:textColor="@color/secondary"
+            android:textSize="@dimen/text_xs" />
+
+    </LinearLayout>
+
+    <!-- Instruction -->
+    <TextView
+        android:id="@+id/tvInstruction"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:paddingTop="@dimen/spacing_md"
+        android:paddingBottom="@dimen/spacing_sm"
+        android:paddingStart="@dimen/spacing_md"
+        android:paddingEnd="@dimen/spacing_md"
+        android:fontFamily="sans-serif-bold"
+        android:text="@string/count_all_instruction"
+        android:textColor="@color/text_primary"
+        android:textSize="@dimen/text_lg" />
+
+    <!-- Problem display: num1 + num2 = ? -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:padding="@dimen/spacing_sm">
+
+        <TextView
+            android:id="@+id/tvNum1"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="sans-serif-black"
+            android:text="3"
+            android:textColor="@color/count_all_color"
+            android:textSize="@dimen/text_xxl" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/spacing_md"
+            android:layout_marginEnd="@dimen/spacing_md"
+            android:fontFamily="sans-serif-black"
+            android:text="+"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/text_xl" />
+
+        <TextView
+            android:id="@+id/tvNum2"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="sans-serif-black"
+            android:text="2"
+            android:textColor="@color/secondary"
+            android:textSize="@dimen/text_xxl" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/spacing_md"
+            android:layout_marginEnd="@dimen/spacing_md"
+            android:fontFamily="sans-serif-black"
+            android:text="="
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/text_xl" />
+
+        <TextView
+            android:id="@+id/tvAnswer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="sans-serif-black"
+            android:text="?"
+            android:textColor="@color/accent_dark"
+            android:textSize="@dimen/text_xxl" />
+
+    </LinearLayout>
+
+    <!-- Fruit objects area -->
+    <com.google.android.material.card.MaterialCardView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_margin="@dimen/spacing_md"
+        app:cardCornerRadius="@dimen/corner_md"
+        app:cardElevation="@dimen/card_elevation"
+        app:cardBackgroundColor="@color/white">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:padding="@dimen/spacing_md">
+
+            <!-- Group 1 -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Group 1:"
+                android:textColor="@color/count_all_color"
+                android:fontFamily="sans-serif-bold"
+                android:textSize="@dimen/text_sm" />
+
+            <TextView
+                android:id="@+id/tvGroup1Objects"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="🍎 🍎 🍎"
+                android:textSize="36sp"
+                android:gravity="center"
+                android:lineSpacingMultiplier="1.3" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="@dimen/spacing_sm"
+                android:layout_marginBottom="@dimen/spacing_sm"
+                android:background="@color/divider" />
+
+            <!-- Group 2 -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Group 2:"
+                android:textColor="@color/secondary"
+                android:fontFamily="sans-serif-bold"
+                android:textSize="@dimen/text_sm" />
+
+            <TextView
+                android:id="@+id/tvGroup2Objects"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="🍓 🍓"
+                android:textSize="36sp"
+                android:gravity="center"
+                android:lineSpacingMultiplier="1.3" />
+
+        </LinearLayout>
+
+    </com.google.android.material.card.MaterialCardView>
+
+    <!-- Answer Input -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:paddingStart="@dimen/spacing_md"
+        android:paddingEnd="@dimen/spacing_md"
+        android:paddingBottom="@dimen/spacing_sm">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/your_answer"
+            android:textColor="@color/text_primary"
+            android:fontFamily="sans-serif-bold"
+            android:textSize="@dimen/text_md" />
+
+        <!-- Number picker buttons -->
+        <LinearLayout
+            android:id="@+id/numberButtonsContainer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/spacing_sm"
+            android:orientation="horizontal">
+            <!-- Populated programmatically -->
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <!-- Selected answer display -->
+    <TextView
+        android:id="@+id/tvSelectedAnswer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:fontFamily="sans-serif-black"
+        android:textColor="@color/primary"
+        android:textSize="@dimen/text_xl"
+        android:text="Tap a number!" />
+
+    <!-- Feedback area -->
+    <TextView
+        android:id="@+id/tvFeedback"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:padding="@dimen/spacing_sm"
+        android:fontFamily="sans-serif-bold"
+        android:textSize="@dimen/text_md"
+        android:visibility="gone" />
+
+    <!-- Buttons: Hint + Submit -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:padding="@dimen/spacing_md">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnHint"
+            android:layout_width="0dp"
+            android:layout_height="@dimen/button_height"
+            android:layout_weight="1"
+            android:layout_marginEnd="@dimen/spacing_sm"
+            android:text="@string/btn_hint"
+            android:textAllCaps="false"
+            android:textSize="@dimen/text_sm"
+            android:fontFamily="sans-serif-bold"
+            app:backgroundTint="@color/accent"
+            app:cornerRadius="@dimen/corner_lg"
+            android:textColor="@color/text_primary"
+            app:icon="@android:drawable/ic_menu_help"
+            app:iconTint="@color/text_primary" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnSubmit"
+            android:layout_width="0dp"
+            android:layout_height="@dimen/button_height"
+            android:layout_weight="1"
+            android:text="@string/btn_submit"
+            android:textAllCaps="false"
+            android:textSize="@dimen/text_sm"
+            android:fontFamily="sans-serif-bold"
+            app:backgroundTint="@color/primary"
+            app:cornerRadius="@dimen/corner_lg"
+            android:textColor="@color/white" />
+
+    </LinearLayout>
+
+</LinearLayout>
