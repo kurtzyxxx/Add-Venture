@@ -8,30 +8,24 @@
     android:orientation="vertical"
     android:padding="@dimen/spacing_lg">
 
-    <!-- Celebration emoji -->
+    <!-- Session Summary Title (Reusing ID for bounce animation) -->
     <TextView
         android:id="@+id/tvCelebration"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="🎉"
-        android:textSize="80sp" />
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/spacing_md"
         android:fontFamily="sans-serif-black"
-        android:text="@string/session_complete"
+        android:text="Session Summary"
         android:textColor="@color/white"
-        android:textSize="@dimen/text_xl" />
+        android:textSize="28sp" />
 
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/spacing_xs"
-        android:text="@string/session_great_job"
+        android:layout_marginTop="8dp"
+        android:fontFamily="sans-serif-bold"
+        android:text="@string/session_complete"
         android:textColor="#FFFFFFCC"
-        android:textSize="@dimen/text_md" />
+        android:textSize="18sp" />
 
     <!-- Summary Card -->
     <com.google.android.material.card.MaterialCardView
@@ -49,95 +43,22 @@
             android:orientation="vertical"
             android:padding="@dimen/spacing_lg">
 
-            <!-- Activities Completed -->
+            <!-- Stars Earned Section -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:gravity="center"
-                android:orientation="horizontal"
-                android:padding="@dimen/spacing_sm">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:fontFamily="sans-serif-bold"
-                    android:text="📝 Activities Completed"
-                    android:textColor="@color/text_primary"
-                    android:textSize="@dimen/text_md" />
-
-                <TextView
-                    android:id="@+id/tvActivities"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:fontFamily="sans-serif-black"
-                    android:text="5"
-                    android:textColor="@color/primary"
-                    android:textSize="@dimen/text_lg" />
-            </LinearLayout>
-
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="1dp"
-                android:background="@color/divider" />
-
-            <!-- Correct Answers -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="center"
-                android:orientation="horizontal"
-                android:padding="@dimen/spacing_sm">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:fontFamily="sans-serif-bold"
-                    android:text="✅ Correct Answers"
-                    android:textColor="@color/text_primary"
-                    android:textSize="@dimen/text_md" />
-
-                <TextView
-                    android:id="@+id/tvCorrect"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:fontFamily="sans-serif-black"
-                    android:text="4"
-                    android:textColor="@color/correct_green"
-                    android:textSize="@dimen/text_lg" />
-            </LinearLayout>
-
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="1dp"
-                android:background="@color/divider" />
-
-            <!-- Stars Earned -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="center"
-                android:orientation="horizontal"
-                android:padding="@dimen/spacing_sm">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:fontFamily="sans-serif-bold"
-                    android:text="⭐ Stars Earned"
-                    android:textColor="@color/text_primary"
-                    android:textSize="@dimen/text_md" />
+                android:orientation="vertical"
+                android:padding="@dimen/spacing_md">
 
                 <TextView
                     android:id="@+id/tvStarsEarned"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:fontFamily="sans-serif-black"
-                    android:text="12"
+                    android:text="+8 Stars"
                     android:textColor="@color/star_gold"
-                    android:textSize="@dimen/text_lg" />
+                    android:textSize="36sp" />
             </LinearLayout>
 
             <View
@@ -145,31 +66,48 @@
                 android:layout_height="1dp"
                 android:background="@color/divider" />
 
-            <!-- Accuracy -->
+            <!-- Activities Section -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:gravity="center"
-                android:orientation="horizontal"
-                android:padding="@dimen/spacing_sm">
+                android:orientation="vertical"
+                android:padding="@dimen/spacing_md">
 
                 <TextView
-                    android:layout_width="0dp"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
                     android:fontFamily="sans-serif-bold"
-                    android:text="📊 Accuracy"
+                    android:text="Activities"
                     android:textColor="@color/text_primary"
-                    android:textSize="@dimen/text_md" />
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:id="@+id/tvActivities"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:fontFamily="sans-serif-black"
+                    android:text="15"
+                    android:textColor="@color/primary"
+                    android:textSize="28sp" />
+            </LinearLayout>
+
+            <!-- Hidden fields kept for compilation and Kotlin binding compatibility -->
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/tvCorrect"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" />
 
                 <TextView
                     android:id="@+id/tvAccuracy"
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:fontFamily="sans-serif-black"
-                    android:text="80%"
-                    android:textColor="@color/secondary"
-                    android:textSize="@dimen/text_lg" />
+                    android:layout_height="wrap_content" />
             </LinearLayout>
 
         </LinearLayout>

@@ -33,14 +33,15 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="⏱️"
-                android:textSize="18sp" />
+                android:fontFamily="sans-serif-medium"
+                android:text="Time: "
+                android:textColor="@color/text_secondary"
+                android:textSize="14sp" />
 
             <TextView
                 android:id="@+id/tvTimer"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="4dp"
                 android:fontFamily="sans-serif-bold"
                 android:text="00:00"
                 android:textColor="@color/text_primary"
@@ -89,6 +90,17 @@
             android:textColor="@color/secondary"
             android:textSize="@dimen/text_xs" />
     </LinearLayout>
+
+    <!-- Activity Title -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:layout_marginTop="8dp"
+        android:fontFamily="sans-serif-black"
+        android:text="Count On Activity"
+        android:textColor="@color/count_on_color"
+        android:textSize="20sp" />
 
     <!-- Instruction -->
     <TextView
@@ -158,7 +170,9 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/spacing_md"
-                android:text="➕"
+                android:fontFamily="sans-serif-black"
+                android:text="+"
+                android:textColor="@color/primary"
                 android:textSize="32sp" />
 
             <TextView

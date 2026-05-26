@@ -9,6 +9,7 @@ import com.addventure.app.R
 import com.addventure.app.databinding.ActivityAdventureMapBinding
 import com.addventure.app.logic.ActivityManager
 import com.addventure.app.viewmodel.ActivityViewModel
+import com.addventure.app.data.entity.ProgressRecord
 
 class AdventureMapActivity : AppCompatActivity() {
 
@@ -27,6 +28,26 @@ class AdventureMapActivity : AppCompatActivity() {
 
     private fun observeProgress() {
         viewModel.getProgressRecords().observe(this) { progressList ->
+            val countAllProgress = progressList.find { it.strategy == ActivityManager.STRATEGY_COUNT_ALL }
+            val countOnProgress = progressList.find { it.strategy == ActivityManager.STRATEGY_COUNT_ON }
+
+            val countAllAccuracy = if (countAllProgress != null && countAllProgress.totalAttempts > 0) {
+                countAllProgress.totalCorrect.toFloat() / countAllProgress.totalAttempts
+            } else 0f
+
+            val isCountOnQualified = countAllProgress != null && 
+                                     countAllProgress.completedActivities >= 3 && 
+                                     countAllAccuracy >= 0.70f
+
+            val countOnAccuracy = if (countOnProgress != null && countOnProgress.totalAttempts > 0) {
+                countOnProgress.totalCorrect.toFloat() / countOnProgress.totalAttempts
+            } else 0f
+
+            val isNumberBondsQualified = isCountOnQualified && 
+                                         countOnProgress != null && 
+                                         countOnProgress.completedActivities >= 3 && 
+                                         countOnAccuracy >= 0.70f
+
             progressList.forEach { progress ->
                 val (container, label) = when (progress.strategy) {
                     ActivityManager.STRATEGY_COUNT_ALL ->
@@ -38,8 +59,25 @@ class AdventureMapActivity : AppCompatActivity() {
                     else -> return@forEach
                 }
 
-                buildPathNodes(container, progress.unlockedLevel, progress.completedActivities)
-                label.text = "Level ${progress.unlockedLevel} unlocked • ${progress.completedActivities} completed • ⭐ ${progress.starsEarned}"
+                val isQualified = when (progress.strategy) {
+                    ActivityManager.STRATEGY_COUNT_ALL -> true
+                    ActivityManager.STRATEGY_COUNT_ON -> isCountOnQualified
+                    ActivityManager.STRATEGY_NUMBER_BONDS -> isNumberBondsQualified
+                    else -> false
+                }
+
+                if (isQualified) {
+                    buildPathNodes(container, progress.unlockedLevel, progress.completedActivities)
+                    label.text = "Level ${progress.unlockedLevel} unlocked • ${progress.completedActivities} completed • Stars: ${progress.starsEarned}"
+                } else {
+                    buildPathNodes(container, 0, 0)
+                    val parentStrategy = when (progress.strategy) {
+                        ActivityManager.STRATEGY_COUNT_ON -> "Count All"
+                        ActivityManager.STRATEGY_NUMBER_BONDS -> "Count On"
+                        else -> ""
+                    }
+                    label.text = "Locked • Complete $parentStrategy with at least 70% accuracy to unlock"
+                }
             }
         }
     }
@@ -62,9 +100,11 @@ class AdventureMapActivity : AppCompatActivity() {
                 when {
                     i <= completed / 3 -> {
                         // Completed
-                        text = "✅"
-                        textSize = 24f
-                        setBackgroundColor(getColor(R.color.node_completed))
+                        text = "✓"
+                        setTextColor(getColor(R.color.white))
+                        setBackgroundResource(R.drawable.bg_number_bond_circle)
+                        background.setTint(getColor(R.color.node_completed))
+                        textSize = 16f
                     }
                     i <= unlockedLevel -> {
                         // Unlocked
@@ -75,9 +115,9 @@ class AdventureMapActivity : AppCompatActivity() {
                     }
                     else -> {
                         // Locked
-                        text = "🔒"
-                        textSize = 20f
-                        setBackgroundColor(getColor(R.color.node_locked))
+                        text = ""
+                        setBackgroundResource(R.drawable.bg_number_bond_circle)
+                        background.setTint(getColor(R.color.node_locked))
                     }
                 }
             }

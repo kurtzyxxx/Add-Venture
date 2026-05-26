@@ -22,7 +22,7 @@ class SessionSummaryActivity : AppCompatActivity() {
 
         binding.tvActivities.text = totalActivities.toString()
         binding.tvCorrect.text = totalCorrect.toString()
-        binding.tvStarsEarned.text = totalStars.toString()
+        binding.tvStarsEarned.text = "+$totalStars Stars"
         binding.tvAccuracy.text = "${(accuracy * 100).toInt()}%"
 
         binding.btnPlayAgain.setOnClickListener {
@@ -41,14 +41,20 @@ class SessionSummaryActivity : AppCompatActivity() {
     }
 
     private fun animateEntry() {
-        // Celebration bounce
-        binding.tvCelebration.scaleX = 0f
-        binding.tvCelebration.scaleY = 0f
-        binding.tvCelebration.animate()
-            .scaleX(1f)
-            .scaleY(1f)
-            .setDuration(800)
-            .setInterpolator(OvershootInterpolator(2f))
-            .start()
+        val isSmoothMode = getSharedPreferences("add_venture_prefs", MODE_PRIVATE).getBoolean("smooth_mode", false)
+        if (isSmoothMode) {
+            binding.tvCelebration.scaleX = 1f
+            binding.tvCelebration.scaleY = 1f
+        } else {
+            // Celebration bounce
+            binding.tvCelebration.scaleX = 0f
+            binding.tvCelebration.scaleY = 0f
+            binding.tvCelebration.animate()
+                .scaleX(1f)
+                .scaleY(1f)
+                .setDuration(800)
+                .setInterpolator(OvershootInterpolator(2f))
+                .start()
+        }
     }
 }

@@ -19,13 +19,22 @@ class SplashActivity : AppCompatActivity() {
         binding = ActivitySplashBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        animateSplash()
+        val sharedPrefs = getSharedPreferences("add_venture_prefs", MODE_PRIVATE)
+        val isSmoothMode = sharedPrefs.getBoolean("smooth_mode", false)
 
-        Handler(Looper.getMainLooper()).postDelayed({
+        if (isSmoothMode) {
+            // Bypass splash animation and delay for speed & smoothness
             startActivity(Intent(this, HomeActivity::class.java))
             finish()
-            overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
-        }, 2500)
+        } else {
+            animateSplash()
+
+            Handler(Looper.getMainLooper()).postDelayed({
+                startActivity(Intent(this, HomeActivity::class.java))
+                finish()
+                overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
+            }, 2500)
+        }
     }
 
     private fun animateSplash() {

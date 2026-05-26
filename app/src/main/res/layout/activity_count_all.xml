@@ -36,14 +36,15 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="⏱️"
-                android:textSize="18sp" />
+                android:fontFamily="sans-serif-medium"
+                android:text="Time: "
+                android:textColor="@color/text_secondary"
+                android:textSize="14sp" />
 
             <TextView
                 android:id="@+id/tvTimer"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="4dp"
                 android:fontFamily="sans-serif-bold"
                 android:text="00:00"
                 android:textColor="@color/text_primary"
@@ -98,6 +99,17 @@
             android:textSize="@dimen/text_xs" />
 
     </LinearLayout>
+
+    <!-- Activity Title -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:layout_marginTop="8dp"
+        android:fontFamily="sans-serif-black"
+        android:text="Count All"
+        android:textColor="@color/count_all_color"
+        android:textSize="20sp" />
 
     <!-- Instruction -->
     <TextView
@@ -171,62 +183,67 @@
 
     </LinearLayout>
 
-    <!-- Fruit objects area -->
-    <com.google.android.material.card.MaterialCardView
+    <!-- Fruit objects area & Drop Zone -->
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:layout_margin="@dimen/spacing_md"
-        app:cardCornerRadius="@dimen/corner_md"
-        app:cardElevation="@dimen/card_elevation"
-        app:cardBackgroundColor="@color/white">
+        android:orientation="vertical"
+        android:layout_margin="@dimen/spacing_md">
 
+        <!-- Source Fruit Area -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1.2"
+            android:layout_marginBottom="@dimen/spacing_sm"
+            app:cardCornerRadius="@dimen/corner_md"
+            app:cardElevation="@dimen/card_elevation"
+            app:cardBackgroundColor="@color/white">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:padding="@dimen/spacing_md">
+
+                <TextView
+                    android:id="@+id/tvGroup1Objects"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="🍎 🍎 🍎"
+                    android:textSize="36sp"
+                    android:gravity="center"
+                    android:lineSpacingMultiplier="1.3" />
+
+            </LinearLayout>
+
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Drag Zone / Drop here! -->
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1.8"
+            android:background="@drawable/bg_drop_zone"
             android:orientation="vertical"
+            android:gravity="center"
             android:padding="@dimen/spacing_md">
 
-            <!-- Group 1 -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Group 1:"
-                android:textColor="@color/count_all_color"
+                android:text="Drag zone! Drop here!"
+                android:textColor="@color/drop_zone_border"
                 android:fontFamily="sans-serif-bold"
-                android:textSize="@dimen/text_sm" />
-
-            <TextView
-                android:id="@+id/tvGroup1Objects"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:text="🍎 🍎 🍎"
-                android:textSize="36sp"
-                android:gravity="center"
-                android:lineSpacingMultiplier="1.3" />
-
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="1dp"
-                android:layout_marginTop="@dimen/spacing_sm"
-                android:layout_marginBottom="@dimen/spacing_sm"
-                android:background="@color/divider" />
-
-            <!-- Group 2 -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Group 2:"
-                android:textColor="@color/secondary"
-                android:fontFamily="sans-serif-bold"
-                android:textSize="@dimen/text_sm" />
+                android:textSize="@dimen/text_md"
+                android:layout_marginBottom="@dimen/spacing_sm" />
 
             <TextView
                 android:id="@+id/tvGroup2Objects"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
                 android:text="🍓 🍓"
                 android:textSize="36sp"
                 android:gravity="center"
@@ -234,7 +251,7 @@
 
         </LinearLayout>
 
-    </com.google.android.material.card.MaterialCardView>
+    </LinearLayout>
 
     <!-- Answer Input -->
     <LinearLayout

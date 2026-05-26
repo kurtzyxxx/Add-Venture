@@ -26,6 +26,7 @@ class CountAllActivity : AppCompatActivity() {
     private var elapsedSeconds = 0
     private var activitiesThisSession = 0
     private val maxActivitiesPerSession = 5
+    private var correctDialog: androidx.appcompat.app.AlertDialog? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -41,16 +42,16 @@ class CountAllActivity : AppCompatActivity() {
     private fun setupUI() {
         binding.btnBack.setOnClickListener { onBackPressedDispatcher.onBackPressed() }
 
-        binding.btnSubmit.setOnClickListener {
+        binding.btnSubmit.setBouncyClickListener {
             val answer = selectedAnswer
             if (answer != null) {
                 viewModel.submitAnswer(answer)
             } else {
-                Toast.makeText(this, "Tap a number first! 👆", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Tap a number first!", Toast.LENGTH_SHORT).show()
             }
         }
 
-        binding.btnHint.setOnClickListener {
+        binding.btnHint.setBouncyClickListener {
             val hint = viewModel.useHint()
             showHintDialog(hint)
         }
@@ -71,9 +72,19 @@ class CountAllActivity : AppCompatActivity() {
             setupNumberButtons(problem.num1 + problem.num2)
 
             selectedAnswer = null
-            binding.tvSelectedAnswer.text = "Tap a number!"
+            binding.tvSelectedAnswer.text = "What is the total?"
             binding.tvFeedback.visibility = View.GONE
             binding.btnSubmit.isEnabled = true
+
+            // Trigger animations if smooth mode is disabled
+            val isSmoothMode = getSharedPreferences("add_venture_prefs", MODE_PRIVATE).getBoolean("smooth_mode", false)
+            if (!isSmoothMode) {
+                binding.tvNum1.fadeInPop(0)
+                binding.tvNum2.fadeInPop(80)
+                binding.tvAnswer.fadeInPop(160)
+                binding.tvGroup1Objects.fadeInPop(240)
+                binding.tvGroup2Objects.fadeInPop(320)
+            }
 
             startTimer()
         }
@@ -83,6 +94,8 @@ class CountAllActivity : AppCompatActivity() {
 
             timer?.cancel()
 
+            val isSmoothMode = getSharedPreferences("add_venture_prefs", MODE_PRIVATE).getBoolean("smooth_mode", false)
+
             if (isCorrect) {
                 val problem = viewModel.currentProblem.value ?: return@observe
                 binding.tvAnswer.text = problem.correctAnswer.toString()
@@ -91,18 +104,13 @@ class CountAllActivity : AppCompatActivity() {
                 binding.btnSubmit.isEnabled = false
 
                 activitiesThisSession++
-
-                // Show star feedback with delay then load next or finish
-                binding.root.postDelayed({
-                    if (activitiesThisSession >= maxActivitiesPerSession) {
-                        finishSession()
-                    } else {
-                        loadNewProblem()
-                    }
-                }, 2000)
+                showCorrectDialog()
             } else {
                 binding.tvFeedback.visibility = View.VISIBLE
                 binding.tvFeedback.setTextColor(getColor(R.color.incorrect_red))
+                if (!isSmoothMode) {
+                    binding.tvFeedback.shake()
+                }
                 showRetryDialog()
             }
         }
@@ -124,7 +132,11 @@ class CountAllActivity : AppCompatActivity() {
 
         viewModel.unlockEvent.observe(this) { strategy ->
             strategy?.let {
-                Toast.makeText(this, "🎉 New activity unlocked!", Toast.LENGTH_LONG).show()
+                val dialog = correctDialog
+                if (dialog != null && dialog.isShowing) {
+                    val stars = viewModel.earnedStars.value ?: 0
+                    dialog.setMessage("+$stars Stars\n\nYou Unlocked")
+                }
                 viewModel.clearUnlockEvent()
             }
         }
@@ -141,7 +153,7 @@ class CountAllActivity : AppCompatActivity() {
         }
 
         options.sorted().forEach { num ->
-            val button = MaterialButton(this, null, R.attr.materialButtonStyle).apply {
+            val button = MaterialButton(this, null, com.google.android.material.R.attr.materialButtonStyle).apply {
                 text = num.toString()
                 textSize = 18f
                 minimumWidth = 0
@@ -154,7 +166,7 @@ class CountAllActivity : AppCompatActivity() {
                 setBackgroundColor(getColor(R.color.secondary))
                 setTextColor(getColor(R.color.white))
 
-                setOnClickListener {
+                setBouncyClickListener {
                     selectedAnswer = num
                     binding.tvSelectedAnswer.text = num.toString()
                     binding.tvAnswer.text = num.toString()
@@ -196,26 +208,58 @@ class CountAllActivity : AppCompatActivity() {
     }
 
     private fun showHintDialog(hint: String) {
-        val strategy = viewModel.currentProblem.value?.strategy ?: ""
-        val mascotMessage = viewModel.hintManager.getMascotMessage(strategy)
-
         MaterialAlertDialogBuilder(this, com.google.android.material.R.style.MaterialAlertDialog_Material3)
-            .setTitle("🦉 Owly says...")
-            .setMessage("$mascotMessage\n\n$hint")
-            .setPositiveButton(getString(R.string.btn_got_it)) { dialog, _ -> dialog.dismiss() }
+            .setTitle("Need a hint?")
+            .setMessage(hint)
+            .setPositiveButton("Got it!") { dialog, _ -> dialog.dismiss() }
             .setCancelable(true)
             .show()
     }
 
+    private fun showCorrectDialog() {
+        val stars = viewModel.earnedStars.value ?: 0
+        val message = "+$stars Stars"
+
+        val builder = MaterialAlertDialogBuilder(this, com.google.android.material.R.style.MaterialAlertDialog_Material3)
+            .setTitle("Great Job!")
+            .setMessage(message)
+            .setPositiveButton("Got it!") { dialog, _ ->
+                dialog.dismiss()
+                proceedAfterAnswer()
+            }
+            .setCancelable(false)
+
+        val dialog = builder.create()
+        correctDialog = dialog
+        dialog.show()
+
+        val isSmoothMode = getSharedPreferences("add_venture_prefs", MODE_PRIVATE).getBoolean("smooth_mode", false)
+        val delay = if (isSmoothMode) 1200L else 2000L
+        binding.root.postDelayed({
+            if (dialog.isShowing) {
+                dialog.dismiss()
+                proceedAfterAnswer()
+            }
+        }, delay)
+    }
+
+    private fun proceedAfterAnswer() {
+        if (activitiesThisSession >= maxActivitiesPerSession) {
+            finishSession()
+        } else {
+            loadNewProblem()
+        }
+    }
+
     private fun showRetryDialog() {
         MaterialAlertDialogBuilder(this, com.google.android.material.R.style.MaterialAlertDialog_Material3)
-            .setTitle("Oops! 😊")
-            .setMessage(viewModel.feedbackMessage.value ?: getString(R.string.feedback_incorrect))
+            .setTitle("Oops! Not quite.")
+            .setMessage("Let's try again!")
             .setPositiveButton(getString(R.string.btn_try_again)) { dialog, _ ->
                 viewModel.retry()
                 dialog.dismiss()
             }
-            .setNeutralButton(getString(R.string.btn_hint)) { dialog, _ ->
+            .setNeutralButton(getString(R.string.btn_need_hint)) { dialog, _ ->
                 dialog.dismiss()
                 val hint = viewModel.useHint()
                 showHintDialog(hint)

@@ -68,11 +68,6 @@ class AdaptiveDifficultyEngine {
      * Returns a human-readable difficulty label.
      */
     fun getDifficultyLabel(difficulty: Int): String {
-        return when (difficulty) {
-            DIFFICULTY_EASY -> "Easy"
-            DIFFICULTY_MEDIUM -> "Medium"
-            DIFFICULTY_HARD -> "Hard"
-            else -> "Easy"
-        }
+        return "L$difficulty"
     }
 }

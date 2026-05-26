@@ -295,4 +295,17 @@ class ActivityViewModel(application: Application) : AndroidViewModel(application
             }
         }
     }
+
+    /**
+     * Updates the learner's profile name.
+     */
+    fun updateLearnerName(name: String) {
+        viewModelScope.launch {
+            val profile = learnerDao.getDefaultLearnerSync()
+            if (profile != null) {
+                val updated = profile.copy(name = name)
+                learnerDao.update(updated)
+            }
+        }
+    }
 }

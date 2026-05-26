@@ -71,3 +71,16 @@ dependencies {
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
 }
+
+tasks.register('runConsoleGame', JavaExec) {
+    dependsOn 'compileDebugKotlin'
+    group = 'application'
+    description = 'Runs the Add-Venture console game interactively on macOS.'
+    
+    mainClass = 'com.addventure.app.logic.ConsoleGameRunnerKt'
+    standardInput = System.in
+    
+    doFirst {
+        classpath = files("build/tmp/kotlin-classes/debug") + configurations.debugRuntimeClasspath
+    }
+}
