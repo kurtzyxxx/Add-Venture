@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated, PanResponder, Alert, SafeAreaView } from 'react-native';
 import * as Speech from 'expo-speech';
+import { IncorrectModal } from '../../components/IncorrectModal';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../../App';
 import { GameManager } from '../../core/GameManager';
@@ -21,6 +22,9 @@ export default function CountOnScreen({ navigation }: Props) {
   const [options, setOptions] = useState<number[]>([]);
   const [dropCounter, setDropCounter] = useState(0);
   const [timer, setTimer] = useState(0);
+  const [hintsDisabled, setHintsDisabled] = useState(false);
+  const [hintsRemaining, setHintsRemaining] = useState(3);
+  const [showIncorrectModal, setShowIncorrectModal] = useState(false);
 
   const dropZoneLayout = useRef<{x: number, y: number, width: number, height: number} | null>(null);
 
@@ -42,6 +46,9 @@ export default function CountOnScreen({ navigation }: Props) {
     setBaseN(base);
     setExtraM(extra);
 
+    const profile = GameManager.getInstance().saveSystem.getProfile();
+    setHintsDisabled(profile.consecutiveCorrect >= 3);
+
     Speech.stop();
     Speech.speak(`Help Oliver! He has ${base} fruits, and needs ${extra} more!`, { rate: 0.95, pitch: 1.4 });
     
@@ -59,9 +66,9 @@ export default function CountOnScreen({ navigation }: Props) {
     setTimer(0);
 
     const opts = new Set([p.correctAnswer]);
-    while(opts.size < 4) {
-      const rand = p.correctAnswer + Math.floor(Math.random() * 7) - 3;
-      if (rand > 0) opts.add(rand);
+    while(opts.size < 5) {
+      const rand = Math.floor(Math.random() * 18) + 1;
+      opts.add(rand);
     }
     setOptions(Array.from(opts).sort((a,b) => a-b));
   };
@@ -86,31 +93,33 @@ export default function CountOnScreen({ navigation }: Props) {
   };
 
   const submitAnswer = async () => {
-    if (selectedAnswer === null) {
-      Alert.alert('Hold on', 'Please select an answer first!');
-      return;
-    }
+    if (selectedAnswer === null) return;
     
     const isCorrect = selectedAnswer === problem?.correctAnswer;
     const { feedback, starsEarned } = await GameManager.getInstance().submitAnswer(isCorrect, timer * 1000);
     
-    Alert.alert(isCorrect ? 'Correct!' : 'Incorrect', `${feedback}\nStars Earned: ${starsEarned}`, [
-      { text: isCorrect ? 'Next Problem' : 'Try Again', onPress: () => {
-        if (isCorrect) {
-          loadNewProblem();
-        } else {
-          setOptions(prev => {
-            const shuffled = [...prev];
-            for (let i = shuffled.length - 1; i > 0; i--) {
-              const j = Math.floor(Math.random() * (i + 1));
-              [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-            }
-            return shuffled;
-          });
-          setSelectedAnswer(null);
+    if (isCorrect) {
+      Alert.alert('Correct!', `${feedback}\nStars Earned: ${starsEarned}`, [
+        { text: 'Next Problem', onPress: () => loadNewProblem() }
+      ]);
+    } else {
+      setOptions(prev => {
+        const shuffled = [...prev];
+        for (let i = shuffled.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
         }
-      }}
-    ]);
+        return shuffled;
+      });
+      setSelectedAnswer(null);
+      setShowIncorrectModal(true);
+    }
+  };
+
+  const useHint = () => {
+    if (!problem || hintsRemaining <= 0) return;
+    setHintsRemaining(prev => prev - 1);
+    Alert.alert('Hint', GameManager.getInstance().getHint(problem));
   };
 
   const finishSession = () => {
@@ -167,8 +176,19 @@ export default function CountOnScreen({ navigation }: Props) {
       </View>
 
       <View style={styles.content}>
-        <View style={styles.titleContainer}>
-          <Text style={styles.title}>Count On</Text>
+        {/* Header Section */}
+        <View style={[styles.titleContainer, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', paddingHorizontal: 10 }]}>
+          <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#4E342E', flex: 1 }}>Hints: {hintsRemaining}</Text>
+          <Text style={[styles.title, { flex: 2, textAlign: 'center' }]}>Count On</Text>
+          <View style={{ flex: 1, alignItems: 'flex-end' }}>
+            <TouchableOpacity 
+              style={[styles.smallHintBtn, { opacity: hintsDisabled || hintsRemaining <= 0 ? 0.5 : 1 }]} 
+              onPress={useHint}
+              disabled={hintsDisabled || hintsRemaining <= 0}
+            >
+              <Text style={styles.smallHintText}>Hint</Text>
+            </TouchableOpacity>
+          </View>
         </View>
         
         <View style={styles.instructionCard}>
@@ -244,7 +264,8 @@ export default function CountOnScreen({ navigation }: Props) {
       </View>
 
       {/* Answer Area */}
-      <View style={[styles.answerArea, { opacity: allDropped ? 1 : 0.5 }]} pointerEvents={allDropped ? 'auto' : 'none'}>
+      {allDropped && (
+        <View style={styles.answerArea}>
         <View style={styles.optionsContainer}>
           {options.map((opt, index) => (
             <TouchableOpacity 
@@ -264,11 +285,33 @@ export default function CountOnScreen({ navigation }: Props) {
           ))}
         </View>
         <View style={styles.actionsContainer}>
-          <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#66BB6A' }]} onPress={submitAnswer}>
+          <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#66BB6A', width: '80%' }]} onPress={submitAnswer}>
             <Text style={styles.actionBtnText}>Submit</Text>
           </TouchableOpacity>
         </View>
       </View>
+      )}
+
+      <IncorrectModal 
+        visible={showIncorrectModal}
+        onTryAgain={() => {
+          setShowIncorrectModal(false);
+          setOptions(prev => {
+            const shuffled = [...prev];
+            for (let i = shuffled.length - 1; i > 0; i--) {
+              const j = Math.floor(Math.random() * (i + 1));
+              [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+            }
+            return shuffled;
+          });
+          setSelectedAnswer(null);
+        }}
+        onHint={() => {
+          setShowIncorrectModal(false);
+          useHint();
+        }}
+        hintsRemaining={hintsRemaining}
+      />
     </SafeAreaView>
   );
 }
@@ -307,6 +350,8 @@ const styles = StyleSheet.create({
   backIcon: { fontSize: 28, fontWeight: 'bold', color: '#4E342E' },
   titleContainer: { alignItems: 'center', marginBottom: 10 },
   title: { fontSize: 28, fontWeight: '900', color: '#4E342E', textShadowColor: '#FFF', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 1 },
+  smallHintBtn: { backgroundColor: '#FFCA28', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 15, elevation: 2 },
+  smallHintText: { fontSize: 16, fontWeight: 'bold', color: '#FFF' },
   timeText: { fontSize: 18, fontWeight: 'bold', color: '#4E342E' },
   badgesContainer: { flexDirection: 'row' },
   badge: { backgroundColor: '#FFF', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 15, elevation: 2 },
@@ -324,7 +369,7 @@ const styles = StyleSheet.create({
   groupHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
   treeIcon: { fontSize: 24, marginRight: 8 },
   groupTitle: { fontSize: 18, fontWeight: 'bold', color: '#4CAF50' },
-  questionContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  questionContainer: { paddingVertical: 15, marginVertical: 10, justifyContent: 'center', alignItems: 'center' },
   questionText: { fontSize: 36, fontWeight: '900', color: '#4E342E', textShadowColor: '#FFF', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 1, textAlign: 'center' },
 
   fruitRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center' },

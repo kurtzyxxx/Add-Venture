@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, SafeAreaView, Dimensions } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, SafeAreaView, Dimensions, Animated, PanResponder } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../../App';
 import { GameManager } from '../../core/GameManager';
 import { Problem } from '../../core/ProblemGenerator';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Speech from 'expo-speech';
+import { IncorrectModal } from '../../components/IncorrectModal';
 
 const { width } = Dimensions.get('window');
 
@@ -13,7 +14,10 @@ type Props = NativeStackScreenProps<RootStackParamList, 'NumberBonds'>;
 
 export default function NumberBondsScreen({ navigation }: Props) {
   const [problem, setProblem] = useState<Problem | null>(null);
-  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
+  const [placedAnswer, setPlacedAnswer] = useState<number | null>(null);
+  const [hintsDisabled, setHintsDisabled] = useState(false);
+  const [hintsRemaining, setHintsRemaining] = useState(3);
+  const [showIncorrectModal, setShowIncorrectModal] = useState(false);
   const [options, setOptions] = useState<number[]>([]);
 
   useEffect(() => {
@@ -23,7 +27,10 @@ export default function NumberBondsScreen({ navigation }: Props) {
   const loadNewProblem = () => {
     const p = GameManager.getInstance().generateProblem();
     setProblem(p);
-    setSelectedAnswer(null);
+    setPlacedAnswer(null);
+
+    const profile = GameManager.getInstance().saveSystem.getProfile();
+    setHintsDisabled(profile.consecutiveCorrect >= 3);
 
     // Narration for the problem
     Speech.stop();
@@ -34,30 +41,46 @@ export default function NumberBondsScreen({ navigation }: Props) {
 
     const opts = new Set([p.correctAnswer]);
     while(opts.size < 5) {
-      const rand = p.correctAnswer + Math.floor(Math.random() * 7) - 3;
-      if (rand > 0 && rand <= 9) opts.add(rand);
+      const rand = Math.floor(Math.random() * 9) + 1; // 1 to 9
+      opts.add(rand);
     }
     setOptions(Array.from(opts).sort((a,b) => a-b));
   };
 
-  const submitAnswer = async () => {
-    if (selectedAnswer === null) return;
-    const isCorrect = selectedAnswer === problem?.correctAnswer;
+  const handleDrop = (answer: number) => {
+    setPlacedAnswer(answer);
+  };
+
+  const submitCheck = async () => {
+    if (placedAnswer === null) return;
+    const isCorrect = placedAnswer === problem?.correctAnswer;
     const { feedback, starsEarned } = await GameManager.getInstance().submitAnswer(isCorrect, 2000);
     
-    Alert.alert(isCorrect ? 'Correct!' : 'Incorrect', `${feedback}\nStars: ${starsEarned}`, [
-      { text: isCorrect ? 'Next' : 'Try Again', onPress: () => { 
-          if(isCorrect) {
-            loadNewProblem(); 
-          } else {
-            setSelectedAnswer(null);
-          }
-      }}
-    ]);
+    if (isCorrect) {
+      Alert.alert('Correct!', `${feedback}\nStars: ${starsEarned}`, [
+        { text: 'Next', onPress: () => loadNewProblem() }
+      ]);
+    } else {
+      setShowIncorrectModal(true);
+    }
+  };
+
+  const handleTryAgain = () => {
+    setShowIncorrectModal(false);
+    setPlacedAnswer(null);
+    setOptions(prev => {
+      const shuffled = [...prev];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      return shuffled;
+    });
   };
 
   const useHint = () => {
-    if (!problem) return;
+    if (!problem || hintsRemaining <= 0) return;
+    setHintsRemaining(prev => prev - 1);
     Alert.alert('Hint', GameManager.getInstance().getHint(problem));
   };
 
@@ -84,13 +107,18 @@ export default function NumberBondsScreen({ navigation }: Props) {
           <Text style={styles.backIcon}>{'<'}</Text>
         </TouchableOpacity>
         
-        <View style={styles.titleContainer}>
+        <View style={[styles.titleContainer, { flexDirection: 'row', alignItems: 'center' }]}>
+          <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#4E342E', marginRight: 10 }}>Hints: {hintsRemaining}</Text>
           <Text style={styles.title}>Number Bonds</Text>
         </View>
 
-        <View style={styles.circleButton}>
-          <Text style={styles.starIcon}>⭐</Text>
-        </View>
+        <TouchableOpacity 
+          style={[styles.smallHintBtn, { opacity: hintsDisabled || hintsRemaining <= 0 ? 0.5 : 1 }]} 
+          onPress={useHint}
+          disabled={hintsDisabled || hintsRemaining <= 0}
+        >
+          <Text style={styles.smallHintText}>Hint</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Graphic Area */}
@@ -112,13 +140,22 @@ export default function NumberBondsScreen({ navigation }: Props) {
             <Text style={styles.circleText}>{problem.num2}</Text>
           </View>
 
-          {/* Bottom Right Circle (Unknown Part) */}
+          {/* Bottom Right Circle (Unknown Part or Placed Answer) */}
           <View style={styles.circleUnknownWrapper}>
-            <Text style={[styles.sparkle, { top: -10, left: -20 }]}>✨</Text>
-            <Text style={[styles.sparkle, { bottom: -10, right: -20 }]}>✨</Text>
-            <View style={[styles.circle, styles.circleUnknown]}>
-              <Text style={styles.circleTextUnknown}>?</Text>
-            </View>
+            {placedAnswer === null ? (
+              <>
+                <Text style={[styles.sparkle, { top: -10, left: -20 }]}>✨</Text>
+                <Text style={[styles.sparkle, { bottom: -10, right: -20 }]}>✨</Text>
+                <View style={[styles.circle, styles.circleUnknown]}>
+                  <Text style={styles.circleTextUnknown}>?</Text>
+                </View>
+              </>
+            ) : (
+              <DraggablePlacedAnswer 
+                answer={placedAnswer} 
+                onRemove={() => setPlacedAnswer(null)} 
+              />
+            )}
           </View>
         </View>
       </View>
@@ -132,36 +169,94 @@ export default function NumberBondsScreen({ navigation }: Props) {
       {/* Options Row */}
       <View style={styles.optionsContainer}>
         {options.map((opt, index) => (
-          <TouchableOpacity 
-            key={opt} 
-            style={[
-              styles.optionButton, 
-              { backgroundColor: optionColors[index % optionColors.length] },
-              selectedAnswer === opt && styles.optionSelected
-            ]} 
-            onPress={() => setSelectedAnswer(opt)}
-            activeOpacity={0.8}
-          >
-            <View style={styles.optionInner}>
-              <Text style={styles.optionText}>{opt}</Text>
-            </View>
-          </TouchableOpacity>
+          <DraggableOption 
+            key={opt}
+            opt={opt}
+            color={optionColors[index % optionColors.length]}
+            onDrop={() => handleDrop(opt)}
+            hidden={placedAnswer === opt}
+          />
         ))}
       </View>
 
       {/* Actions */}
       <View style={styles.actionsContainer}>
-        <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#FFCA28' }]} onPress={useHint}>
-          <Text style={styles.actionBtnText}>Hint</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#66BB6A' }]} onPress={submitAnswer}>
-          <Text style={styles.actionBtnText}>Submit</Text>
-        </TouchableOpacity>
+        {placedAnswer !== null && (
+          <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#66BB6A', width: '80%' }]} onPress={submitCheck}>
+            <Text style={styles.actionBtnText}>Check</Text>
+          </TouchableOpacity>
+        )}
       </View>
+
+      <IncorrectModal 
+        visible={showIncorrectModal}
+        onTryAgain={handleTryAgain}
+        onHint={() => {
+          setShowIncorrectModal(false);
+          useHint();
+        }}
+        hintsRemaining={hintsRemaining}
+      />
     </SafeAreaView>
   );
 }
+
+const DraggableOption = ({ opt, color, onDrop, hidden }: any) => {
+  const pan = useRef(new Animated.ValueXY()).current;
+  
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => !hidden,
+      onPanResponderMove: Animated.event([null, { dx: pan.x, dy: pan.y }], { useNativeDriver: false }),
+      onPanResponderRelease: (e, gesture) => {
+        if (gesture.dy < -80) {
+          onDrop();
+        }
+        Animated.spring(pan, { toValue: { x: 0, y: 0 }, useNativeDriver: false }).start();
+      }
+    })
+  ).current;
+
+  return (
+    <Animated.View {...panResponder.panHandlers} style={[
+      styles.optionButton, 
+      { backgroundColor: color, transform: [{ translateX: pan.x }, { translateY: pan.y }], zIndex: 100 },
+      hidden && { opacity: 0 }
+    ]}>
+      <View style={styles.optionInner}>
+        <Text style={styles.optionText}>{opt}</Text>
+      </View>
+    </Animated.View>
+  );
+};
+
+const DraggablePlacedAnswer = ({ answer, onRemove }: any) => {
+  const pan = useRef(new Animated.ValueXY()).current;
+  
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onPanResponderMove: Animated.event([null, { dx: pan.x, dy: pan.y }], { useNativeDriver: false }),
+      onPanResponderRelease: (e, gesture) => {
+        // If dragged downwards by at least 50 pixels, consider it a drag-back
+        if (gesture.dy > 50) {
+          onRemove();
+        } else {
+          Animated.spring(pan, { toValue: { x: 0, y: 0 }, useNativeDriver: false }).start();
+        }
+      }
+    })
+  ).current;
+
+  return (
+    <Animated.View {...panResponder.panHandlers} style={[
+      styles.circle, styles.circlePlaced,
+      { transform: [{ translateX: pan.x }, { translateY: pan.y }], zIndex: 100 }
+    ]}>
+      <Text style={styles.circleText}>{answer}</Text>
+    </Animated.View>
+  );
+};
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#A5D6A7' },
@@ -172,6 +267,8 @@ const styles = StyleSheet.create({
   starIcon: { fontSize: 24 },
   titleContainer: { alignItems: 'center' },
   title: { fontSize: 28, fontWeight: '900', color: '#4E342E', textShadowColor: '#FFF', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 1 },
+  smallHintBtn: { backgroundColor: '#FFCA28', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 15, elevation: 2 },
+  smallHintText: { fontSize: 16, fontWeight: 'bold', color: '#FFF' },
   
   graphicContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', position: 'relative' },
   circle: { width: 100, height: 100, borderRadius: 50, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center', elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 4 },
@@ -180,6 +277,7 @@ const styles = StyleSheet.create({
   circleBottomLeft: { borderWidth: 4, borderColor: '#00BCD4' },
   circleUnknownWrapper: { position: 'relative' },
   circleUnknown: { borderWidth: 4, borderColor: '#9C27B0', borderStyle: 'dashed' },
+  circlePlaced: { borderWidth: 4, borderColor: '#66BB6A', backgroundColor: '#E8F5E9' },
   circleText: { fontSize: 48, fontWeight: '900', color: '#4E342E' },
   circleTextUnknown: { fontSize: 48, fontWeight: '900', color: '#9C27B0' },
   sparkle: { position: 'absolute', fontSize: 24, zIndex: 10 },
