@@ -24,17 +24,17 @@ object ConsoleGameRunner {
 
         while (running) {
             println("\n========================================")
-            println("              MAIN MENU 🦉")
+            println("              MAIN MENU")
             println("========================================")
             println("Current Difficulty: ${difficultyEngine.getDifficultyLabel(currentDifficulty)}")
-            println("Total Stars Earned: ⭐ $totalStarsEarned")
+            println("Total Stars Earned: $totalStarsEarned")
             println("----------------------------------------")
             println("Choose a strategy to play:")
-            println("1) Count All 🍎")
-            println("2) Count On 🔢")
-            println("3) Number Bonds 🧩")
-            println("4) Change Difficulty Manual Setting ⚙️")
-            println("5) Exit Game 🚪")
+            println("1) Count All")
+            println("2) Count On")
+            println("3) Number Bonds")
+            println("4) Change Difficulty")
+            println("5) Exit Game")
             print("\nEnter option (1-5): ")
 
             val input = scanner.nextLine().trim()
@@ -44,7 +44,7 @@ object ConsoleGameRunner {
                 "3" -> playSession(ActivityManager.STRATEGY_NUMBER_BONDS)
                 "4" -> changeDifficultyMenu()
                 "5", "exit", "quit" -> {
-                    println("\nThanks for playing Add-Venture! Bye! 🦉👋")
+                    println("\nThanks for playing Add-Venture! Bye!")
                     running = false
                 }
                 else -> println("Invalid option. Please enter a number 1-5.")
@@ -60,7 +60,7 @@ object ConsoleGameRunner {
         println("*                                              *")
         println("************************************************")
         println("    ,___,")
-        println("    [O.o]    Hi! I'm Owly! 🦉")
+        println("    [O.o]    Hi! I'm Owly!")
         println("    /)__)    Let's learn addition together!")
         println("    \"\" \"\"")
         println("Type 'hint' or 'h' during gameplay if you get stuck!")
@@ -92,14 +92,14 @@ object ConsoleGameRunner {
 
     private fun playSession(strategy: String) {
         val strategyLabel = when (strategy) {
-            ActivityManager.STRATEGY_COUNT_ALL -> "COUNT ALL 🍎"
-            ActivityManager.STRATEGY_COUNT_ON -> "COUNT ON 🔢"
-            ActivityManager.STRATEGY_NUMBER_BONDS -> "NUMBER BONDS 🧩"
+            ActivityManager.STRATEGY_COUNT_ALL -> "COUNT ALL"
+            ActivityManager.STRATEGY_COUNT_ON -> "COUNT ON"
+            ActivityManager.STRATEGY_NUMBER_BONDS -> "NUMBER BONDS"
             else -> strategy
         }
 
         println("\n========================================")
-        println("🎮 STARTING SESSION: $strategyLabel")
+        println("STARTING SESSION: $strategyLabel")
         println("========================================")
 
         var correctAnswersThisSession = 0
@@ -132,7 +132,7 @@ object ConsoleGameRunner {
                         val bigger = maxOf(problem.num1, problem.num2)
                         val smaller = minOf(problem.num1, problem.num2)
                         println("Start with the bigger number ($bigger) and count forward $smaller times:")
-                        val countOnCircles = List(smaller) { "🔵" }.joinToString(" ")
+                        val countOnCircles = List(smaller) { "[o]" }.joinToString(" ")
                         println("Counting steps: $bigger -> $countOnCircles")
                         println("Question: What is the total sum?")
                     }
@@ -150,7 +150,7 @@ object ConsoleGameRunner {
 
                 if (userInput == "h" || userInput == "hint") {
                     hintsUsed++
-                    println("\n🦉 Hint: ${hintManager.getHint(strategy)}\n")
+                    println("\nHint: ${hintManager.getHint(strategy)}\n")
                     continue
                 }
 
@@ -170,9 +170,9 @@ object ConsoleGameRunner {
                 val responseTimeMs = System.currentTimeMillis() - startTime
 
                 if (isCorrect) {
-                    println("🎉 Correct! Great job!")
+                    println("Correct! Great job!")
                     val stars = activityManager.calculateStars(true, responseTimeMs, hintsUsed, retryCount)
-                    println("Earned: ⭐ $stars")
+                    println("Earned: $stars stars")
                     starsThisSession += stars
                     totalStarsEarned += stars
                     correctAnswersThisSession++
@@ -192,13 +192,13 @@ object ConsoleGameRunner {
                     consecutiveWrong = evaluation.third
 
                     if (currentDifficulty > oldDiff) {
-                        println("🚀 Performance update: You leveled up! Difficulty is now: ${difficultyEngine.getDifficultyLabel(currentDifficulty)}")
+                        println("Performance update: You leveled up! Difficulty is now: ${difficultyEngine.getDifficultyLabel(currentDifficulty)}")
                     }
                     
                     solved = true
                 } else {
                     retryCount++
-                    println("❌ Oops! That's incorrect. Try again! 😊")
+                    println("Oops! That's incorrect. Try again!")
                     
                     if (retryCount >= 2) {
                         // Adaptive difficulty decrease after consecutive errors
@@ -215,7 +215,7 @@ object ConsoleGameRunner {
                         consecutiveWrong = evaluation.third
 
                         if (currentDifficulty < oldDiff) {
-                            println("📉 System update: Adjusted difficulty to: ${difficultyEngine.getDifficultyLabel(currentDifficulty)}")
+                            println("System update: Adjusted difficulty to: ${difficultyEngine.getDifficultyLabel(currentDifficulty)}")
                         }
                     }
                 }
@@ -224,10 +224,10 @@ object ConsoleGameRunner {
 
         // Session summary
         println("\n========================================")
-        println("🏁 SESSION COMPLETE!")
+        println("SESSION COMPLETE!")
         println("========================================")
         println("Correct Answers: $correctAnswersThisSession / $maxActivities")
-        println("Stars Earned this session: ⭐ $starsThisSession")
+        println("Stars Earned this session: $starsThisSession")
         val accuracy = if (totalAttempts > 0) (correctAnswersThisSession.toFloat() / maxActivities * 100).toInt() else 0
         println("Session Accuracy: $accuracy%")
         println("Current Difficulty: ${difficultyEngine.getDifficultyLabel(currentDifficulty)}")

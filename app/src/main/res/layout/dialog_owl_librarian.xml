@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_margin="@dimen/spacing_md"
+    app:cardCornerRadius="@dimen/corner_lg"
+    app:cardElevation="@dimen/card_elevation_high"
+    app:cardBackgroundColor="@color/white">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:padding="@dimen/spacing_lg">
+
+        <ImageView
+            android:id="@+id/ivOwlLibrarian"
+            android:layout_width="160dp"
+            android:layout_height="160dp"
+            android:src="@drawable/owl_librarian"
+            android:contentDescription="Owl Librarian"
+            android:scaleType="fitCenter"
+            android:layout_marginBottom="@dimen/spacing_md" />
+
+        <TextView
+    android:id="@+id/tvOwlMessage"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="center"
+    android:text=""
+    android:textColor="@color/text_primary"
+    android:textSize="@dimen/text_md" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnOwlOk"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/button_height"
+            android:layout_marginTop="@dimen/spacing_sm"
+            android:text="OK"
+            android:textAllCaps="false"
+            android:textSize="@dimen/text_sm"
+            android:fontFamily="sans-serif-bold"
+            app:backgroundTint="@color/primary"
+            app:cornerRadius="@dimen/corner_lg"
+            android:textColor="@color/white" />
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>

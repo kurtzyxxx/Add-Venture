@@ -21,16 +21,26 @@ class SplashActivity : AppCompatActivity() {
 
         val sharedPrefs = getSharedPreferences("add_venture_prefs", MODE_PRIVATE)
         val isSmoothMode = sharedPrefs.getBoolean("smooth_mode", false)
+        val isFirstLogin = sharedPrefs.getBoolean("first_login", true)
 
         if (isSmoothMode) {
-            // Bypass splash animation and delay for speed & smoothness
-            startActivity(Intent(this, HomeActivity::class.java))
+            val targetIntent = if (isFirstLogin) {
+                Intent(this, OwlIntroActivity::class.java)
+            } else {
+                Intent(this, HomeActivity::class.java)
+            }
+            startActivity(targetIntent)
             finish()
         } else {
             animateSplash()
 
             Handler(Looper.getMainLooper()).postDelayed({
-                startActivity(Intent(this, HomeActivity::class.java))
+                val targetIntent = if (isFirstLogin) {
+                    Intent(this, OwlIntroActivity::class.java)
+                } else {
+                    Intent(this, HomeActivity::class.java)
+                }
+                startActivity(targetIntent)
                 finish()
                 overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
             }, 2500)

@@ -28,7 +28,7 @@
             android:layout_weight="1"
             android:gravity="center"
             android:fontFamily="sans-serif-black"
-            android:text="🗺️ Adventure Map"
+            android:text="Adventure Map"
             android:textColor="@color/text_primary"
             android:textSize="@dimen/text_lg" />
 
@@ -67,7 +67,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:fontFamily="sans-serif-black"
-                        android:text="🍎 Count All Path"
+                        android:text="Count All Path"
                         android:textColor="@color/count_all_color"
                         android:textSize="@dimen/text_lg" />
 
@@ -110,7 +110,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:fontFamily="sans-serif-black"
-                        android:text="🔢 Count On Path"
+                        android:text="Count On Path"
                         android:textColor="@color/count_on_color"
                         android:textSize="@dimen/text_lg" />
 
@@ -153,7 +153,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:fontFamily="sans-serif-black"
-                        android:text="🧩 Number Bonds Path"
+                        android:text="Number Bonds Path"
                         android:textColor="@color/number_bonds_color"
                         android:textSize="@dimen/text_lg" />
 

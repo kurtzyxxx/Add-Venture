@@ -21,6 +21,13 @@ class ActivityViewModel(application: Application) : AndroidViewModel(application
     val adaptiveEngine = AdaptiveDifficultyEngine()
     val feedbackManager = FeedbackManager()
 
+    // Tracks sum of a problem answered correctly on first try; used to avoid repetition
+    private var lastFirstTrySum: Int? = null
+
+    // Flag to track if the current problem is generated
+    private val _isProblemGenerated = MutableLiveData(false)
+    val isProblemGenerated: LiveData<Boolean> = _isProblemGenerated
+
     // Current problem state
     private val _currentProblem = MutableLiveData<AdditionProblem>()
     val currentProblem: LiveData<AdditionProblem> = _currentProblem
@@ -41,6 +48,10 @@ class ActivityViewModel(application: Application) : AndroidViewModel(application
     // Feedback
     private val _feedbackMessage = MutableLiveData<String>()
     val feedbackMessage: LiveData<String> = _feedbackMessage
+
+    // Combo count
+    private val _comboCount = MutableLiveData(0)
+    val comboCount: LiveData<Int> = _comboCount
 
     private val _isCorrectAnswer = MutableLiveData<Boolean?>()
     val isCorrectAnswer: LiveData<Boolean?> = _isCorrectAnswer
@@ -83,14 +94,23 @@ class ActivityViewModel(application: Application) : AndroidViewModel(application
      */
     fun generateNewProblem(strategy: String) {
         viewModelScope.launch {
+            _isProblemGenerated.value = false
             val learner = learnerDao.getDefaultLearnerSync()
             val difficulty = learner?.currentDifficulty ?: 1
             _currentDifficulty.value = difficulty
 
-            val problem = activityManager.generateProblem(strategy, difficulty)
+            // Generate a problem, avoiding the previous first‑try correct sum if applicable
+            var problem = activityManager.generateProblem(strategy, difficulty)
+            lastFirstTrySum?.let { previousSum ->
+                var attempts = 0
+                while (problem.correctAnswer == previousSum && attempts < 5) {
+                    problem = activityManager.generateProblem(strategy, difficulty)
+                    attempts++
+                }
+            }
             _currentProblem.value = problem
 
-            // Reset per-activity counters
+            // Reset per‑activity counters
             hintsUsedThisActivity = 0
             retryCountThisActivity = 0
             activityStartTimeMs = System.currentTimeMillis()
@@ -101,6 +121,7 @@ class ActivityViewModel(application: Application) : AndroidViewModel(application
 
             // Reset hints
             hintManager.resetHints(strategy)
+            _isProblemGenerated.value = true
         }
     }
 
@@ -109,6 +130,7 @@ class ActivityViewModel(application: Application) : AndroidViewModel(application
      */
     fun submitAnswer(learnerAnswer: Int) {
         val problem = _currentProblem.value ?: return
+        _isProblemGenerated.value = false
 
         viewModelScope.launch {
             val responseTimeMs = System.currentTimeMillis() - activityStartTimeMs
@@ -121,6 +143,7 @@ class ActivityViewModel(application: Application) : AndroidViewModel(application
             _earnedStars.value = stars
 
             if (isCorrect) {
+                _comboCount.value = (_comboCount.value ?: 0) + 1
                 _feedbackMessage.value = feedbackManager.getCorrectFeedback()
                 _totalStars.value = (_totalStars.value ?: 0) + stars
                 _activitiesCompleted.value = (_activitiesCompleted.value ?: 0) + 1
@@ -165,9 +188,14 @@ class ActivityViewModel(application: Application) : AndroidViewModel(application
                 }
 
                 // Check progression / unlock
+                // Record sum if first‑try correct
+                if (retryCountThisActivity == 0) {
+                    lastFirstTrySum = problem.correctAnswer
+                }
                 checkAndUnlockNext(problem.strategy)
 
             } else {
+                _comboCount.value = 0
                 _feedbackMessage.value = feedbackManager.getIncorrectFeedback()
 
                 // Record incorrect attempt

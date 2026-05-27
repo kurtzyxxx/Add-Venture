@@ -25,6 +25,10 @@
             android:exported="false" />
 
         <activity
+            android:name=".ui.OwlIntroActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".ui.AdventureMapActivity"
             android:exported="false" />
 

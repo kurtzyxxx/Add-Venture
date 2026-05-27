@@ -49,7 +49,7 @@ class ProgressActivity : AppCompatActivity() {
 
             val isCountOnQualified = countAllProgress != null && 
                                      countAllProgress.completedActivities >= 3 && 
-                                     countAllAccuracy >= 0.70f
+                                     countAllAccuracy >= 0.80f
 
             val countOnAccuracy = if (countOnProgress != null && countOnProgress.totalAttempts > 0) {
                 countOnProgress.totalCorrect.toFloat() / countOnProgress.totalAttempts
@@ -58,7 +58,7 @@ class ProgressActivity : AppCompatActivity() {
             val isNumberBondsQualified = isCountOnQualified && 
                                          countOnProgress != null && 
                                          countOnProgress.completedActivities >= 3 && 
-                                         countOnAccuracy >= 0.70f
+                                         countOnAccuracy >= 0.80f
 
             progressList.forEach { progress ->
                 val accuracy = if (progress.totalAttempts > 0)
@@ -80,7 +80,7 @@ class ProgressActivity : AppCompatActivity() {
                         } else {
                             binding.cardCountOnProgress.alpha = 0.4f
                             binding.tvCountOnStars.text = "Stars: 0"
-                            binding.tvCountOnStats.text = "Locked • Complete Count All with at least 70% accuracy to unlock"
+                            binding.tvCountOnStats.text = "Locked • Complete Count All with at least 80% accuracy to unlock"
                             binding.progressCountOn.progress = 0
                         }
                     }
@@ -93,7 +93,7 @@ class ProgressActivity : AppCompatActivity() {
                         } else {
                             binding.cardNumberBondsProgress.alpha = 0.4f
                             binding.tvNumberBondsStars.text = "Stars: 0"
-                            binding.tvNumberBondsStats.text = "Locked • Complete Count On with at least 70% accuracy to unlock"
+                            binding.tvNumberBondsStats.text = "Locked • Complete Count On with at least 80% accuracy to unlock"
                             binding.progressNumberBonds.progress = 0
                         }
                     }
@@ -108,15 +108,17 @@ class ProgressActivity : AppCompatActivity() {
     private fun buildBadges(totalCorrect: Int) {
         binding.badgesContainer.removeAllViews()
 
+        data class Badge(val label: String, val name: String, val colorRes: Int, val threshold: Int)
+
         val badges = listOf(
-            Triple("🌱", "Beginner Counter", 1),
-            Triple("⚡", "Fast Thinker", 5),
-            Triple("🔥", "Streak", 10)
+            Badge("B", "Beginner Counter", R.color.badge_beginner, 1),
+            Badge("F", "Fast Thinker", R.color.badge_fast, 5),
+            Badge("S", "Streak", R.color.badge_streak, 10)
         )
 
-        badges.forEach { (emoji, name, threshold) ->
-            val earned = totalCorrect >= threshold
-            
+        badges.forEach { badge ->
+            val earned = totalCorrect >= badge.threshold
+
             val badgeLayout = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = android.view.Gravity.CENTER
@@ -125,24 +127,41 @@ class ProgressActivity : AppCompatActivity() {
                     LinearLayout.LayoutParams.WRAP_CONTENT,
                     1f
                 )
+                val pad = (8 * resources.displayMetrics.density).toInt()
+                setPadding(pad, pad, pad, pad)
             }
 
-            val emojiView = TextView(this).apply {
-                textSize = 32f
-                text = emoji
+            // Color circle with initial letter
+            val circleSize = (48 * resources.displayMetrics.density).toInt()
+            val circleView = TextView(this).apply {
+                text = badge.label
+                textSize = 20f
                 gravity = android.view.Gravity.CENTER
-                alpha = if (earned) 1f else 0.2f
+                setTextColor(getColor(R.color.white))
+                typeface = android.graphics.Typeface.DEFAULT_BOLD
+                layoutParams = LinearLayout.LayoutParams(circleSize, circleSize)
+                val bg = android.graphics.drawable.GradientDrawable().apply {
+                    shape = android.graphics.drawable.GradientDrawable.OVAL
+                    setColor(getColor(badge.colorRes))
+                }
+                background = bg
+                alpha = if (earned) 1f else 0.25f
             }
 
             val nameView = TextView(this).apply {
                 textSize = 11f
-                text = name
+                text = badge.name
                 gravity = android.view.Gravity.CENTER
                 setTextColor(getColor(if (earned) R.color.text_primary else R.color.text_secondary))
                 typeface = android.graphics.Typeface.DEFAULT_BOLD
+                val topMargin = (6 * resources.displayMetrics.density).toInt()
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { this.topMargin = topMargin }
             }
 
-            badgeLayout.addView(emojiView)
+            badgeLayout.addView(circleView)
             badgeLayout.addView(nameView)
             binding.badgesContainer.addView(badgeLayout)
         }

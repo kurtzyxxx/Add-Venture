@@ -37,7 +37,7 @@ class AdventureMapActivity : AppCompatActivity() {
 
             val isCountOnQualified = countAllProgress != null && 
                                      countAllProgress.completedActivities >= 3 && 
-                                     countAllAccuracy >= 0.70f
+                                     countAllAccuracy >= 0.80f
 
             val countOnAccuracy = if (countOnProgress != null && countOnProgress.totalAttempts > 0) {
                 countOnProgress.totalCorrect.toFloat() / countOnProgress.totalAttempts
@@ -46,7 +46,7 @@ class AdventureMapActivity : AppCompatActivity() {
             val isNumberBondsQualified = isCountOnQualified && 
                                          countOnProgress != null && 
                                          countOnProgress.completedActivities >= 3 && 
-                                         countOnAccuracy >= 0.70f
+                                         countOnAccuracy >= 0.80f
 
             progressList.forEach { progress ->
                 val (container, label) = when (progress.strategy) {
@@ -76,7 +76,7 @@ class AdventureMapActivity : AppCompatActivity() {
                         ActivityManager.STRATEGY_NUMBER_BONDS -> "Count On"
                         else -> ""
                     }
-                    label.text = "Locked • Complete $parentStrategy with at least 70% accuracy to unlock"
+                    label.text = "Locked • Complete $parentStrategy with at least 80% accuracy to unlock"
                 }
             }
         }

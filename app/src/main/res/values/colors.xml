@@ -1,43 +1,51 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Primary Colors - Child-friendly vibrant palette -->
+    <!-- Primary Colors - Vibrant coral-orange palette -->
     <color name="primary">#FF6B35</color>
-    <color name="primary_dark">#E85D26</color>
+    <color name="primary_dark">#E85520</color>
     <color name="primary_light">#FF8F65</color>
+    <color name="primary_surface">#FFF0E8</color>
 
-    <color name="secondary">#4ECDC4</color>
-    <color name="secondary_dark">#3AB8B0</color>
-    <color name="secondary_light">#7EDDD7</color>
+    <color name="secondary">#00BFA5</color>
+    <color name="secondary_dark">#009E89</color>
+    <color name="secondary_light">#64FFDA</color>
+    <color name="secondary_surface">#E0F7F3</color>
 
     <color name="accent">#FFD93D</color>
     <color name="accent_dark">#F5C518</color>
+    <color name="accent_surface">#FFF8E1</color>
 
-    <!-- Strategy Colors -->
-    <color name="count_all_color">#FF6B6B</color>
-    <color name="count_all_light">#FFB3B3</color>
-    <color name="count_on_color">#4ECDC4</color>
-    <color name="count_on_light">#A8E6E0</color>
-    <color name="number_bonds_color">#A78BFA</color>
-    <color name="number_bonds_light">#D4C5FD</color>
+    <!-- Strategy Colors - Rich, distinct, child-friendly -->
+    <color name="count_all_color">#EF5350</color>
+    <color name="count_all_light">#FFCDD2</color>
+    <color name="count_all_surface">#FFF5F5</color>
+    <color name="count_on_color">#26A69A</color>
+    <color name="count_on_light">#B2DFDB</color>
+    <color name="count_on_surface">#F0FAF8</color>
+    <color name="number_bonds_color">#7E57C2</color>
+    <color name="number_bonds_light">#D1C4E9</color>
+    <color name="number_bonds_surface">#F5F0FF</color>
 
     <!-- Feedback Colors -->
-    <color name="correct_green">#2ECC71</color>
-    <color name="correct_green_light">#A8E6CE</color>
-    <color name="incorrect_red">#E74C3C</color>
-    <color name="incorrect_red_light">#F5B7B1</color>
+    <color name="correct_green">#43A047</color>
+    <color name="correct_green_light">#C8E6C9</color>
+    <color name="correct_green_surface">#F1F8F2</color>
+    <color name="incorrect_red">#E53935</color>
+    <color name="incorrect_red_light">#FFCDD2</color>
 
     <!-- Star Colors -->
-    <color name="star_gold">#FFD700</color>
-    <color name="star_empty">#D3D3D3</color>
+    <color name="star_gold">#FFB300</color>
+    <color name="star_empty">#E0E0E0</color>
 
     <!-- UI Colors -->
-    <color name="background_light">#FFF8F0</color>
-    <color name="background_game">#F0F8FF</color>
+    <color name="background_light">#FAFBFE</color>
+    <color name="background_game">#F5F7FA</color>
     <color name="card_background">#FFFFFF</color>
-    <color name="text_primary">#2C3E50</color>
-    <color name="text_secondary">#7F8C8D</color>
+    <color name="text_primary">#1A2138</color>
+    <color name="text_secondary">#6B7280</color>
     <color name="text_on_primary">#FFFFFF</color>
-    <color name="divider">#E0E0E0</color>
+    <color name="divider">#E5E7EB</color>
+    <color name="surface_elevated">#FFFFFF</color>
 
     <!-- Drag Drop -->
     <color name="drop_zone_border">#90CAF9</color>
@@ -52,8 +60,18 @@
 
     <!-- Splash -->
     <color name="splash_bg_start">#FF6B35</color>
-    <color name="splash_bg_end">#FFD93D</color>
+    <color name="splash_bg_center">#FF8A50</color>
+    <color name="splash_bg_end">#FFB74D</color>
+
+    <!-- Badge Colors -->
+    <color name="badge_beginner">#66BB6A</color>
+    <color name="badge_fast">#42A5F5</color>
+    <color name="badge_streak">#FF7043</color>
 
     <color name="white">#FFFFFF</color>
     <color name="black">#000000</color>
+
+    <!-- Locked overlay -->
+    <color name="locked_overlay">#B0BEC5</color>
+    <color name="locked_surface">#ECEFF1</color>
 </resources>

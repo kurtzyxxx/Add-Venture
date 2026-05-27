@@ -3,7 +3,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/bg_game"
+    android:background="@drawable/bg_game_gradient"
     android:orientation="vertical">
 
     <!-- Top Bar -->
@@ -60,7 +60,8 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="⭐"
+                android:text="★"
+                android:textColor="@color/star_gold"
                 android:textSize="16sp" />
 
             <TextView
@@ -90,235 +91,267 @@
             android:textSize="@dimen/text_xs" />
     </LinearLayout>
 
-    <!-- Activity Title -->
-    <TextView
+    <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center"
-        android:layout_marginTop="8dp"
-        android:fontFamily="sans-serif-black"
-        android:text="Number Bonds Activity"
-        android:textColor="@color/number_bonds_color"
-        android:textSize="20sp" />
-
-    <!-- Instruction -->
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center"
-        android:paddingTop="@dimen/spacing_md"
-        android:paddingBottom="@dimen/spacing_sm"
-        android:fontFamily="sans-serif-bold"
-        android:text="@string/number_bonds_instruction"
-        android:textColor="@color/text_primary"
-        android:textSize="@dimen/text_lg" />
-
-    <!-- Number Bond Diagram -->
-    <com.google.android.material.card.MaterialCardView
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:layout_margin="@dimen/spacing_md"
-        app:cardCornerRadius="@dimen/corner_md"
-        app:cardElevation="@dimen/card_elevation"
-        app:cardBackgroundColor="@color/white">
+        android:layout_height="match_parent"
+        android:fillViewport="true">
 
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:gravity="center"
-            android:orientation="vertical"
-            android:padding="@dimen/spacing_lg">
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
 
-            <!-- Whole (Top circle) -->
+            <!-- Activity Title -->
             <TextView
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="@string/number_bonds_whole"
+                android:gravity="center"
+                android:layout_marginTop="8dp"
+                android:fontFamily="sans-serif-black"
+                android:text="Number Bonds Activity"
+                android:textColor="@color/number_bonds_color"
+                android:textSize="20sp" />
+
+            <!-- Instruction with Oliver the Owl Guide -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingStart="@dimen/spacing_md"
+                android:paddingEnd="@dimen/spacing_md"
+                android:layout_marginTop="8dp">
+
+                <ImageView
+                    android:id="@+id/imgOwlCheer"
+                    android:layout_width="64dp"
+                    android:layout_height="64dp"
+                    android:src="@drawable/lost_owl"
+                    android:contentDescription="Oliver the Owl Guide"
+                    android:scaleType="fitCenter" />
+
+                <TextView
+                    android:id="@+id/tvInstruction"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="@dimen/spacing_sm"
+                    android:gravity="start|center_vertical"
+                    android:fontFamily="sans-serif-bold"
+                    android:text="@string/number_bonds_instruction"
+                    android:textColor="@color/text_primary"
+                    android:textSize="16sp" />
+
+            </LinearLayout>
+
+            <!-- Number Bond Diagram -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_margin="@dimen/spacing_md"
+                app:cardCornerRadius="@dimen/corner_md"
+                app:cardElevation="@dimen/card_elevation"
+                app:cardBackgroundColor="@color/white">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:padding="@dimen/spacing_lg">
+
+                    <!-- Whole (Top circle) -->
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/number_bonds_whole"
+                        android:textColor="@color/text_secondary"
+                        android:fontFamily="sans-serif-bold"
+                        android:textSize="@dimen/text_sm" />
+
+                    <FrameLayout
+                        android:layout_width="@dimen/number_bond_circle"
+                        android:layout_height="@dimen/number_bond_circle"
+                        android:background="@drawable/bg_number_bond_circle">
+
+                        <TextView
+                            android:id="@+id/tvWhole"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="center"
+                            android:fontFamily="sans-serif-black"
+                            android:text="7"
+                            android:textColor="@color/number_bonds_color"
+                            android:textSize="@dimen/text_xl" />
+
+                    </FrameLayout>
+
+                    <!-- Connecting Lines Indicator -->
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_sm"
+                        android:text="╱  ╲"
+                        android:textColor="@color/number_bonds_color"
+                        android:textSize="@dimen/text_xl" />
+
+                    <!-- Parts (Bottom circles) -->
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_sm"
+                        android:gravity="center"
+                        android:orientation="horizontal">
+
+                        <!-- Part 1 (Known) -->
+                        <LinearLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:gravity="center"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Part"
+                                android:textColor="@color/text_secondary"
+                                android:fontFamily="sans-serif-bold"
+                                android:textSize="@dimen/text_xs" />
+
+                            <FrameLayout
+                                android:layout_width="@dimen/number_bond_circle"
+                                android:layout_height="@dimen/number_bond_circle"
+                                android:background="@drawable/bg_number_bond_circle">
+
+                                <TextView
+                                    android:id="@+id/tvPart1"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_gravity="center"
+                                    android:fontFamily="sans-serif-black"
+                                    android:text="3"
+                                    android:textColor="@color/count_on_color"
+                                    android:textSize="@dimen/text_xl" />
+                            </FrameLayout>
+                        </LinearLayout>
+
+                        <View
+                            android:layout_width="@dimen/spacing_xxl"
+                            android:layout_height="1dp" />
+
+                        <!-- Part 2 (Missing - to find) -->
+                        <LinearLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:gravity="center"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Missing!"
+                                android:textColor="@color/incorrect_red"
+                                android:fontFamily="sans-serif-bold"
+                                android:textSize="@dimen/text_xs" />
+
+                            <FrameLayout
+                                android:id="@+id/frameMissingPart"
+                                android:layout_width="@dimen/number_bond_circle"
+                                android:layout_height="@dimen/number_bond_circle"
+                                android:background="@drawable/bg_number_bond_circle">
+
+                                <TextView
+                                    android:id="@+id/tvPart2"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_gravity="center"
+                                    android:fontFamily="sans-serif-black"
+                                    android:text="?"
+                                    android:textColor="@color/incorrect_red"
+                                    android:textSize="@dimen/text_xl" />
+                            </FrameLayout>
+                        </LinearLayout>
+
+                    </LinearLayout>
+
+                    <!-- Equation summary -->
+                    <TextView
+                        android:id="@+id/tvEquation"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_lg"
+                        android:fontFamily="sans-serif-bold"
+                        android:text="3 + ? = 7"
+                        android:textColor="@color/text_primary"
+                        android:textSize="@dimen/text_lg" />
+
+                </LinearLayout>
+
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Number Selection Bar -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:text="Tap the missing number:"
                 android:textColor="@color/text_secondary"
                 android:fontFamily="sans-serif-bold"
                 android:textSize="@dimen/text_sm" />
 
-            <FrameLayout
-                android:layout_width="@dimen/number_bond_circle"
-                android:layout_height="@dimen/number_bond_circle"
-                android:background="@drawable/bg_number_bond_circle">
-
-                <TextView
-                    android:id="@+id/tvWhole"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="center"
-                    android:fontFamily="sans-serif-black"
-                    android:text="7"
-                    android:textColor="@color/number_bonds_color"
-                    android:textSize="@dimen/text_xl" />
-
-            </FrameLayout>
-
-            <!-- Connecting Lines Indicator -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/spacing_sm"
-                android:text="╱  ╲"
-                android:textColor="@color/number_bonds_color"
-                android:textSize="@dimen/text_xl" />
-
-            <!-- Parts (Bottom circles) -->
             <LinearLayout
-                android:layout_width="wrap_content"
+                android:id="@+id/numberButtonsContainer"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/spacing_sm"
                 android:gravity="center"
-                android:orientation="horizontal">
+                android:orientation="horizontal"
+                android:padding="@dimen/spacing_sm" />
 
-                <!-- Part 1 (Known) -->
-                <LinearLayout
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:gravity="center"
-                    android:orientation="vertical">
+            <TextView
+                android:id="@+id/tvFeedback"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:padding="@dimen/spacing_sm"
+                android:fontFamily="sans-serif-bold"
+                android:textSize="@dimen/text_md"
+                android:visibility="gone" />
 
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Part"
-                        android:textColor="@color/text_secondary"
-                        android:fontFamily="sans-serif-bold"
-                        android:textSize="@dimen/text_xs" />
+            <!-- Buttons -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:orientation="horizontal"
+                android:padding="@dimen/spacing_md">
 
-                    <FrameLayout
-                        android:layout_width="@dimen/number_bond_circle"
-                        android:layout_height="@dimen/number_bond_circle"
-                        android:background="@drawable/bg_number_bond_circle">
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnHint"
+                    android:layout_width="0dp"
+                    android:layout_height="@dimen/button_height"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="@dimen/spacing_sm"
+                    android:text="@string/btn_hint"
+                    android:textAllCaps="false"
+                    android:fontFamily="sans-serif-bold"
+                    app:backgroundTint="@color/accent"
+                    app:cornerRadius="@dimen/corner_lg"
+                    android:textColor="@color/text_primary" />
 
-                        <TextView
-                            android:id="@+id/tvPart1"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_gravity="center"
-                            android:fontFamily="sans-serif-black"
-                            android:text="3"
-                            android:textColor="@color/count_on_color"
-                            android:textSize="@dimen/text_xl" />
-                    </FrameLayout>
-                </LinearLayout>
-
-                <View
-                    android:layout_width="@dimen/spacing_xxl"
-                    android:layout_height="1dp" />
-
-                <!-- Part 2 (Missing - to find) -->
-                <LinearLayout
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:gravity="center"
-                    android:orientation="vertical">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Missing!"
-                        android:textColor="@color/incorrect_red"
-                        android:fontFamily="sans-serif-bold"
-                        android:textSize="@dimen/text_xs" />
-
-                    <FrameLayout
-                        android:id="@+id/frameMissingPart"
-                        android:layout_width="@dimen/number_bond_circle"
-                        android:layout_height="@dimen/number_bond_circle"
-                        android:background="@drawable/bg_number_bond_circle">
-
-                        <TextView
-                            android:id="@+id/tvPart2"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_gravity="center"
-                            android:fontFamily="sans-serif-black"
-                            android:text="?"
-                            android:textColor="@color/incorrect_red"
-                            android:textSize="@dimen/text_xl" />
-                    </FrameLayout>
-                </LinearLayout>
-
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnSubmit"
+                    android:layout_width="0dp"
+                    android:layout_height="@dimen/button_height"
+                    android:layout_weight="1"
+                    android:text="@string/btn_submit"
+                    android:textAllCaps="false"
+                    android:fontFamily="sans-serif-bold"
+                    app:backgroundTint="@color/number_bonds_color"
+                    app:cornerRadius="@dimen/corner_lg"
+                    android:textColor="@color/white" />
             </LinearLayout>
 
-            <!-- Equation summary -->
-            <TextView
-                android:id="@+id/tvEquation"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/spacing_lg"
-                android:fontFamily="sans-serif-bold"
-                android:text="3 + ? = 7"
-                android:textColor="@color/text_primary"
-                android:textSize="@dimen/text_lg" />
-
         </LinearLayout>
-
-    </com.google.android.material.card.MaterialCardView>
-
-    <!-- Number Selection Bar -->
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center"
-        android:text="Tap the missing number:"
-        android:textColor="@color/text_secondary"
-        android:fontFamily="sans-serif-bold"
-        android:textSize="@dimen/text_sm" />
-
-    <LinearLayout
-        android:id="@+id/numberButtonsContainer"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center"
-        android:orientation="horizontal"
-        android:padding="@dimen/spacing_sm" />
-
-    <TextView
-        android:id="@+id/tvFeedback"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center"
-        android:padding="@dimen/spacing_sm"
-        android:fontFamily="sans-serif-bold"
-        android:textSize="@dimen/text_md"
-        android:visibility="gone" />
-
-    <!-- Buttons -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center"
-        android:orientation="horizontal"
-        android:padding="@dimen/spacing_md">
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnHint"
-            android:layout_width="0dp"
-            android:layout_height="@dimen/button_height"
-            android:layout_weight="1"
-            android:layout_marginEnd="@dimen/spacing_sm"
-            android:text="@string/btn_hint"
-            android:textAllCaps="false"
-            android:fontFamily="sans-serif-bold"
-            app:backgroundTint="@color/accent"
-            app:cornerRadius="@dimen/corner_lg"
-            android:textColor="@color/text_primary" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnSubmit"
-            android:layout_width="0dp"
-            android:layout_height="@dimen/button_height"
-            android:layout_weight="1"
-            android:text="@string/btn_submit"
-            android:textAllCaps="false"
-            android:fontFamily="sans-serif-bold"
-            app:backgroundTint="@color/number_bonds_color"
-            app:cornerRadius="@dimen/corner_lg"
-            android:textColor="@color/white" />
-    </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
 
 </LinearLayout>

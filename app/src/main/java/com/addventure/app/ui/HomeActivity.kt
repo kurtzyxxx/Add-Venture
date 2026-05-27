@@ -63,6 +63,9 @@ class HomeActivity : AppCompatActivity() {
 
         // Animate cards on entry
         animateCardsEntry()
+
+        // Start floating animation on Oliver the Owl
+        binding.imgHomeOwl.startFloatingAnimation()
     }
 
     private fun observeData() {
@@ -110,7 +113,7 @@ class HomeActivity : AppCompatActivity() {
         }
 
         com.google.android.material.dialog.MaterialAlertDialogBuilder(this, com.google.android.material.R.style.MaterialAlertDialog_Material3)
-            .setTitle("Welcome to Add-Venture! 🦉")
+            .setTitle("Welcome to Add-Venture!")
             .setMessage("Let's start your addition adventure. What is your name?")
             .setView(container)
             .setCancelable(false)
@@ -136,9 +139,9 @@ class HomeActivity : AppCompatActivity() {
         // 1. COUNT_ALL is always unlocked
         binding.cardCountAll.isEnabled = true
         binding.cardCountAll.alpha = 1.0f
-        binding.tvCountAllArrow.text = "▶"
+        binding.tvCountAllArrow.text = ">"
 
-        // 2. COUNT_ON unlocks if COUNT_ALL has completed >= 3 activities AND accuracy >= 70%
+        // 2. COUNT_ON unlocks if COUNT_ALL has completed >= 3 activities AND accuracy >= 80%
         val countAllAccuracy = if (countAllProgress != null && countAllProgress.totalAttempts > 0) {
             countAllProgress.totalCorrect.toFloat() / countAllProgress.totalAttempts
         } else {
@@ -146,19 +149,19 @@ class HomeActivity : AppCompatActivity() {
         }
         val isCountOnQualified = countAllProgress != null && 
                                  countAllProgress.completedActivities >= 3 && 
-                                 countAllAccuracy >= 0.70f
+                                 countAllAccuracy >= 0.80f
 
         if (isCountOnQualified) {
             binding.cardCountOn.isEnabled = true
             binding.cardCountOn.alpha = 1.0f
-            binding.tvCountOnArrow.text = "▶"
+            binding.tvCountOnArrow.text = ">"
         } else {
             binding.cardCountOn.isEnabled = false
             binding.cardCountOn.alpha = 0.4f
-            binding.tvCountOnArrow.text = "🔒"
+            binding.tvCountOnArrow.text = "Locked"
         }
 
-        // 3. NUMBER_BONDS unlocks if COUNT_ON has completed >= 3 activities AND accuracy >= 70%
+        // 3. NUMBER_BONDS unlocks if COUNT_ON has completed >= 3 activities AND accuracy >= 80%
         //    AND COUNT_ON itself is unlocked
         val countOnAccuracy = if (countOnProgress != null && countOnProgress.totalAttempts > 0) {
             countOnProgress.totalCorrect.toFloat() / countOnProgress.totalAttempts
@@ -168,16 +171,16 @@ class HomeActivity : AppCompatActivity() {
         val isNumberBondsQualified = isCountOnQualified &&
                                      countOnProgress != null && 
                                      countOnProgress.completedActivities >= 3 && 
-                                     countOnAccuracy >= 0.70f
+                                     countOnAccuracy >= 0.80f
 
         if (isNumberBondsQualified) {
             binding.cardNumberBonds.isEnabled = true
             binding.cardNumberBonds.alpha = 1.0f
-            binding.tvNumberBondsArrow.text = "▶"
+            binding.tvNumberBondsArrow.text = ">"
         } else {
             binding.cardNumberBonds.isEnabled = false
             binding.cardNumberBonds.alpha = 0.4f
-            binding.tvNumberBondsArrow.text = "🔒"
+            binding.tvNumberBondsArrow.text = "Locked"
         }
     }
 

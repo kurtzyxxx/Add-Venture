@@ -1,9 +1,14 @@
 package com.addventure.app.ui
 
+import android.content.ClipData
+import android.content.ClipDescription
 import android.content.Intent
 import android.os.Bundle
 import android.os.CountDownTimer
+import android.view.DragEvent
+import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.widget.LinearLayout
 import android.widget.Toast
 import androidx.activity.viewModels
@@ -12,6 +17,7 @@ import com.addventure.app.R
 import com.addventure.app.databinding.ActivityCountOnBinding
 import com.addventure.app.logic.ActivityManager
 import com.addventure.app.viewmodel.ActivityViewModel
+import android.widget.TextView
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
@@ -46,7 +52,7 @@ class CountOnActivity : AppCompatActivity() {
             if (answer != null) {
                 viewModel.submitAnswer(answer)
             } else {
-                Toast.makeText(this, "Tap a number first!", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Drag or tap a number first!", Toast.LENGTH_SHORT).show()
             }
         }
 
@@ -54,6 +60,62 @@ class CountOnActivity : AppCompatActivity() {
             val hint = viewModel.useHint()
             showHintDialog(hint)
         }
+
+        // Setup drag-and-drop listener for Count On
+        val dragListener = View.OnDragListener { v, event ->
+            val isMainDropZone = v.id == R.id.layoutDropZone
+            when (event.action) {
+                DragEvent.ACTION_DRAG_STARTED -> {
+                    if (event.clipDescription.hasMimeType(ClipDescription.MIMETYPE_TEXT_PLAIN)) {
+                        if (isMainDropZone) {
+                            v.setBackgroundResource(R.drawable.bg_drop_zone_active)
+                        }
+                        true
+                    } else {
+                        false
+                    }
+                }
+                DragEvent.ACTION_DRAG_ENTERED -> {
+                    true
+                }
+                DragEvent.ACTION_DRAG_EXITED -> {
+                    if (isMainDropZone) {
+                        v.setBackgroundResource(R.drawable.bg_drop_zone)
+                    }
+                    true
+                }
+                DragEvent.ACTION_DROP -> {
+                    val item = event.clipData.getItemAt(0)
+                    val valueStr = item.text.toString()
+                    val value = valueStr.toIntOrNull()
+                    if (value != null) {
+                        selectedAnswer = value
+                        binding.tvSelectedAnswer.text = valueStr
+
+                        // Find corresponding button in container and highlight it
+                        for (i in 0 until binding.numberButtonsContainer.childCount) {
+                            val btn = binding.numberButtonsContainer.getChildAt(i) as? MaterialButton
+                            if (btn?.text == valueStr) {
+                                highlightSelectedButton(btn)
+                                break
+                            }
+                        }
+                    }
+                    true
+                }
+                DragEvent.ACTION_DRAG_ENDED -> {
+                    if (isMainDropZone) {
+                        v.setBackgroundResource(R.drawable.bg_drop_zone)
+                    }
+                    true
+                }
+                else -> false
+            }
+        }
+        binding.layoutDropZone.setOnDragListener(dragListener)
+
+        // Start floating animation on Oliver the Owl Guide
+        binding.imgOwlCheer.startFloatingAnimation()
     }
 
     private fun observeData() {
@@ -68,11 +130,23 @@ class CountOnActivity : AppCompatActivity() {
             binding.tvInstruction.text = "Start from $bigger and count on $smaller more!"
 
             // Show count on objects (circles for the smaller number)
-            binding.tvCountOnObjects.text = List(smaller) { "🔵" }.joinToString(" ")
+            binding.containerCountOnObjects.removeAllViews()
+            val size = resources.getDimensionPixelSize(R.dimen.fruit_size)
+            val margin = resources.getDimensionPixelSize(R.dimen.spacing_xs)
+            val isSmoothMode = getSharedPreferences("add_venture_prefs", MODE_PRIVATE).getBoolean("smooth_mode", false)
 
-            // Show counting steps: bigger → bigger+1 → ... → answer
-            val steps = (bigger..bigger + smaller).joinToString(" → ")
-            binding.tvCountingSteps.text = steps
+            for (i in 0 until smaller) {
+                val circleView = View(this).apply {
+                    setBackgroundResource(R.drawable.bg_token_seed)
+                    layoutParams = LinearLayout.LayoutParams(size, size).apply {
+                        setMargins(margin, margin, margin, margin)
+                    }
+                }
+                binding.containerCountOnObjects.addView(circleView)
+                if (!isSmoothMode) {
+                    circleView.fadeInPop(80L + i * 50L)
+                }
+            }
 
             // Setup answer buttons
             setupNumberButtons(problem.correctAnswer)
@@ -81,20 +155,22 @@ class CountOnActivity : AppCompatActivity() {
             binding.tvSelectedAnswer.text = "What is the result after dragging?"
             binding.tvFeedback.visibility = View.GONE
             binding.btnSubmit.isEnabled = true
+            binding.imgOwlCheer.setImageResource(R.drawable.lost_owl)
 
             // Trigger animations
-            val isSmoothMode = getSharedPreferences("add_venture_prefs", MODE_PRIVATE).getBoolean("smooth_mode", false)
             if (!isSmoothMode) {
                 binding.tvStartNumber.fadeInPop(0)
-                binding.tvCountOnObjects.fadeInPop(80)
-                binding.tvCountingSteps.fadeInPop(160)
             }
 
             startTimer()
         }
 
         viewModel.isCorrectAnswer.observe(this) { isCorrect ->
-            if (isCorrect == null) return@observe
+            if (isCorrect == null) {
+                binding.tvFeedback.visibility = View.GONE
+                binding.imgOwlCheer.setImageResource(R.drawable.lost_owl)
+                return@observe
+            }
             timer?.cancel()
 
             val isSmoothMode = getSharedPreferences("add_venture_prefs", MODE_PRIVATE).getBoolean("smooth_mode", false)
@@ -103,6 +179,7 @@ class CountOnActivity : AppCompatActivity() {
                 binding.tvFeedback.visibility = View.VISIBLE
                 binding.tvFeedback.setTextColor(getColor(R.color.correct_green))
                 binding.btnSubmit.isEnabled = false
+                binding.imgOwlCheer.setImageResource(R.drawable.happy_owl)
                 activitiesThisSession++
                 showCorrectDialog()
             } else {
@@ -165,10 +242,20 @@ class CountOnActivity : AppCompatActivity() {
                 setBackgroundColor(getColor(R.color.count_on_color))
                 setTextColor(getColor(R.color.white))
 
-                setBouncyClickListener {
-                    selectedAnswer = num
-                    binding.tvSelectedAnswer.text = num.toString()
-                    highlightSelectedButton(this)
+                setOnTouchListener { view, event ->
+                    if (event.action == MotionEvent.ACTION_DOWN) {
+                        selectedAnswer = num
+                        binding.tvSelectedAnswer.text = num.toString()
+                        highlightSelectedButton(this)
+
+                        val clipData = ClipData.newPlainText("answer", num.toString())
+                        val shadow = View.DragShadowBuilder(view)
+                        view.startDragAndDrop(clipData, shadow, view, 0)
+                        view.performClick()
+                        true
+                    } else {
+                        false
+                    }
                 }
             }
             binding.numberButtonsContainer.addView(button)
@@ -208,23 +295,57 @@ class CountOnActivity : AppCompatActivity() {
 
     private fun showCorrectDialog() {
         val stars = viewModel.earnedStars.value ?: 0
-        val message = "+$stars Stars"
+        val combo = viewModel.comboCount.value ?: 0
 
-        val builder = MaterialAlertDialogBuilder(this, com.google.android.material.R.style.MaterialAlertDialog_Material3)
-            .setTitle("Great Job!")
-            .setMessage(message)
-            .setPositiveButton("Got it!") { dialog, _ ->
-                dialog.dismiss()
-                proceedAfterAnswer()
-            }
+        val dialogView = layoutInflater.inflate(R.layout.dialog_correct, null)
+        val dialog = MaterialAlertDialogBuilder(this, com.google.android.material.R.style.MaterialAlertDialog_Material3)
+            .setView(dialogView)
             .setCancelable(false)
+            .create()
 
-        val dialog = builder.create()
-        correctDialog = dialog
         dialog.show()
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+        val tvComboTitle = dialogView.findViewById<TextView>(R.id.tvComboTitle)
+        val tvCorrectTitle = dialogView.findViewById<TextView>(R.id.tvCorrectTitle)
+        val tvCorrectStars = dialogView.findViewById<TextView>(R.id.tvCorrectStars)
+        val tvComboBadge = dialogView.findViewById<TextView>(R.id.tvComboBadge)
+        val btnNext = dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnCorrectNext)
+
+        tvCorrectStars.text = "+$stars Stars"
+
+        if (combo >= 2) {
+            tvComboTitle.visibility = View.VISIBLE
+            tvComboBadge.visibility = View.VISIBLE
+            tvComboBadge.text = "Combo x$combo!"
+            
+            tvComboTitle.text = when (combo) {
+                2 -> "FANTASTIC!"
+                3 -> "MAGNIFICENT!"
+                4 -> "SPECTACULAR!"
+                else -> "UNSTOPPABLE!"
+            }
+
+            tvComboTitle.scaleX = 0.5f
+            tvComboTitle.scaleY = 0.5f
+            tvComboTitle.animate()
+                .scaleX(1f)
+                .scaleY(1f)
+                .setDuration(400)
+                .setInterpolator(android.view.animation.OvershootInterpolator())
+                .start()
+        } else {
+            tvComboTitle.visibility = View.GONE
+            tvComboBadge.visibility = View.GONE
+        }
+
+        btnNext.setOnClickListener {
+            dialog.dismiss()
+            proceedAfterAnswer()
+        }
 
         val isSmoothMode = getSharedPreferences("add_venture_prefs", MODE_PRIVATE).getBoolean("smooth_mode", false)
-        val delay = if (isSmoothMode) 1200L else 2000L
+        val delay = if (isSmoothMode) 1500L else 2500L
         binding.root.postDelayed({
             if (dialog.isShowing) {
                 dialog.dismiss()
@@ -242,19 +363,27 @@ class CountOnActivity : AppCompatActivity() {
     }
 
     private fun showRetryDialog() {
-        MaterialAlertDialogBuilder(this, com.google.android.material.R.style.MaterialAlertDialog_Material3)
-            .setTitle("Oops! Not quite.")
-            .setMessage("Let's try again!")
-            .setPositiveButton(getString(R.string.btn_try_again)) { dialog, _ ->
-                viewModel.retry()
-                dialog.dismiss()
-            }
-            .setNeutralButton(getString(R.string.btn_need_hint)) { dialog, _ ->
-                dialog.dismiss()
-                showHintDialog(viewModel.useHint())
-            }
+        val dialogView = layoutInflater.inflate(R.layout.dialog_retry, null)
+        val dialog = MaterialAlertDialogBuilder(this, com.google.android.material.R.style.MaterialAlertDialog_Material3)
+            .setView(dialogView)
             .setCancelable(false)
-            .show()
+            .create()
+
+        dialog.show()
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+        val btnTryAgain = dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnDialogTryAgain)
+        val btnHint = dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnDialogHint)
+
+        btnTryAgain.setOnClickListener {
+            viewModel.retry()
+            dialog.dismiss()
+        }
+
+        btnHint.setOnClickListener {
+            dialog.dismiss()
+            showHintDialog(viewModel.useHint())
+        }
     }
 
     private fun loadNewProblem() {

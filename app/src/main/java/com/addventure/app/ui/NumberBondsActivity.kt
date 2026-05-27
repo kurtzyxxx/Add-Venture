@@ -1,9 +1,14 @@
 package com.addventure.app.ui
 
+import android.content.ClipData
+import android.content.ClipDescription
 import android.content.Intent
 import android.os.Bundle
 import android.os.CountDownTimer
+import android.view.DragEvent
+import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.widget.LinearLayout
 import android.widget.Toast
 import androidx.activity.viewModels
@@ -12,6 +17,7 @@ import com.addventure.app.R
 import com.addventure.app.databinding.ActivityNumberBondsBinding
 import com.addventure.app.logic.ActivityManager
 import com.addventure.app.viewmodel.ActivityViewModel
+import android.widget.TextView
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
@@ -46,7 +52,7 @@ class NumberBondsActivity : AppCompatActivity() {
             if (answer != null) {
                 viewModel.submitAnswer(answer)
             } else {
-                Toast.makeText(this, "Tap a number first!", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Drag or tap a number first!", Toast.LENGTH_SHORT).show()
             }
         }
 
@@ -54,6 +60,61 @@ class NumberBondsActivity : AppCompatActivity() {
             val hint = viewModel.useHint()
             showHintDialog(hint)
         }
+
+        // Setup drag-and-drop listener for Number Bonds
+        val dragListener = View.OnDragListener { v, event ->
+            when (event.action) {
+                DragEvent.ACTION_DRAG_STARTED -> {
+                    if (event.clipDescription.hasMimeType(ClipDescription.MIMETYPE_TEXT_PLAIN)) {
+                        v.setBackgroundResource(R.drawable.bg_number_bond_circle_active)
+                        true
+                    } else {
+                        false
+                    }
+                }
+                DragEvent.ACTION_DRAG_ENTERED -> {
+                    true
+                }
+                DragEvent.ACTION_DRAG_EXITED -> {
+                    v.setBackgroundResource(R.drawable.bg_number_bond_circle)
+                    true
+                }
+                DragEvent.ACTION_DROP -> {
+                    val item = event.clipData.getItemAt(0)
+                    val valueStr = item.text.toString()
+                    val value = valueStr.toIntOrNull()
+                    if (value != null) {
+                        selectedAnswer = value
+                        binding.tvPart2.text = valueStr
+                        binding.tvPart2.setTextColor(getColor(R.color.number_bonds_color))
+
+                        val problem = viewModel.currentProblem.value
+                        if (problem != null) {
+                            binding.tvEquation.text = "${problem.num1} + $valueStr = ${problem.correctAnswer}"
+                        }
+
+                        // Find corresponding button in container and highlight it
+                        for (i in 0 until binding.numberButtonsContainer.childCount) {
+                            val btn = binding.numberButtonsContainer.getChildAt(i) as? MaterialButton
+                            if (btn?.text == valueStr) {
+                                highlightSelectedButton(btn)
+                                break
+                            }
+                        }
+                    }
+                    true
+                }
+                DragEvent.ACTION_DRAG_ENDED -> {
+                    v.setBackgroundResource(R.drawable.bg_number_bond_circle)
+                    true
+                }
+                else -> false
+            }
+        }
+        binding.frameMissingPart.setOnDragListener(dragListener)
+
+        // Start floating animation on Oliver the Owl Guide
+        binding.imgOwlCheer.startFloatingAnimation()
     }
 
     private fun observeData() {
@@ -75,6 +136,7 @@ class NumberBondsActivity : AppCompatActivity() {
             selectedAnswer = null
             binding.tvFeedback.visibility = View.GONE
             binding.btnSubmit.isEnabled = true
+            binding.imgOwlCheer.setImageResource(R.drawable.lost_owl)
 
             // Trigger animations
             val isSmoothMode = getSharedPreferences("add_venture_prefs", MODE_PRIVATE).getBoolean("smooth_mode", false)
@@ -89,7 +151,13 @@ class NumberBondsActivity : AppCompatActivity() {
         }
 
         viewModel.isCorrectAnswer.observe(this) { isCorrect ->
-            if (isCorrect == null) return@observe
+            if (isCorrect == null) {
+                binding.tvFeedback.visibility = View.GONE
+                binding.imgOwlCheer.setImageResource(R.drawable.lost_owl)
+                binding.tvPart2.text = "?"
+                binding.tvPart2.setTextColor(getColor(R.color.incorrect_red))
+                return@observe
+            }
             timer?.cancel()
 
             val isSmoothMode = getSharedPreferences("add_venture_prefs", MODE_PRIVATE).getBoolean("smooth_mode", false)
@@ -101,6 +169,7 @@ class NumberBondsActivity : AppCompatActivity() {
                 binding.tvFeedback.visibility = View.VISIBLE
                 binding.tvFeedback.setTextColor(getColor(R.color.correct_green))
                 binding.btnSubmit.isEnabled = false
+                binding.imgOwlCheer.setImageResource(R.drawable.happy_owl)
                 activitiesThisSession++
                 showCorrectDialog()
             } else {
@@ -109,7 +178,10 @@ class NumberBondsActivity : AppCompatActivity() {
                 if (!isSmoothMode) {
                     binding.tvFeedback.shake()
                 }
-                showRetryDialog()
+                // Show owl librarian notification and encourage retry
+                showOwlLibrarianNotification(getString(R.string.feedback_incorrect))
+                // Start floating animation for visual feedback
+                binding.imgOwlCheer.startFloatingAnimation()
             }
         }
 
@@ -163,17 +235,27 @@ class NumberBondsActivity : AppCompatActivity() {
                 setBackgroundColor(getColor(R.color.number_bonds_color))
                 setTextColor(getColor(R.color.white))
 
-                setBouncyClickListener {
-                    selectedAnswer = num
-                    binding.tvPart2.text = num.toString()
-                    binding.tvPart2.setTextColor(getColor(R.color.number_bonds_color))
+                setOnTouchListener { view, event ->
+                    if (event.action == MotionEvent.ACTION_DOWN) {
+                        selectedAnswer = num
+                        binding.tvPart2.text = num.toString()
+                        binding.tvPart2.setTextColor(getColor(R.color.number_bonds_color))
 
-                    val problem = viewModel.currentProblem.value
-                    if (problem != null) {
-                        binding.tvEquation.text = "${problem.num1} + $num = ${problem.correctAnswer}"
+                        val problem = viewModel.currentProblem.value
+                        if (problem != null) {
+                            binding.tvEquation.text = "${problem.num1} + $num = ${problem.correctAnswer}"
+                        }
+
+                        highlightSelectedButton(this)
+
+                        val clipData = ClipData.newPlainText("answer", num.toString())
+                        val shadow = View.DragShadowBuilder(view)
+                        view.startDragAndDrop(clipData, shadow, view, 0)
+                        view.performClick()
+                        true
+                    } else {
+                        false
                     }
-
-                    highlightSelectedButton(this)
                 }
             }
             binding.numberButtonsContainer.addView(button)
@@ -213,23 +295,57 @@ class NumberBondsActivity : AppCompatActivity() {
 
     private fun showCorrectDialog() {
         val stars = viewModel.earnedStars.value ?: 0
-        val message = "+$stars Stars"
+        val combo = viewModel.comboCount.value ?: 0
 
-        val builder = MaterialAlertDialogBuilder(this, com.google.android.material.R.style.MaterialAlertDialog_Material3)
-            .setTitle("Great Job!")
-            .setMessage(message)
-            .setPositiveButton("Got it!") { dialog, _ ->
-                dialog.dismiss()
-                proceedAfterAnswer()
-            }
+        val dialogView = layoutInflater.inflate(R.layout.dialog_correct, null)
+        val dialog = MaterialAlertDialogBuilder(this, com.google.android.material.R.style.MaterialAlertDialog_Material3)
+            .setView(dialogView)
             .setCancelable(false)
+            .create()
 
-        val dialog = builder.create()
-        correctDialog = dialog
         dialog.show()
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+        val tvComboTitle = dialogView.findViewById<TextView>(R.id.tvComboTitle)
+        val tvCorrectTitle = dialogView.findViewById<TextView>(R.id.tvCorrectTitle)
+        val tvCorrectStars = dialogView.findViewById<TextView>(R.id.tvCorrectStars)
+        val tvComboBadge = dialogView.findViewById<TextView>(R.id.tvComboBadge)
+        val btnNext = dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnCorrectNext)
+
+        tvCorrectStars.text = "+$stars Stars"
+
+        if (combo >= 2) {
+            tvComboTitle.visibility = View.VISIBLE
+            tvComboBadge.visibility = View.VISIBLE
+            tvComboBadge.text = "Combo x$combo!"
+            
+            tvComboTitle.text = when (combo) {
+                2 -> "FANTASTIC!"
+                3 -> "MAGNIFICENT!"
+                4 -> "SPECTACULAR!"
+                else -> "UNSTOPPABLE!"
+            }
+
+            tvComboTitle.scaleX = 0.5f
+            tvComboTitle.scaleY = 0.5f
+            tvComboTitle.animate()
+                .scaleX(1f)
+                .scaleY(1f)
+                .setDuration(400)
+                .setInterpolator(android.view.animation.OvershootInterpolator())
+                .start()
+        } else {
+            tvComboTitle.visibility = View.GONE
+            tvComboBadge.visibility = View.GONE
+        }
+
+        btnNext.setOnClickListener {
+            dialog.dismiss()
+            proceedAfterAnswer()
+        }
 
         val isSmoothMode = getSharedPreferences("add_venture_prefs", MODE_PRIVATE).getBoolean("smooth_mode", false)
-        val delay = if (isSmoothMode) 1200L else 2000L
+        val delay = if (isSmoothMode) 1500L else 2500L
         binding.root.postDelayed({
             if (dialog.isShowing) {
                 dialog.dismiss()
@@ -249,21 +365,27 @@ class NumberBondsActivity : AppCompatActivity() {
     }
 
     private fun showRetryDialog() {
-        MaterialAlertDialogBuilder(this, com.google.android.material.R.style.MaterialAlertDialog_Material3)
-            .setTitle("Oops! Not quite.")
-            .setMessage("Let's try again!")
-            .setPositiveButton(getString(R.string.btn_try_again)) { dialog, _ ->
-                viewModel.retry()
-                binding.tvPart2.text = "?"
-                binding.tvPart2.setTextColor(getColor(R.color.incorrect_red))
-                dialog.dismiss()
-            }
-            .setNeutralButton(getString(R.string.btn_need_hint)) { dialog, _ ->
-                dialog.dismiss()
-                showHintDialog(viewModel.useHint())
-            }
+        val dialogView = layoutInflater.inflate(R.layout.dialog_retry, null)
+        val dialog = MaterialAlertDialogBuilder(this, com.google.android.material.R.style.MaterialAlertDialog_Material3)
+            .setView(dialogView)
             .setCancelable(false)
-            .show()
+            .create()
+
+        dialog.show()
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+        val btnTryAgain = dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnDialogTryAgain)
+        val btnHint = dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnDialogHint)
+
+        btnTryAgain.setOnClickListener {
+            viewModel.retry()
+            dialog.dismiss()
+        }
+
+        btnHint.setOnClickListener {
+            dialog.dismiss()
+            showHintDialog(viewModel.useHint())
+        }
     }
 
     private fun loadNewProblem() {

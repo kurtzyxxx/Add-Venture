@@ -74,29 +74,29 @@ class ActivityManager {
     ): Int {
         if (!isCorrect) return 0
 
-        return when {
-            hintsUsed == 0 && retryCount == 0 && responseTimeMs < 15000 -> 3
-            hintsUsed == 0 && retryCount == 0 -> 2
-            else -> 1
-        }
+        // Start with 5 stars for a correct first try. Each mistake (retry) reduces by 1.
+        // Minimum stars is 0.
+        val baseStars = 5
+        val starsAfterRetries = (baseStars - retryCount).coerceAtLeast(0)
+        return starsAfterRetries
     }
 
     /**
      * Checks if the learner meets progression criteria to unlock next level.
-     * Requires at least 3 completed activities with >= 70% accuracy.
+     * Requires at least 3 completed activities with >= 80% accuracy.
      */
     fun checkProgressionCriteria(completedActivities: Int, totalCorrect: Int, totalAttempts: Int): Boolean {
         if (completedActivities < 3) return false
         if (totalAttempts == 0) return false
         val accuracy = totalCorrect.toFloat() / totalAttempts
-        return accuracy >= 0.7f
+        return accuracy >= 0.8f
     }
 
     /**
      * Gets the list of objects/fruits for Count All activities.
      */
     fun getCountAllObjects(num1: Int, num2: Int): Pair<List<String>, List<String>> {
-        val fruits = listOf("🍎", "🍓", "🍊", "🍌", "🍇")
+        val fruits = listOf("berry", "nut", "seed")
         val fruit1 = fruits[Random.nextInt(fruits.size)]
         val fruit2 = fruits.filter { it != fruit1 }[Random.nextInt(fruits.size - 1)]
 

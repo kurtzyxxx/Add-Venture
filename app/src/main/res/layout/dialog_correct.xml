@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_margin="@dimen/spacing_md"
+    app:cardCornerRadius="@dimen/corner_lg"
+    app:cardElevation="@dimen/card_elevation_high"
+    app:cardBackgroundColor="@color/white">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:padding="@dimen/spacing_lg">
+
+        <!-- Happy Cheering Owl -->
+        <ImageView
+            android:id="@+id/imgCorrectOwl"
+            android:layout_width="180dp"
+            android:layout_height="180dp"
+            android:src="@drawable/happy_owl"
+            android:contentDescription="Oliver cheering happily"
+            android:scaleType="fitCenter"
+            android:layout_marginBottom="@dimen/spacing_md" />
+
+        <!-- Combo Comic Text (Candy Crush style) -->
+        <TextView
+            android:id="@+id/tvComboTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="sans-serif-black"
+            android:text="SWEET!"
+            android:textColor="@color/primary"
+            android:textSize="32sp"
+            android:visibility="gone"
+            android:layout_marginBottom="@dimen/spacing_xs" />
+
+        <!-- Title -->
+        <TextView
+            android:id="@+id/tvCorrectTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:fontFamily="sans-serif-black"
+            android:text="Great Job!"
+            android:textColor="@color/correct_green"
+            android:textSize="24sp"
+            android:layout_marginBottom="@dimen/spacing_xs" />
+
+        <!-- Star Reward text -->
+        <TextView
+            android:id="@+id/tvCorrectStars"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:fontFamily="sans-serif-bold"
+            android:text="+3 Stars"
+            android:textColor="@color/star_gold"
+            android:textSize="20sp"
+            android:layout_marginBottom="@dimen/spacing_sm" />
+
+        <!-- Combo Badge -->
+        <TextView
+            android:id="@+id/tvComboBadge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_card_rounded"
+            android:backgroundTint="@color/accent"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp"
+            android:fontFamily="sans-serif-black"
+            android:text="Combo x2!"
+            android:textColor="@color/text_primary"
+            android:textSize="18sp"
+            android:visibility="gone"
+            android:layout_marginBottom="@dimen/spacing_md" />
+
+        <!-- Next button -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnCorrectNext"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/button_height"
+            android:text="Continue →"
+            android:textAllCaps="false"
+            android:textSize="@dimen/text_sm"
+            android:fontFamily="sans-serif-bold"
+            app:backgroundTint="@color/primary"
+            app:cornerRadius="@dimen/corner_lg"
+            android:textColor="@color/white" />
+
+    </LinearLayout>
+
+</com.google.android.material.card.MaterialCardView>

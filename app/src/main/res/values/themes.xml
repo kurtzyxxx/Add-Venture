@@ -11,6 +11,7 @@
         <item name="colorOnSecondary">@color/white</item>
         <item name="android:statusBarColor">@color/primary_dark</item>
         <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:windowBackground">@color/background_light</item>
     </style>
 
     <!-- Splash Theme -->
@@ -25,7 +26,8 @@
         <item name="android:minHeight">@dimen/button_height</item>
         <item name="cornerRadius">@dimen/corner_lg</item>
         <item name="android:textAllCaps">false</item>
-        <item name="android:fontFamily">sans-serif-black</item>
+        <item name="android:fontFamily">sans-serif-bold</item>
+        <item name="android:letterSpacing">0.02</item>
     </style>
 
     <style name="GameButton.Primary" parent="GameButton">
@@ -41,6 +43,11 @@
     <style name="GameButton.Accent" parent="GameButton">
         <item name="backgroundTint">@color/accent</item>
         <item name="android:textColor">@color/text_primary</item>
+    </style>
+
+    <style name="GameButton.Correct" parent="GameButton">
+        <item name="backgroundTint">@color/correct_green</item>
+        <item name="android:textColor">@color/white</item>
     </style>
 
     <style name="GameButton.Outline" parent="Widget.MaterialComponents.Button.OutlinedButton">
@@ -65,6 +72,7 @@
         <item name="android:textSize">@dimen/text_xl</item>
         <item name="android:textColor">@color/text_primary</item>
         <item name="android:fontFamily">sans-serif-black</item>
+        <item name="android:letterSpacing">-0.01</item>
     </style>
 
     <style name="TextSubtitle">
@@ -76,6 +84,7 @@
     <style name="TextBody">
         <item name="android:textSize">@dimen/text_md</item>
         <item name="android:textColor">@color/text_secondary</item>
+        <item name="android:lineSpacingMultiplier">1.3</item>
     </style>
 
     <style name="TextDisplay">
@@ -84,9 +93,18 @@
         <item name="android:fontFamily">sans-serif-black</item>
     </style>
 
+    <style name="TextCaption">
+        <item name="android:textSize">@dimen/text_xs</item>
+        <item name="android:textColor">@color/text_secondary</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:letterSpacing">0.04</item>
+        <item name="android:textAllCaps">true</item>
+    </style>
+
     <!-- Strategy Card -->
     <style name="StrategyCard" parent="GameCard">
         <item name="cardElevation">@dimen/card_elevation_high</item>
+        <item name="cardCornerRadius">20dp</item>
     </style>
 
     <!-- Number Button Style -->
@@ -99,5 +117,21 @@
         <item name="backgroundTint">@color/secondary</item>
         <item name="android:textColor">@color/white</item>
         <item name="android:fontFamily">sans-serif-black</item>
+    </style>
+
+    <!-- Stat Value Style -->
+    <style name="StatValue">
+        <item name="android:textSize">@dimen/text_xl</item>
+        <item name="android:fontFamily">sans-serif-black</item>
+        <item name="android:gravity">center</item>
+    </style>
+
+    <style name="StatLabel">
+        <item name="android:textSize">@dimen/text_xs</item>
+        <item name="android:textColor">@color/text_secondary</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:gravity">center</item>
+        <item name="android:textAllCaps">true</item>
+        <item name="android:letterSpacing">0.06</item>
     </style>
 </resources>

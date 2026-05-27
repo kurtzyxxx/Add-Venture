@@ -17,7 +17,7 @@
     <string name="btn_submit">Submit</string>
     <string name="btn_hint">Hint</string>
     <string name="btn_try_again">Try Again</string>
-    <string name="btn_next">Next →</string>
+    <string name="btn_next">Next</string>
     <string name="btn_got_it">Got it!</string>
     <string name="btn_finish">Finish Session</string>
     <string name="btn_play_again">Keep Practicing</string>
@@ -26,11 +26,11 @@
 
     <!-- Count All -->
     <string name="count_all_instruction">Count ALL the objects and enter the total!</string>
-    <string name="count_all_drag_instruction">Drag the fruits to the basket</string>
+    <string name="count_all_drag_instruction">Drag the fruits to the drop zone</string>
 
     <!-- Count On -->
     <string name="count_on_instruction">Start from the bigger number and count on!</string>
-    <string name="count_on_start_label">Start with</string>
+    <string name="count_on_start_label">Start</string>
     <string name="count_on_add_label">Count on</string>
 
     <!-- Number Bonds -->
@@ -45,7 +45,7 @@
     <string name="feedback_hint_title">Here\'s a Hint!</string>
 
     <!-- Progress -->
-    <string name="progress_title">• My Progress</string>
+    <string name="progress_title">My Progress</string>
     <string name="progress_stars">Stars Earned</string>
     <string name="progress_activities">Activities Completed</string>
     <string name="progress_accuracy">Accuracy</string>

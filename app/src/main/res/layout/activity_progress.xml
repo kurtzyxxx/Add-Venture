@@ -99,8 +99,8 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="⭐ Stars"
-                                android:textColor="@color/text_secondary"
+                                android:text="★ Stars"
+                                android:textColor="@color/star_gold"
                                 android:textSize="@dimen/text_xs" />
                         </LinearLayout>
 
@@ -130,7 +130,7 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="📊 Progress"
+                                android:text="Progress"
                                 android:textColor="@color/text_secondary"
                                 android:textSize="@dimen/text_xs" />
                         </LinearLayout>
@@ -161,7 +161,7 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="📈 Level"
+                                android:text="Level"
                                 android:textColor="@color/text_secondary"
                                 android:textSize="@dimen/text_xs" />
                         </LinearLayout>
@@ -213,11 +213,7 @@
                         android:layout_height="wrap_content"
                         android:gravity="center_vertical">
 
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="🍎 "
-                            android:textSize="24sp" />
+
 
                         <TextView
                             android:layout_width="0dp"
@@ -233,7 +229,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:fontFamily="sans-serif-bold"
-                            android:text="⭐ 0"
+                            android:text="★ 0"
                             android:textColor="@color/star_gold"
                             android:textSize="@dimen/text_sm" />
                     </LinearLayout>
@@ -281,11 +277,7 @@
                         android:layout_height="wrap_content"
                         android:gravity="center_vertical">
 
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="🔢 "
-                            android:textSize="24sp" />
+
 
                         <TextView
                             android:layout_width="0dp"
@@ -301,7 +293,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:fontFamily="sans-serif-bold"
-                            android:text="⭐ 0"
+                            android:text="★ 0"
                             android:textColor="@color/star_gold"
                             android:textSize="@dimen/text_sm" />
                     </LinearLayout>
@@ -349,11 +341,7 @@
                         android:layout_height="wrap_content"
                         android:gravity="center_vertical">
 
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="🧩 "
-                            android:textSize="24sp" />
+
 
                         <TextView
                             android:layout_width="0dp"
@@ -369,7 +357,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:fontFamily="sans-serif-bold"
-                            android:text="⭐ 0"
+                            android:text="★ 0"
                             android:textColor="@color/star_gold"
                             android:textSize="@dimen/text_sm" />
                     </LinearLayout>
