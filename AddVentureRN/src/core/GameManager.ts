@@ -3,6 +3,7 @@ import { DifficultyEngine } from './DifficultyEngine';
 import { HintManager } from './HintManager';
 import { FeedbackManager } from './FeedbackManager';
 import { ProblemGenerator, CountAllGenerator, CountOnGenerator, NumberBondsGenerator, Problem } from './ProblemGenerator';
+import * as Speech from 'expo-speech';
 
 export class GameManager {
   private static instance: GameManager;
@@ -71,6 +72,7 @@ export class GameManager {
     let starsEarned = 0;
     if (isCorrect) {
       starsEarned = profile.currentDifficulty * 10;
+      this.playSuccessSound();
       profile.consecutiveCorrect++;
       profile.consecutiveWrong = 0;
       profile.totalStars += starsEarned;
@@ -99,6 +101,15 @@ export class GameManager {
 
   public getHint(problem: Problem): string {
     return this.hintManager.getHint(this.currentStrategy, problem);
+  }
+
+  private async playSuccessSound() {
+    try {
+      Speech.stop();
+      // Sounds and voiceovers removed
+    } catch (e) {
+      console.log('Success sound failed', e);
+    }
   }
 
   public endSession(): SessionRecord | null {

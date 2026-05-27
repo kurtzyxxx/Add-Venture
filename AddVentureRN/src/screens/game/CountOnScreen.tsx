@@ -5,6 +5,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../../App';
 import { GameManager } from '../../core/GameManager';
 import { Problem } from '../../core/ProblemGenerator';
+import { LinearGradient } from 'expo-linear-gradient';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CountOn'>;
 
@@ -40,6 +41,9 @@ export default function CountOnScreen({ navigation }: Props) {
     const extra = Math.min(p.num1, p.num2);
     setBaseN(base);
     setExtraM(extra);
+
+    Speech.stop();
+    Speech.speak(`Help Oliver! He has ${base} fruits, and needs ${extra} more!`, { rate: 0.95, pitch: 1.4 });
     
     const newFruits: { id: string, emoji: string, dropped: boolean }[] = [];
     const emojiType = FRUITS[Math.floor(Math.random() * FRUITS.length)];
@@ -70,7 +74,12 @@ export default function CountOnScreen({ navigation }: Props) {
       
       const currentTotal = baseN + droppedCount;
       Speech.stop();
-      Speech.speak(currentTotal.toString(), { rate: 0.9, pitch: 1.1 });
+      if (droppedCount === next.length) {
+        Speech.speak(currentTotal.toString(), { rate: 0.95, pitch: 1.4 });
+        Speech.speak("How many fruits in all?", { rate: 0.95, pitch: 1.4 });
+      } else {
+        Speech.speak(currentTotal.toString(), { rate: 0.95, pitch: 1.4 });
+      }
       
       return next;
     });
@@ -87,7 +96,19 @@ export default function CountOnScreen({ navigation }: Props) {
     
     Alert.alert(isCorrect ? 'Correct!' : 'Incorrect', `${feedback}\nStars Earned: ${starsEarned}`, [
       { text: isCorrect ? 'Next Problem' : 'Try Again', onPress: () => {
-        if (isCorrect) loadNewProblem();
+        if (isCorrect) {
+          loadNewProblem();
+        } else {
+          setOptions(prev => {
+            const shuffled = [...prev];
+            for (let i = shuffled.length - 1; i > 0; i--) {
+              const j = Math.floor(Math.random() * (i + 1));
+              [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+            }
+            return shuffled;
+          });
+          setSelectedAnswer(null);
+        }
       }}
     ]);
   };
@@ -114,12 +135,23 @@ export default function CountOnScreen({ navigation }: Props) {
     return `${m}:${s}`;
   };
 
+  const optionColors = ['#FF5252', '#FF9800', '#FFCA28', '#66BB6A', '#29B6F6'];
+
   return (
     <SafeAreaView style={styles.container}>
+      <LinearGradient
+        colors={['#A5D6A7', '#B2DFDB']}
+        style={StyleSheet.absoluteFill}
+      />
+      {/* Cloud Decorations */}
+      <Text style={[styles.cloud, { top: '10%', left: '-5%', fontSize: 80, opacity: 0.6 }]}>☁️</Text>
+      <Text style={[styles.cloud, { top: '20%', right: '-10%', fontSize: 100, opacity: 0.6 }]}>☁️</Text>
+      <Text style={[styles.cloud, { top: '60%', left: '5%', fontSize: 70, opacity: 0.5 }]}>☁️</Text>
+      <Text style={[styles.cloud, { top: '70%', right: '0%', fontSize: 90, opacity: 0.5 }]}>☁️</Text>
       {/* Top Bar */}
       <View style={styles.topBar}>
-        <TouchableOpacity onPress={finishSession} style={styles.backButton}>
-          <Text style={styles.backIcon}>↩</Text>
+        <TouchableOpacity onPress={finishSession} style={styles.circleButton}>
+          <Text style={styles.backIcon}>{'<'}</Text>
         </TouchableOpacity>
         
         <Text style={styles.timeText}>Time: {formatTime(timer)}</Text>
@@ -135,7 +167,9 @@ export default function CountOnScreen({ navigation }: Props) {
       </View>
 
       <View style={styles.content}>
-        <Text style={styles.mainTitle}>Count On</Text>
+        <View style={styles.titleContainer}>
+          <Text style={styles.title}>Count On</Text>
+        </View>
         
         <View style={styles.instructionCard}>
           <View style={styles.owlPlaceholder}>
@@ -155,21 +189,24 @@ export default function CountOnScreen({ navigation }: Props) {
           <Text style={[styles.equationNumber, { color: '#FFCA28' }]}>?</Text>
         </View>
 
-        {/* The Tree (Source) */}
-        <View style={[styles.groupCard, { zIndex: 10 }]}>
-          <View style={styles.groupHeader}>
-            <Text style={styles.treeIcon}>🌳</Text>
-            <Text style={styles.groupTitle}>The Tree</Text>
+        {/* The Tree (Source) or Final Question */}
+        {!allDropped ? (
+          <View style={[styles.groupCard, { zIndex: 10 }]}>
+            <View style={styles.groupHeader}>
+              <Text style={styles.treeIcon}>🌳</Text>
+              <Text style={styles.groupTitle}>The Tree</Text>
+            </View>
+            <View style={styles.fruitRow}>
+              {fruits.filter(f => !f.dropped).map(fruit => (
+                <DraggableFruit key={fruit.id} fruit={fruit} onDrop={() => handleDrop(fruit.id)} />
+              ))}
+            </View>
           </View>
-          <View style={styles.fruitRow}>
-            {fruits.filter(f => !f.dropped).map(fruit => (
-              <DraggableFruit key={fruit.id} fruit={fruit} onDrop={() => handleDrop(fruit.id)} />
-            ))}
-            {fruits.filter(f => !f.dropped).length === 0 && (
-              <Text style={styles.emptyTreeText}>No more fruits left!</Text>
-            )}
+        ) : (
+          <View style={styles.questionContainer}>
+            <Text style={styles.questionText}>How many fruits in all?</Text>
           </View>
-        </View>
+        )}
 
         {/* Oliver's Basket (Drop Zone) */}
         <View style={styles.basketZone}>
@@ -209,19 +246,28 @@ export default function CountOnScreen({ navigation }: Props) {
       {/* Answer Area */}
       <View style={[styles.answerArea, { opacity: allDropped ? 1 : 0.5 }]} pointerEvents={allDropped ? 'auto' : 'none'}>
         <View style={styles.optionsContainer}>
-          {options.map(opt => (
+          {options.map((opt, index) => (
             <TouchableOpacity 
               key={opt} 
-              style={[styles.optionButton, selectedAnswer === opt && styles.optionSelected]}
+              style={[
+                styles.optionButton, 
+                { backgroundColor: optionColors[index % optionColors.length] },
+                selectedAnswer === opt && styles.optionSelected
+              ]} 
               onPress={() => setSelectedAnswer(opt)}
+              activeOpacity={0.8}
             >
-              <Text style={[styles.optionText, selectedAnswer === opt && styles.optionTextSelected]}>{opt}</Text>
+              <View style={styles.optionInner}>
+                <Text style={styles.optionText}>{opt}</Text>
+              </View>
             </TouchableOpacity>
           ))}
         </View>
-        <TouchableOpacity style={styles.submitButton} onPress={submitAnswer}>
-          <Text style={styles.submitText}>Submit</Text>
-        </TouchableOpacity>
+        <View style={styles.actionsContainer}>
+          <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#66BB6A' }]} onPress={submitAnswer}>
+            <Text style={styles.actionBtnText}>Submit</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -254,19 +300,22 @@ const DraggableFruit = ({ fruit, onDrop }: any) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFF3E0' }, // slightly warm background for Count On
-  topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, backgroundColor: '#FFF' },
-  backButton: { padding: 8 },
-  backIcon: { fontSize: 28, color: '#9E9E9E', transform: [{ scaleX: -1 }] },
-  timeText: { fontSize: 16, fontWeight: 'bold', color: '#546E7A' },
+  container: { flex: 1, backgroundColor: '#A5D6A7' },
+  cloud: { position: 'absolute', color: '#FFF' },
+  topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, zIndex: 10 },
+  circleButton: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center', elevation: 2 },
+  backIcon: { fontSize: 28, fontWeight: 'bold', color: '#4E342E' },
+  titleContainer: { alignItems: 'center', marginBottom: 10 },
+  title: { fontSize: 28, fontWeight: '900', color: '#4E342E', textShadowColor: '#FFF', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 1 },
+  timeText: { fontSize: 18, fontWeight: 'bold', color: '#4E342E' },
   badgesContainer: { flexDirection: 'row' },
-  badge: { borderWidth: 1, borderColor: '#E0E0E0', borderRadius: 16, paddingHorizontal: 12, paddingVertical: 4 },
-  badgeText: { fontSize: 14, fontWeight: 'bold', color: '#FFCA28' },
-  content: { flex: 1, padding: 16, zIndex: 10 },
-  mainTitle: { fontSize: 24, fontWeight: '900', color: '#FF9800', textAlign: 'center', marginBottom: 12 },
-  instructionCard: { flexDirection: 'row', alignItems: 'center', marginBottom: 20, paddingHorizontal: 10 },
-  owlPlaceholder: { width: 60, height: 60, backgroundColor: '#FFF', borderRadius: 30, justifyContent: 'center', alignItems: 'center', marginRight: 12, elevation: 2 },
-  instructionText: { flex: 1, fontSize: 16, color: '#37474F' },
+  badge: { backgroundColor: '#FFF', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 15, elevation: 2 },
+  badgeText: { fontWeight: 'bold', color: '#FF9800' },
+  content: { flex: 1, paddingHorizontal: 20 },
+  
+  instructionCard: { flexDirection: 'row', backgroundColor: '#FFF', padding: 15, borderRadius: 20, alignItems: 'center', marginBottom: 20, elevation: 3 },
+  owlPlaceholder: { width: 60, height: 60, backgroundColor: '#E0F7FA', borderRadius: 30, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
+  instructionText: { flex: 1, fontSize: 16, color: '#4E342E', fontWeight: 'bold' },
   equationContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 24 },
   equationNumber: { fontSize: 48, fontWeight: '900' },
   equationSymbol: { fontSize: 40, fontWeight: '900', color: '#263238', marginHorizontal: 8 },
@@ -275,6 +324,9 @@ const styles = StyleSheet.create({
   groupHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
   treeIcon: { fontSize: 24, marginRight: 8 },
   groupTitle: { fontSize: 18, fontWeight: 'bold', color: '#4CAF50' },
+  questionContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  questionText: { fontSize: 36, fontWeight: '900', color: '#4E342E', textShadowColor: '#FFF', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 1, textAlign: 'center' },
+
   fruitRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center' },
   fruitCircle: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#F1F8E9', justifyContent: 'center', alignItems: 'center', margin: 4, borderWidth: 2, borderColor: '#DCEDC8' },
   emoji: { fontSize: 32 },
@@ -290,12 +342,15 @@ const styles = StyleSheet.create({
   dropZoneHint: { color: '#BCAAA4', fontSize: 18, fontWeight: 'bold', marginLeft: 16 },
   droppedFruitWrapper: { margin: 4, width: 50, height: 50, borderRadius: 25, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center', elevation: 1 },
   
-  answerArea: { padding: 16, backgroundColor: '#FFF', borderTopWidth: 1, borderColor: '#EEE' },
-  optionsContainer: { flexDirection: 'row', justifyContent: 'center', marginBottom: 16 },
-  optionButton: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#F5F5F5', justifyContent: 'center', alignItems: 'center', marginHorizontal: 8 },
-  optionSelected: { backgroundColor: '#FF9800' },
-  optionText: { fontSize: 24, fontWeight: 'bold', color: '#37474F' },
-  optionTextSelected: { color: '#FFF' },
-  submitButton: { backgroundColor: '#FF9800', padding: 16, borderRadius: 30, alignItems: 'center' },
-  submitText: { color: '#FFF', fontSize: 20, fontWeight: '900' }
+  answerArea: { backgroundColor: 'transparent', padding: 10 },
+  optionsContainer: { flexDirection: 'row', justifyContent: 'space-evenly', paddingHorizontal: 10, marginBottom: 20 },
+  optionButton: { width: 60, height: 70, borderRadius: 16, justifyContent: 'center', alignItems: 'center', elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4 },
+  optionSelected: { borderWidth: 4, borderColor: '#FFF', transform: [{ scale: 1.1 }] },
+  optionInner: { width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', borderTopWidth: 2, borderTopColor: 'rgba(255,255,255,0.4)', borderRadius: 16 },
+  optionText: { fontSize: 36, fontWeight: '900', color: '#FFF', textShadowColor: 'rgba(0,0,0,0.3)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 },
+  
+  actionsContainer: { flexDirection: 'row', justifyContent: 'center', paddingHorizontal: 20, marginBottom: 20 },
+  actionBtn: { width: '60%', paddingVertical: 16, borderRadius: 30, justifyContent: 'center', alignItems: 'center', elevation: 4, borderWidth: 3, borderColor: '#FFF' },
+  actionBtnText: { fontSize: 24, fontWeight: '900', color: '#FFF', textShadowColor: 'rgba(0,0,0,0.2)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 }
+
 });
