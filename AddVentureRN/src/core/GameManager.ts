@@ -1,9 +1,11 @@
-import { SaveSystem, LearnerProfile, SessionRecord } from './SaveSystem';
+import { SaveSystem, LearnerProfile, SessionRecord, ProgressRecord } from './SaveSystem';
 import { DifficultyEngine } from './DifficultyEngine';
 import { HintManager } from './HintManager';
 import { FeedbackManager } from './FeedbackManager';
 import { ProblemGenerator, CountAllGenerator, CountOnGenerator, NumberBondsGenerator, Problem } from './ProblemGenerator';
 import * as Speech from 'expo-speech';
+
+export const MAX_ACTIVITIES_PER_SESSION = 10;
 
 export class GameManager {
   private static instance: GameManager;
@@ -16,7 +18,6 @@ export class GameManager {
   private generators: Record<string, ProblemGenerator>;
 
   public currentStrategy: string = 'COUNT_ALL';
-  public currentSession: SessionRecord | null = null;
   private sessionStartTime: number = 0;
 
   private constructor() {
@@ -46,52 +47,67 @@ export class GameManager {
   public startSession(strategy: string): void {
     this.currentStrategy = strategy;
     this.sessionStartTime = Date.now();
-    this.currentSession = {
-      strategy,
-      totalActivities: 0,
-      totalStars: 0,
-      totalCorrect: 0,
-      totalAttempts: 0,
-      startedAt: this.sessionStartTime
-    };
+    // Session state is now pulled from SaveSystem, so we just set the strategy
   }
 
   public generateProblem(): Problem {
     const profile = this.saveSystem.getProfile();
     const generator = this.generators[this.currentStrategy];
     if (!generator) throw new Error("Invalid strategy: " + this.currentStrategy);
-
     return generator.generateProblem(profile.currentDifficulty);
   }
 
-  public async submitAnswer(isCorrect: boolean, responseTimeMs: number): Promise<{ feedback: string, starsEarned: number }> {
-    if (!this.currentSession) throw new Error("Session not started");
+  private getCurrentProgress(): ProgressRecord {
+    return this.saveSystem.getProgress(this.currentStrategy);
+  }
 
+  /** Returns how many activities have been completed in the current 10-activity batch */
+  public getSessionActivityCount(): number {
+    return this.getCurrentProgress().sessionActivitiesCount;
+  }
+
+  /** Returns true when the session has reached the 10-activity cap */
+  public isSessionComplete(): boolean {
+    return this.getSessionActivityCount() >= MAX_ACTIVITIES_PER_SESSION;
+  }
+
+  public static starsForTry(tryNumber: number, isCorrect: boolean): number {
+    if (!isCorrect) return 0;
+    if (tryNumber === 1) return 3;
+    if (tryNumber === 2) return 2;
+    return 1;
+  }
+
+  public async submitAnswer(
+    isCorrect: boolean,
+    tryNumber: number,
+    responseTimeMs: number
+  ): Promise<{ feedback: string; starsEarned: number }> {
     const profile = this.saveSystem.getProfile();
-    
-    let starsEarned = 0;
+    const starsEarned = GameManager.starsForTry(tryNumber, isCorrect);
+
     if (isCorrect) {
-      starsEarned = profile.currentDifficulty * 10;
       this.playSuccessSound();
       profile.consecutiveCorrect++;
       profile.consecutiveWrong = 0;
       profile.totalStars += starsEarned;
-      
-      this.currentSession.totalCorrect++;
-      this.currentSession.totalStars += starsEarned;
     } else {
       profile.consecutiveCorrect = 0;
       profile.consecutiveWrong++;
     }
 
-    this.currentSession.totalActivities++;
-    this.currentSession.totalAttempts++;
-
-    // Adjust difficulty
-    profile.currentDifficulty = this.difficultyEngine.evaluatePerformance(profile.currentDifficulty, isCorrect, responseTimeMs);
-    
-    await this.saveSystem.saveProfile(profile);
-    await this.saveSystem.recordActivity(this.currentStrategy, isCorrect, starsEarned);
+    const activityResolved = isCorrect || tryNumber >= 3;
+    if (activityResolved) {
+      profile.currentDifficulty = this.difficultyEngine.evaluatePerformance(
+        profile.currentDifficulty,
+        isCorrect,
+        responseTimeMs
+      );
+      await this.saveSystem.saveProfile(profile);
+      await this.saveSystem.recordActivity(this.currentStrategy, isCorrect, starsEarned, tryNumber);
+    } else {
+      await this.saveSystem.saveProfile(profile);
+    }
 
     return {
       feedback: this.feedbackManager.getFeedback(isCorrect),
@@ -112,9 +128,22 @@ export class GameManager {
     }
   }
 
-  public endSession(): SessionRecord | null {
-    const session = this.currentSession;
-    this.currentSession = null;
-    return session;
+  /** 
+   * Call this ONLY when finishing a full 10-activity session.
+   * Returns stats for the summary screen, then resets the batch counters.
+   */
+  public async completeAndResetSession(): Promise<SessionRecord> {
+    const p = this.getCurrentProgress();
+    const summary: SessionRecord = {
+      strategy: this.currentStrategy,
+      totalActivities: p.sessionActivitiesCount,
+      totalStars: p.sessionStarsCount,
+      totalCorrect: p.sessionCorrectCount,
+      totalAttempts: p.sessionActivitiesCount, // In a batch, attempts = activities
+      startedAt: this.sessionStartTime
+    };
+    
+    await this.saveSystem.completeAndResetSession(this.currentStrategy);
+    return summary;
   }
 }

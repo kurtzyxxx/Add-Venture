@@ -1,10 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated, PanResponder, Alert, SafeAreaView } from 'react-native';
+import {
+  View, Text, StyleSheet, TouchableOpacity, Animated,
+  PanResponder, SafeAreaView, Modal
+} from 'react-native';
 import * as Speech from 'expo-speech';
 import { IncorrectModal } from '../../components/IncorrectModal';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../../App';
-import { GameManager } from '../../core/GameManager';
+import { GameManager, MAX_ACTIVITIES_PER_SESSION } from '../../core/GameManager';
 import { Problem } from '../../core/ProblemGenerator';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -14,7 +17,7 @@ const FRUITS = ['🍎', '🍌', '🍇', '🍉', '🍓', '🍑', '🍍', '🍊'];
 
 export default function CountAllScreen({ navigation }: Props) {
   const [problem, setProblem] = useState<Problem | null>(null);
-  const [fruits, setFruits] = useState<{ id: string, emoji: string, dropped: boolean, group: 1 | 2 }[]>([]);
+  const [fruits, setFruits] = useState<{ id: string; emoji: string; dropped: boolean; group: 1 | 2 }[]>([]);
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [options, setOptions] = useState<number[]>([]);
   const [dropCounter, setDropCounter] = useState(0);
@@ -24,6 +27,21 @@ export default function CountAllScreen({ navigation }: Props) {
   const [hintsRemaining, setHintsRemaining] = useState(3);
   const [showIncorrectModal, setShowIncorrectModal] = useState(false);
 
+  // 3-try system
+  const [currentTry, setCurrentTry] = useState(1);
+  // Activity counter (1–10)
+  const [activityCount, setActivityCount] = useState(0);
+  // Great Job overlay
+  const [showGreatJob, setShowGreatJob] = useState(false);
+  const [greatJobStars, setGreatJobStars] = useState(3);
+  // Adaptive repeat queue
+  const repeatQueue = useRef<Problem[]>([]);
+  // Current problem ref (to push into queue)
+  const currentProblemRef = useRef<Problem | null>(null);
+  // Animation
+  const starScale = useRef(new Animated.Value(0)).current;
+  const confettiAnim = useRef(new Animated.Value(0)).current;
+
   useEffect(() => {
     loadNewProblem();
     const interval = setInterval(() => {
@@ -32,38 +50,59 @@ export default function CountAllScreen({ navigation }: Props) {
     return () => clearInterval(interval);
   }, []);
 
-  const loadNewProblem = () => {
-    const p = GameManager.getInstance().generateProblem();
+  const animateGreatJob = () => {
+    starScale.setValue(0);
+    confettiAnim.setValue(0);
+    Animated.parallel([
+      Animated.spring(starScale, { toValue: 1, friction: 4, useNativeDriver: true }),
+      Animated.timing(confettiAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
+    ]).start();
+  };
+
+  const loadNewProblem = (forceRepeat?: Problem) => {
+    // Pull from repeat queue if available, otherwise generate new
+    let p: Problem;
+    if (forceRepeat) {
+      p = forceRepeat;
+    } else if (repeatQueue.current.length > 0) {
+      p = repeatQueue.current.shift()!;
+    } else {
+      p = GameManager.getInstance().generateProblem();
+    }
+    const pCount = GameManager.getInstance().getSessionActivityCount();
+    setActivityCount(pCount);
+
+    currentProblemRef.current = p;
     setProblem(p);
 
     Speech.stop();
     Speech.speak(`Help Oliver gather food! Let's count them all!`, { rate: 0.95, pitch: 1.4 });
-    
+
     const profile = GameManager.getInstance().saveSystem.getProfile();
     setHintsDisabled(profile.consecutiveCorrect >= 3);
-    
-    const newFruits: { id: string, emoji: string, dropped: boolean, group: 1 | 2 }[] = [];
+
+    const newFruits: { id: string; emoji: string; dropped: boolean; group: 1 | 2 }[] = [];
     const emojiType1 = FRUITS[Math.floor(Math.random() * FRUITS.length)];
     let emojiType2 = FRUITS[Math.floor(Math.random() * FRUITS.length)];
     while (emojiType1 === emojiType2) {
       emojiType2 = FRUITS[Math.floor(Math.random() * FRUITS.length)];
     }
-    
     for (let i = 0; i < p.num1; i++) newFruits.push({ id: `g1_${i}`, emoji: emojiType1, dropped: false, group: 1 });
     for (let i = 0; i < p.num2; i++) newFruits.push({ id: `g2_${i}`, emoji: emojiType2, dropped: false, group: 2 });
-    
+
     setFruits(newFruits);
     setDropCounter(0);
     setShowCounter(false);
     setSelectedAnswer(null);
+    setCurrentTry(1);
     setTimer(0);
 
     const opts = new Set([p.correctAnswer]);
-    while(opts.size < 5) {
+    while (opts.size < 5) {
       const rand = Math.floor(Math.random() * 18) + 1;
       opts.add(rand);
     }
-    setOptions(Array.from(opts).sort((a,b) => a-b));
+    setOptions(Array.from(opts).sort((a, b) => a - b));
   };
 
   const handleDrop = (fruitId: string) => {
@@ -75,55 +114,97 @@ export default function CountAllScreen({ navigation }: Props) {
       Speech.stop();
       if (droppedCount === next.length) {
         Speech.speak(droppedCount.toString(), { rate: 0.95, pitch: 1.4 });
-        Speech.speak("How many fruits in all?", { rate: 0.95, pitch: 1.4 });
+        Speech.speak('How many fruits in all?', { rate: 0.95, pitch: 1.4 });
       } else {
         Speech.speak(droppedCount.toString(), { rate: 0.95, pitch: 1.4 });
       }
-      
       return next;
     });
   };
 
   const counterTimeout = useRef<any>(null);
-
   const triggerDropCounter = () => {
     setShowCounter(true);
     if (counterTimeout.current) clearTimeout(counterTimeout.current);
-    counterTimeout.current = setTimeout(() => {
-      setShowCounter(false);
-    }, 500);
+    counterTimeout.current = setTimeout(() => setShowCounter(false), 500);
   };
 
   const submitAnswer = async () => {
-    if (selectedAnswer === null) return;
-    
-    const isCorrect = selectedAnswer === problem?.correctAnswer;
-    const { feedback, starsEarned } = await GameManager.getInstance().submitAnswer(isCorrect, timer * 1000);
-    
+    if (selectedAnswer === null || !problem) return;
+
+    const isCorrect = selectedAnswer === problem.correctAnswer;
+    const { starsEarned } = await GameManager.getInstance().submitAnswer(isCorrect, currentTry, timer * 1000);
+
     if (isCorrect) {
-      Alert.alert('Correct!', `${feedback}\nStars Earned: ${starsEarned}`, [
-        { text: 'Next Problem', onPress: () => loadNewProblem() }
-      ]);
+      // Activity count increments by 1 when resolved
+      const newCount = GameManager.getInstance().getSessionActivityCount();
+      setActivityCount(newCount);
+      setGreatJobStars(starsEarned);
+      animateGreatJob();
+      setShowGreatJob(true);
     } else {
-      setShowIncorrectModal(true);
+      if (currentTry >= 3) {
+        // Failed all 3 tries → queue problem to repeat
+        repeatQueue.current.push({ ...problem });
+        const newCount = GameManager.getInstance().getSessionActivityCount();
+        setActivityCount(newCount);
+        // Show incorrect modal briefly then auto-advance
+        setShowIncorrectModal(true);
+      } else {
+        setCurrentTry(prev => prev + 1);
+        setShowIncorrectModal(true);
+      }
+    }
+  };
+
+  const handleContinueAfterGreatJob = async () => {
+    setShowGreatJob(false);
+    if (activityCount >= MAX_ACTIVITIES_PER_SESSION) {
+      await finishSession();
+    } else {
+      loadNewProblem();
+    }
+  };
+
+  const handleTryAgainAfterFail = async () => {
+    setShowIncorrectModal(false);
+    if (activityCount >= MAX_ACTIVITIES_PER_SESSION) {
+      await finishSession();
+      return;
+    }
+    // If exhausted tries, load next problem (repeat queued)
+    if (currentTry >= 3) {
+      loadNewProblem();
+    } else {
+      setOptions(prev => {
+        const shuffled = [...prev];
+        for (let i = shuffled.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        }
+        return shuffled;
+      });
+      setSelectedAnswer(null);
     }
   };
 
   const useHint = () => {
     if (!problem || hintsRemaining <= 0) return;
     setHintsRemaining(prev => prev - 1);
-    Alert.alert('Hint', GameManager.getInstance().getHint(problem));
+    Speech.speak(GameManager.getInstance().getHint(problem), { rate: 0.95, pitch: 1.2 });
   };
 
-  const finishSession = () => {
-    const session = GameManager.getInstance().endSession();
-    if (session) {
-      navigation.replace('SessionSummary', { 
-        stars: session.totalStars, 
-        activities: session.totalActivities,
-        correct: session.totalCorrect 
-      });
-    }
+  const finishSession = async () => {
+    const session = await GameManager.getInstance().completeAndResetSession();
+    navigation.replace('SessionSummary', {
+      stars: session.totalStars,
+      activities: session.totalActivities,
+      correct: session.totalCorrect
+    });
+  };
+
+  const handleBack = () => {
+    navigation.goBack();
   };
 
   if (!problem) return <View style={styles.container}><Text>Loading...</Text></View>;
@@ -140,31 +221,37 @@ export default function CountAllScreen({ navigation }: Props) {
 
   const optionColors = ['#FF5252', '#FF9800', '#FFCA28', '#66BB6A', '#29B6F6'];
 
+  // Try indicator dots
+  const tryDots = [1, 2, 3].map(t => ({
+    active: t >= currentTry,
+    color: t === 1 ? '#FFD700' : t === 2 ? '#C0C0C0' : '#CD7F32'
+  }));
+
   return (
     <SafeAreaView style={styles.container}>
-      <LinearGradient
-        colors={['#A5D6A7', '#B2DFDB']}
-        style={StyleSheet.absoluteFill}
-      />
+      <LinearGradient colors={['#A5D6A7', '#B2DFDB']} style={StyleSheet.absoluteFill} />
+
       {/* Cloud Decorations */}
       <Text style={[styles.cloud, { top: '10%', left: '-5%', fontSize: 80, opacity: 0.6 }]}>☁️</Text>
       <Text style={[styles.cloud, { top: '20%', right: '-10%', fontSize: 100, opacity: 0.6 }]}>☁️</Text>
       <Text style={[styles.cloud, { top: '60%', left: '5%', fontSize: 70, opacity: 0.5 }]}>☁️</Text>
       <Text style={[styles.cloud, { top: '70%', right: '0%', fontSize: 90, opacity: 0.5 }]}>☁️</Text>
+
       {/* Top Bar */}
       <View style={styles.topBar}>
-        <TouchableOpacity onPress={finishSession} style={styles.circleButton}>
+        <TouchableOpacity onPress={handleBack} style={styles.circleButton}>
           <Text style={styles.backIcon}>{'<'}</Text>
         </TouchableOpacity>
-        
-        <Text style={styles.timeText}>Time: {formatTime(timer)}</Text>
-        
+
+        <View style={styles.topCenter}>
+          <Text style={styles.timeText}>⏱ {formatTime(timer)}</Text>
+          {/* Activity progress */}
+          <Text style={styles.activityProgress}>{activityCount}/{MAX_ACTIVITIES_PER_SESSION}</Text>
+        </View>
+
         <View style={styles.badgesContainer}>
           <View style={styles.badge}>
-            <Text style={styles.badgeText}>⭐ +{profile.totalStars}</Text>
-          </View>
-          <View style={[styles.badge, { marginLeft: 8 }]}>
-            <Text style={styles.badgeText}>L{profile.currentDifficulty}</Text>
+            <Text style={styles.badgeText}>⭐ {profile.totalStars}</Text>
           </View>
         </View>
       </View>
@@ -172,21 +259,27 @@ export default function CountAllScreen({ navigation }: Props) {
       <View style={styles.content}>
         {/* Header Section */}
         <View style={[styles.titleContainer, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', paddingHorizontal: 10 }]}>
-          <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#4E342E', flex: 1 }}>Hints: {hintsRemaining}</Text>
+          {/* Try stars */}
+          <View style={styles.tryStarsRow}>
+            {tryDots.map((dot, i) => (
+              <Text key={i} style={[styles.tryStar, { opacity: dot.active ? 1 : 0.3 }]}>⭐</Text>
+            ))}
+          </View>
           <Text style={[styles.title, { flex: 2, textAlign: 'center' }]}>Count All</Text>
           <View style={{ flex: 1, alignItems: 'flex-end' }}>
-            <TouchableOpacity 
-              style={[styles.smallHintBtn, { opacity: hintsDisabled || hintsRemaining <= 0 ? 0.5 : 1 }]} 
+            <TouchableOpacity
+              style={[styles.smallHintBtn, { opacity: hintsDisabled || hintsRemaining <= 0 ? 0.5 : 1 }]}
               onPress={useHint}
               disabled={hintsDisabled || hintsRemaining <= 0}
             >
-              <Text style={styles.smallHintText}>Hint</Text>
+              <Text style={styles.smallHintText}>💡 {hintsRemaining}</Text>
             </TouchableOpacity>
           </View>
         </View>
+
         <View style={styles.instructionCard}>
           <View style={styles.owlPlaceholder}>
-            <Text style={{fontSize: 40}}>🦉</Text>
+            <Text style={{ fontSize: 40 }}>🦉</Text>
           </View>
           <Text style={styles.instructionText}>
             Help Oliver gather food! Count and drag the fruits to the drop zone.
@@ -205,34 +298,34 @@ export default function CountAllScreen({ navigation }: Props) {
         {/* Groups or Final Question */}
         {!allDropped ? (
           <View style={styles.groupsWrapper}>
-          <View style={[styles.groupCard, { zIndex: 2 }]}>
-            <View style={styles.groupHeader}>
-              <Text style={styles.treeIcon}>🌳</Text>
-              <Text style={styles.groupTitle}>Tree 1</Text>
+            <View style={[styles.groupCard, { zIndex: 2 }]}>
+              <View style={styles.groupHeader}>
+                <Text style={styles.treeIcon}>🌳</Text>
+                <Text style={styles.groupTitle}>Tree 1</Text>
+              </View>
+              <View style={styles.fruitRow}>
+                {fruits.filter(f => f.group === 1 && !f.dropped).map(fruit => (
+                  <DraggableFruit key={fruit.id} fruit={fruit} disabled={false} onDrop={() => handleDrop(fruit.id)} />
+                ))}
+              </View>
             </View>
-            <View style={styles.fruitRow}>
-              {fruits.filter(f => f.group === 1 && !f.dropped).map(fruit => (
-                <DraggableFruit key={fruit.id} fruit={fruit} disabled={false} onDrop={() => handleDrop(fruit.id)} />
-              ))}
-            </View>
-          </View>
 
-          <View style={[styles.groupCard, { zIndex: 1 }]}>
-            <View style={styles.groupHeader}>
-              <Text style={styles.treeIcon}>🌳</Text>
-              <Text style={styles.groupTitle}>Tree 2</Text>
+            <View style={[styles.groupCard, { zIndex: 1 }]}>
+              <View style={styles.groupHeader}>
+                <Text style={styles.treeIcon}>🌳</Text>
+                <Text style={styles.groupTitle}>Tree 2</Text>
+              </View>
+              <View style={styles.fruitRow}>
+                {fruits.filter(f => f.group === 2 && !f.dropped).map(fruit => (
+                  <DraggableFruit
+                    key={fruit.id}
+                    fruit={fruit}
+                    disabled={!isGroup1Finished}
+                    onDrop={() => handleDrop(fruit.id)}
+                  />
+                ))}
+              </View>
             </View>
-            <View style={styles.fruitRow}>
-              {fruits.filter(f => f.group === 2 && !f.dropped).map(fruit => (
-                <DraggableFruit 
-                  key={fruit.id} 
-                  fruit={fruit} 
-                  disabled={!isGroup1Finished} 
-                  onDrop={() => handleDrop(fruit.id)} 
-                />
-              ))}
-            </View>
-          </View>
           </View>
         ) : (
           <View style={styles.questionContainer}>
@@ -261,56 +354,134 @@ export default function CountAllScreen({ navigation }: Props) {
       {/* Answer Area */}
       {allDropped && (
         <View style={styles.answerArea}>
-        <View style={styles.optionsContainer}>
-          {options.map((opt, index) => (
-            <TouchableOpacity 
-              key={opt} 
-              style={[
-                styles.optionButton, 
-                { backgroundColor: optionColors[index % optionColors.length] },
-                selectedAnswer === opt && styles.optionSelected
-              ]} 
-              onPress={() => setSelectedAnswer(opt)}
-              activeOpacity={0.8}
+          <View style={styles.optionsContainer}>
+            {options.map((opt, index) => (
+              <TouchableOpacity
+                key={opt}
+                style={[
+                  styles.optionButton,
+                  { backgroundColor: optionColors[index % optionColors.length] },
+                  selectedAnswer === opt && styles.optionSelected
+                ]}
+                onPress={() => setSelectedAnswer(opt)}
+                activeOpacity={0.8}
+              >
+                <View style={styles.optionInner}>
+                  <Text style={styles.optionText}>{opt}</Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <View style={styles.actionsContainer}>
+            <TouchableOpacity
+              style={[styles.actionBtn, { backgroundColor: selectedAnswer !== null ? '#66BB6A' : '#9E9E9E', width: '80%' }]}
+              onPress={submitAnswer}
+              disabled={selectedAnswer === null}
             >
-              <View style={styles.optionInner}>
-                <Text style={styles.optionText}>{opt}</Text>
-              </View>
+              <Text style={styles.actionBtnText}>Submit ✓</Text>
             </TouchableOpacity>
-          ))}
+          </View>
         </View>
-        <View style={styles.actionsContainer}>
-          <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#66BB6A', width: '80%' }]} onPress={submitAnswer}>
-            <Text style={styles.actionBtnText}>Submit</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
       )}
 
-      <IncorrectModal 
+      {/* Incorrect Modal */}
+      <IncorrectModal
         visible={showIncorrectModal}
-        onTryAgain={() => {
-          setShowIncorrectModal(false);
-          setOptions(prev => {
-            const shuffled = [...prev];
-            for (let i = shuffled.length - 1; i > 0; i--) {
-              const j = Math.floor(Math.random() * (i + 1));
-              [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-            }
-            return shuffled;
-          });
-          setSelectedAnswer(null);
-        }}
+        onTryAgain={handleTryAgainAfterFail}
         onHint={() => {
           setShowIncorrectModal(false);
           useHint();
         }}
         hintsRemaining={hintsRemaining}
       />
+
+      {/* Great Job Overlay */}
+      <GreatJobOverlay
+        visible={showGreatJob}
+        stars={greatJobStars}
+        activityCount={activityCount}
+        onContinue={handleContinueAfterGreatJob}
+        starScale={starScale}
+        confettiAnim={confettiAnim}
+      />
     </SafeAreaView>
   );
 }
 
+// ─── Great Job Overlay ────────────────────────────────────────────────────────
+function GreatJobOverlay({ visible, stars, activityCount, onContinue, starScale, confettiAnim }: {
+  visible: boolean;
+  stars: number;
+  activityCount: number;
+  onContinue: () => void;
+  starScale: Animated.Value;
+  confettiAnim: Animated.Value;
+}) {
+  const CONFETTI = ['🎊', '🎉', '✨', '⭐', '🌟', '💥', '🎈'];
+
+  return (
+    <Modal visible={visible} transparent animationType="fade">
+      <View style={gjStyles.overlay}>
+        <View style={gjStyles.card}>
+          {/* Confetti row */}
+          <View style={gjStyles.confettiRow}>
+            {CONFETTI.map((c, i) => (
+              <Animated.Text
+                key={i}
+                style={[
+                  gjStyles.confettiItem,
+                  {
+                    opacity: confettiAnim,
+                    transform: [{
+                      translateY: confettiAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [-30, 0]
+                      })
+                    }]
+                  }
+                ]}
+              >
+                {c}
+              </Animated.Text>
+            ))}
+          </View>
+
+          {/* Big star */}
+          <Animated.Text style={[gjStyles.bigStar, { transform: [{ scale: starScale }] }]}>
+            ⭐
+          </Animated.Text>
+
+          {/* Great Job! */}
+          <Text style={gjStyles.greatJobText}>Great Job!</Text>
+
+          {/* Stars earned */}
+          <View style={gjStyles.starsEarnedRow}>
+            <Text style={gjStyles.plusStars}>+{stars} {stars === 1 ? 'Star' : 'Stars'}</Text>
+            <View style={gjStyles.starIconsRow}>
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Text key={i} style={[gjStyles.starIcon, { opacity: i < stars ? 1 : 0.25 }]}>⭐</Text>
+              ))}
+            </View>
+          </View>
+
+          {/* Progress indicator */}
+          <Text style={gjStyles.progressText}>
+            Activity {activityCount} of {MAX_ACTIVITIES_PER_SESSION}
+          </Text>
+
+          {/* Continue button */}
+          <TouchableOpacity style={gjStyles.continueBtn} onPress={onContinue} activeOpacity={0.85}>
+            <Text style={gjStyles.continueBtnText}>
+              {activityCount >= MAX_ACTIVITIES_PER_SESSION ? '🏆 Finish!' : 'Continue →'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+// ─── Draggable Fruit ──────────────────────────────────────────────────────────
 const DraggableFruit = ({ fruit, onDrop, disabled }: any) => {
   const pan = useRef(new Animated.ValueXY()).current;
   const disabledRef = useRef(disabled);
@@ -342,49 +513,98 @@ const DraggableFruit = ({ fruit, onDrop, disabled }: any) => {
   );
 };
 
+// ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#A5D6A7' },
   cloud: { position: 'absolute', color: '#FFF' },
   topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, zIndex: 10 },
   circleButton: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center', elevation: 2 },
   backIcon: { fontSize: 28, fontWeight: 'bold', color: '#4E342E' },
+  topCenter: { alignItems: 'center' },
+  timeText: { fontSize: 16, fontWeight: 'bold', color: '#4E342E' },
+  activityProgress: { fontSize: 13, fontWeight: 'bold', color: '#4E342E', opacity: 0.75 },
   titleContainer: { alignItems: 'center', marginBottom: 10 },
-  title: { fontSize: 28, fontWeight: '900', color: '#4E342E', textShadowColor: '#FFF', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 1 },
-  smallHintBtn: { backgroundColor: '#FFCA28', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 15, elevation: 2 },
-  smallHintText: { fontSize: 16, fontWeight: 'bold', color: '#FFF' },
-  timeText: { fontSize: 18, fontWeight: 'bold', color: '#4E342E' },
+  title: { fontSize: 26, fontWeight: '900', color: '#4E342E', textShadowColor: '#FFF', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 1 },
+  tryStarsRow: { flex: 1, flexDirection: 'row', gap: 2 },
+  tryStar: { fontSize: 20 },
+  smallHintBtn: { backgroundColor: '#FFCA28', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 15, elevation: 2 },
+  smallHintText: { fontSize: 14, fontWeight: 'bold', color: '#FFF' },
   badgesContainer: { flexDirection: 'row' },
   badge: { backgroundColor: '#FFF', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 15, elevation: 2 },
   badgeText: { fontWeight: 'bold', color: '#FF9800' },
   content: { flex: 1, paddingHorizontal: 20 },
-  instructionCard: { flexDirection: 'row', backgroundColor: '#FFF', padding: 15, borderRadius: 20, alignItems: 'center', marginBottom: 20, elevation: 3 },
-  owlPlaceholder: { width: 60, height: 60, backgroundColor: '#E0F7FA', borderRadius: 30, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
-  instructionText: { flex: 1, fontSize: 16, color: '#4E342E', fontWeight: 'bold' },
-  equationContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 24 },
-  equationNumber: { fontSize: 48, fontWeight: '900' },
-  equationSymbol: { fontSize: 40, fontWeight: '900', color: '#263238', marginHorizontal: 8 },
+  instructionCard: { flexDirection: 'row', backgroundColor: '#FFF', padding: 15, borderRadius: 20, alignItems: 'center', marginBottom: 16, elevation: 3 },
+  owlPlaceholder: { width: 56, height: 56, backgroundColor: '#E0F7FA', borderRadius: 28, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  instructionText: { flex: 1, fontSize: 14, color: '#4E342E', fontWeight: 'bold' },
+  equationContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
+  equationNumber: { fontSize: 44, fontWeight: '900' },
+  equationSymbol: { fontSize: 36, fontWeight: '900', color: '#263238', marginHorizontal: 6 },
   groupsWrapper: { zIndex: 10 },
-  groupCard: { backgroundColor: '#FFF', borderRadius: 16, padding: 16, marginBottom: 16, elevation: 2, zIndex: 10 },
-  groupHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
-  treeIcon: { fontSize: 24, marginRight: 8 },
-  groupTitle: { fontSize: 18, fontWeight: 'bold', color: '#90A4AE' },
-  questionContainer: { paddingVertical: 15, marginVertical: 10, justifyContent: 'center', alignItems: 'center' },
-  questionText: { fontSize: 36, fontWeight: '900', color: '#4E342E', textShadowColor: '#FFF', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 1, textAlign: 'center' },
+  groupCard: { backgroundColor: '#FFF', borderRadius: 16, padding: 12, marginBottom: 10, elevation: 2, zIndex: 10 },
+  groupHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
+  treeIcon: { fontSize: 22, marginRight: 8 },
+  groupTitle: { fontSize: 16, fontWeight: 'bold', color: '#90A4AE' },
+  questionContainer: { paddingVertical: 12, marginVertical: 8, justifyContent: 'center', alignItems: 'center' },
+  questionText: { fontSize: 30, fontWeight: '900', color: '#4E342E', textShadowColor: '#FFF', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 1, textAlign: 'center' },
   fruitRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center' },
-  fruitCircle: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#F5F5F5', justifyContent: 'center', alignItems: 'center', margin: 4, borderWidth: 2, borderColor: '#EEEEEE' },
-  emoji: { fontSize: 32 },
-  dropZone: { flex: 1, backgroundColor: '#E1F5FE', borderRadius: 16, borderWidth: 3, borderColor: '#81D4FA', borderStyle: 'dashed', padding: 16, justifyContent: 'center', alignItems: 'center', zIndex: 1, marginTop: 8 },
-  dropZoneHint: { color: '#81D4FA', fontSize: 18, fontWeight: 'bold', position: 'absolute' },
+  fruitCircle: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#F5F5F5', justifyContent: 'center', alignItems: 'center', margin: 4, borderWidth: 2, borderColor: '#EEEEEE' },
+  emoji: { fontSize: 30 },
+  dropZone: { flex: 1, backgroundColor: '#E1F5FE', borderRadius: 16, borderWidth: 3, borderColor: '#81D4FA', borderStyle: 'dashed', padding: 16, justifyContent: 'center', alignItems: 'center', zIndex: 1, marginTop: 6 },
+  dropZoneHint: { color: '#81D4FA', fontSize: 16, fontWeight: 'bold', position: 'absolute' },
   droppedFruitWrapper: { margin: 4 },
   dropCounterBadge: { position: 'absolute', top: 10, right: 10, backgroundColor: '#FF5252', borderRadius: 16, paddingHorizontal: 12, paddingVertical: 4 },
   dropCounterText: { color: '#FFF', fontWeight: 'bold', fontSize: 20 },
   answerArea: { backgroundColor: 'transparent', padding: 10 },
-  optionsContainer: { flexDirection: 'row', justifyContent: 'space-evenly', paddingHorizontal: 10, marginBottom: 20 },
-  optionButton: { width: 60, height: 70, borderRadius: 16, justifyContent: 'center', alignItems: 'center', elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4 },
+  optionsContainer: { flexDirection: 'row', justifyContent: 'space-evenly', paddingHorizontal: 10, marginBottom: 14 },
+  optionButton: { width: 58, height: 68, borderRadius: 16, justifyContent: 'center', alignItems: 'center', elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4 },
   optionSelected: { borderWidth: 4, borderColor: '#FFF', transform: [{ scale: 1.1 }] },
   optionInner: { width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', borderTopWidth: 2, borderTopColor: 'rgba(255,255,255,0.4)', borderRadius: 16 },
-  optionText: { fontSize: 36, fontWeight: '900', color: '#FFF', textShadowColor: 'rgba(0,0,0,0.3)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 },
-  actionsContainer: { flexDirection: 'row', justifyContent: 'center', paddingHorizontal: 20, marginBottom: 20 },
-  actionBtn: { width: '60%', paddingVertical: 16, borderRadius: 30, justifyContent: 'center', alignItems: 'center', elevation: 4, borderWidth: 3, borderColor: '#FFF' },
-  actionBtnText: { fontSize: 24, fontWeight: '900', color: '#FFF', textShadowColor: 'rgba(0,0,0,0.2)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 }
+  optionText: { fontSize: 32, fontWeight: '900', color: '#FFF', textShadowColor: 'rgba(0,0,0,0.3)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 },
+  actionsContainer: { flexDirection: 'row', justifyContent: 'center', paddingHorizontal: 20, marginBottom: 16 },
+  actionBtn: { width: '60%', paddingVertical: 14, borderRadius: 30, justifyContent: 'center', alignItems: 'center', elevation: 4, borderWidth: 3, borderColor: '#FFF' },
+  actionBtnText: { fontSize: 22, fontWeight: '900', color: '#FFF', textShadowColor: 'rgba(0,0,0,0.2)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 },
+});
+
+const gjStyles = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
+  card: {
+    width: '82%',
+    backgroundColor: '#FFF',
+    borderRadius: 32,
+    alignItems: 'center',
+    paddingVertical: 32,
+    paddingHorizontal: 24,
+    elevation: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+  },
+  confettiRow: { flexDirection: 'row', justifyContent: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 4 },
+  confettiItem: { fontSize: 22 },
+  bigStar: { fontSize: 90, marginVertical: 4 },
+  greatJobText: {
+    fontSize: 42,
+    fontWeight: '900',
+    color: '#FF6F00',
+    textShadowColor: '#FFD700',
+    textShadowOffset: { width: 2, height: 2 },
+    textShadowRadius: 4,
+    marginBottom: 8,
+  },
+  starsEarnedRow: { alignItems: 'center', marginBottom: 8 },
+  plusStars: { fontSize: 30, fontWeight: '900', color: '#43A047', marginBottom: 6 },
+  starIconsRow: { flexDirection: 'row', gap: 6 },
+  starIcon: { fontSize: 32 },
+  progressText: { fontSize: 14, color: '#9E9E9E', fontWeight: 'bold', marginBottom: 20 },
+  continueBtn: {
+    backgroundColor: '#43A047',
+    paddingHorizontal: 40,
+    paddingVertical: 16,
+    borderRadius: 30,
+    elevation: 4,
+    borderWidth: 3,
+    borderColor: '#A5D6A7',
+  },
+  continueBtnText: { fontSize: 22, fontWeight: '900', color: '#FFF' },
 });

@@ -12,14 +12,25 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
 
 export default function HomeScreen({ navigation }: Props) {
   const [stars, setStars] = useState(0);
+  const [countOnUnlocked, setCountOnUnlocked] = useState(false);
+  const [numberBondsUnlocked, setNumberBondsUnlocked] = useState(false);
   const floatAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
-      const profile = GameManager.getInstance().saveSystem.getProfile();
+      const gm = GameManager.getInstance();
+      const profile = gm.saveSystem.getProfile();
       setStars(profile.totalStars);
+
+      // Unlock chain: Count On needs 60% accuracy on Count All
+      const countOnOk = gm.saveSystem.isCountOnUnlocked();
+      setCountOnUnlocked(countOnOk);
+
+      // Number Bonds needs 60% accuracy on Count On
+      const numberBondsOk = gm.saveSystem.isNumberBondsUnlocked();
+      setNumberBondsUnlocked(numberBondsOk);
     });
-    
+
     // Floating animation for nodes
     Animated.loop(
       Animated.sequence([
@@ -62,14 +73,14 @@ export default function HomeScreen({ navigation }: Props) {
       {/* Path Line */}
       <View style={StyleSheet.absoluteFill} pointerEvents="none">
         <Svg width={width} height={height}>
-          <Path 
+          <Path
             d={`M ${width * 0.3} ${height * 0.35} C ${width * 0.8} ${height * 0.35}, ${width * 0.9} ${height * 0.55}, ${width * 0.5} ${height * 0.75}`}
             stroke="rgba(255, 255, 255, 0.4)"
             strokeWidth={15}
             fill="none"
             strokeLinecap="round"
           />
-          <Path 
+          <Path
             d={`M ${width * 0.3} ${height * 0.35} C ${width * 0.8} ${height * 0.35}, ${width * 0.9} ${height * 0.55}, ${width * 0.5} ${height * 0.75}`}
             stroke="rgba(255, 255, 255, 0.8)"
             strokeWidth={4}
@@ -87,26 +98,63 @@ export default function HomeScreen({ navigation }: Props) {
         <Text style={styles.logoText}>Add-Venture</Text>
       </View>
 
-      {/* Nodes */}
+      {/* Stars Badge */}
+      <View style={styles.starsBadge}>
+        <Text style={styles.starsBadgeText}>⭐ {stars} Stars</Text>
+      </View>
+
+      {/* Node 1 — Count All (always unlocked) */}
       <Animated.View style={[styles.nodeContainer, { top: '25%', left: '15%', transform: [{ translateY }] }]}>
-        <TouchableOpacity style={[styles.node, { backgroundColor: '#FFCA28' }]} onPress={() => startGame('COUNT_ALL', 'CountAll')} activeOpacity={0.8}>
+        <TouchableOpacity
+          style={[styles.node, { backgroundColor: '#FFCA28' }]}
+          onPress={() => startGame('COUNT_ALL', 'CountAll')}
+          activeOpacity={0.8}
+        >
           <Text style={styles.nodeIcon}>⭐</Text>
         </TouchableOpacity>
         <Text style={styles.nodeLabel}>Count All</Text>
       </Animated.View>
 
+      {/* Node 2 — Count On (locked until Count All ≥ 60%) */}
       <Animated.View style={[styles.nodeContainer, { top: '50%', right: '15%', transform: [{ translateY }] }]}>
-        <TouchableOpacity style={[styles.node, { backgroundColor: '#D500F9' }]} onPress={() => startGame('COUNT_ON', 'CountOn')} activeOpacity={0.8}>
-          <Text style={styles.nodeIcon}>🔒</Text>
+        <TouchableOpacity
+          style={[
+            styles.node,
+            countOnUnlocked ? { backgroundColor: '#D500F9' } : styles.nodeLocked
+          ]}
+          onPress={countOnUnlocked ? () => startGame('COUNT_ON', 'CountOn') : undefined}
+          disabled={!countOnUnlocked}
+          activeOpacity={countOnUnlocked ? 0.8 : 1}
+        >
+          <Text style={styles.nodeIcon}>{countOnUnlocked ? '⚡' : '🔒'}</Text>
         </TouchableOpacity>
         <Text style={styles.nodeLabel}>Count On</Text>
+        {!countOnUnlocked && (
+          <View style={styles.lockHint}>
+            <Text style={styles.lockHintText}>60% & 10+ activities on Count All</Text>
+          </View>
+        )}
       </Animated.View>
 
+      {/* Node 3 — Number Bonds (locked until Count On ≥ 60%) */}
       <Animated.View style={[styles.nodeContainer, { top: '70%', left: '30%', transform: [{ translateY }] }]}>
-        <TouchableOpacity style={[styles.node, { backgroundColor: '#00BFFF' }]} onPress={() => startGame('NUMBER_BONDS', 'NumberBonds')} activeOpacity={0.8}>
-          <Text style={styles.nodeIcon}>🔒</Text>
+        <TouchableOpacity
+          style={[
+            styles.node,
+            numberBondsUnlocked ? { backgroundColor: '#00BFFF' } : styles.nodeLocked
+          ]}
+          onPress={numberBondsUnlocked ? () => startGame('NUMBER_BONDS', 'NumberBonds') : undefined}
+          disabled={!numberBondsUnlocked}
+          activeOpacity={numberBondsUnlocked ? 0.8 : 1}
+        >
+          <Text style={styles.nodeIcon}>{numberBondsUnlocked ? '🔗' : '🔒'}</Text>
         </TouchableOpacity>
         <Text style={styles.nodeLabel}>Number Bonds</Text>
+        {!numberBondsUnlocked && (
+          <View style={styles.lockHint}>
+            <Text style={styles.lockHintText}>60% & 10+ activities on Count On</Text>
+          </View>
+        )}
       </Animated.View>
 
       {/* Bottom Navigation */}
@@ -115,7 +163,7 @@ export default function HomeScreen({ navigation }: Props) {
           <Text style={styles.navIcon}>🏠</Text>
           <Text style={[styles.navText, { color: '#880E4F' }]}>Home</Text>
         </TouchableOpacity>
-        
+
         <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Progress')}>
           <Text style={styles.navIcon}>📊</Text>
           <Text style={styles.navText}>Progress</Text>
@@ -178,7 +226,7 @@ const styles = StyleSheet.create({
   logoTextStroke: {
     fontSize: 40,
     fontWeight: '900',
-    color: '#FFD700', // Yellow outline/stroke simulation
+    color: '#FFD700',
     position: 'absolute',
     top: 55,
     textShadowColor: '#FFD700',
@@ -188,8 +236,23 @@ const styles = StyleSheet.create({
   logoText: {
     fontSize: 40,
     fontWeight: '900',
-    color: '#D50000', // Red fill
+    color: '#D50000',
     marginTop: 5,
+  },
+  starsBadge: {
+    alignSelf: 'center',
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    paddingHorizontal: 20,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginTop: 8,
+    zIndex: 10,
+    elevation: 4,
+  },
+  starsBadgeText: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#FF6F00',
   },
   nodeContainer: {
     position: 'absolute',
@@ -210,6 +273,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 4,
   },
+  nodeLocked: {
+    backgroundColor: '#9E9E9E',
+    opacity: 0.7,
+  },
   nodeIcon: {
     fontSize: 40,
   },
@@ -221,6 +288,19 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(0,0,0,0.5)',
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 3,
+  },
+  lockHint: {
+    marginTop: 4,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  lockHintText: {
+    color: '#FFD700',
+    fontSize: 11,
+    fontWeight: 'bold',
+    textAlign: 'center',
   },
   bottomNav: {
     position: 'absolute',
