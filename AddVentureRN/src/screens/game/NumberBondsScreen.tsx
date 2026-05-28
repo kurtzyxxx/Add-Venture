@@ -10,6 +10,7 @@ import { Problem } from '../../core/ProblemGenerator';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Speech from 'expo-speech';
 import { IncorrectModal } from '../../components/IncorrectModal';
+import { HintModal } from '../../components/HintModal';
 
 const { width } = Dimensions.get('window');
 
@@ -78,7 +79,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
 
     const opts = new Set([p.correctAnswer]);
     while (opts.size < 5) {
-      const rand = Math.floor(Math.random() * (p.num1 - 1)) + 1;
+      const rand = Math.floor(Math.random() * 9) + 1; // Pick any digit 1-9
       if (rand !== p.num2) opts.add(rand);
     }
     setOptions(Array.from(opts).sort((a, b) => a - b));
@@ -102,9 +103,6 @@ export default function NumberBondsScreen({ navigation }: Props) {
       setShowGreatJob(true);
     } else {
       if (currentTry >= 3) {
-        repeatQueue.current.push({ ...problem });
-        const newCount = GameManager.getInstance().getSessionActivityCount();
-        setActivityCount(newCount);
         setShowIncorrectModal(true);
       } else {
         setCurrentTry(prev => prev + 1);
@@ -125,29 +123,30 @@ export default function NumberBondsScreen({ navigation }: Props) {
 
   const handleTryAgainAfterFail = async () => {
     setShowIncorrectModal(false);
-    if (activityCount >= MAX_ACTIVITIES_PER_SESSION) {
-      await finishSession();
-      return;
-    }
     if (currentTry >= 3) {
-      loadNewProblem();
-    } else {
-      setOptions(prev => {
-        const shuffled = [...prev];
-        for (let i = shuffled.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-        }
-        return shuffled;
-      });
-      setSelectedOption(null);
+      setCurrentTry(1);
     }
+    setOptions(prev => {
+      const shuffled = [...prev];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      return shuffled;
+    });
+    setSelectedOption(null);
   };
+
+  const [showHintModal, setShowHintModal] = useState(false);
+  const [currentHintText, setCurrentHintText] = useState("");
 
   const useHint = () => {
     if (!problem || hintsRemaining <= 0) return;
     setHintsRemaining(prev => prev - 1);
-    Speech.speak(GameManager.getInstance().getHint(problem), { rate: 0.95, pitch: 1.2 });
+    const hintText = GameManager.getInstance().getHint(problem);
+    setCurrentHintText(hintText);
+    Speech.speak(hintText, { rate: 0.95, pitch: 1.2 });
+    setShowHintModal(true);
   };
 
   const finishSession = async () => {
@@ -306,6 +305,12 @@ export default function NumberBondsScreen({ navigation }: Props) {
         onTryAgain={handleTryAgainAfterFail}
         onHint={() => { setShowIncorrectModal(false); useHint(); }}
         hintsRemaining={hintsRemaining}
+      />
+
+      <HintModal
+        visible={showHintModal}
+        hintText={currentHintText}
+        onClose={() => setShowHintModal(false)}
       />
 
       <GreatJobOverlay

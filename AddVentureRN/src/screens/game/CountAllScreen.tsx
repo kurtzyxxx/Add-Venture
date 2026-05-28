@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import * as Speech from 'expo-speech';
 import { IncorrectModal } from '../../components/IncorrectModal';
+import { HintModal } from '../../components/HintModal';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../../App';
 import { GameManager, MAX_ACTIVITIES_PER_SESSION } from '../../core/GameManager';
@@ -144,14 +145,10 @@ export default function CountAllScreen({ navigation }: Props) {
       setShowGreatJob(true);
     } else {
       if (currentTry >= 3) {
-        // Failed all 3 tries → queue problem to repeat
-        repeatQueue.current.push({ ...problem });
-        const newCount = GameManager.getInstance().getSessionActivityCount();
-        setActivityCount(newCount);
-        // Show incorrect modal briefly then auto-advance
+        // We will NOT queue a new problem. We just show the incorrect modal.
+        // We don't increment the session count here because they haven't finished this problem successfully yet.
         setShowIncorrectModal(true);
       } else {
-        setCurrentTry(prev => prev + 1);
         setShowIncorrectModal(true);
       }
     }
@@ -168,30 +165,35 @@ export default function CountAllScreen({ navigation }: Props) {
 
   const handleTryAgainAfterFail = async () => {
     setShowIncorrectModal(false);
-    if (activityCount >= MAX_ACTIVITIES_PER_SESSION) {
-      await finishSession();
-      return;
-    }
-    // If exhausted tries, load next problem (repeat queued)
+    
+    // If exhausted tries, reset tries to let them retry the exact same problem.
     if (currentTry >= 3) {
-      loadNewProblem();
+      setCurrentTry(1);
     } else {
-      setOptions(prev => {
-        const shuffled = [...prev];
-        for (let i = shuffled.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-        }
-        return shuffled;
-      });
-      setSelectedAnswer(null);
+      setCurrentTry(prev => prev + 1);
     }
+    
+    setOptions(prev => {
+      const shuffled = [...prev];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      return shuffled;
+    });
+    setSelectedAnswer(null);
   };
+
+  const [showHintModal, setShowHintModal] = useState(false);
+  const [currentHintText, setCurrentHintText] = useState("");
 
   const useHint = () => {
     if (!problem || hintsRemaining <= 0) return;
     setHintsRemaining(prev => prev - 1);
-    Speech.speak(GameManager.getInstance().getHint(problem), { rate: 0.95, pitch: 1.2 });
+    const hintText = GameManager.getInstance().getHint(problem);
+    setCurrentHintText(hintText);
+    Speech.speak(hintText, { rate: 0.95, pitch: 1.2 });
+    setShowHintModal(true);
   };
 
   const finishSession = async () => {
@@ -393,6 +395,13 @@ export default function CountAllScreen({ navigation }: Props) {
           useHint();
         }}
         hintsRemaining={hintsRemaining}
+      />
+
+      {/* Hint Modal */}
+      <HintModal
+        visible={showHintModal}
+        hintText={currentHintText}
+        onClose={() => setShowHintModal(false)}
       />
 
       {/* Great Job Overlay */}

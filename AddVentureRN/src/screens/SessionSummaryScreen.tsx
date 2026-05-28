@@ -15,7 +15,14 @@ export default function SessionSummaryScreen({ route, navigation }: Props) {
       <View style={styles.statsCard}>
         <Text style={styles.statText}>Activities: {activities}</Text>
         <Text style={styles.statText}>Correct: {correct}</Text>
+        <Text style={styles.statText}>Accuracy: {Math.round((correct / activities) * 100) || 0}%</Text>
         <Text style={styles.starsText}>⭐ +{stars} Stars!</Text>
+        <View style={styles.practiceBox}>
+          <Text style={styles.practiceTitle}>Areas Needing Practice:</Text>
+          <Text style={styles.practiceText}>
+            {correct === activities ? "None! Perfect Score!" : "Counting larger numbers"}
+          </Text>
+        </View>
       </View>
 
       <TouchableOpacity style={styles.button} onPress={() => navigation.navigate('Home')}>
@@ -70,4 +77,23 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#333',
   },
+  practiceBox: {
+    marginTop: 20,
+    padding: 15,
+    backgroundColor: '#FFF3E0',
+    borderRadius: 12,
+    alignItems: 'center',
+    width: '100%',
+  },
+  practiceTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#E65100',
+    marginBottom: 5,
+  },
+  practiceText: {
+    fontSize: 14,
+    color: '#E65100',
+    textAlign: 'center',
+  }
 });

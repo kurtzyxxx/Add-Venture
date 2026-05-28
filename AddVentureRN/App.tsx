@@ -4,6 +4,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { GameManager } from './src/core/GameManager';
+import { DatabaseHelper } from './src/database/DatabaseHelper';
 
 import SplashScreen from './src/screens/SplashScreen';
 import HomeScreen from './src/screens/HomeScreen';
@@ -13,6 +14,7 @@ import CountAllScreen from './src/screens/game/CountAllScreen';
 import CountOnScreen from './src/screens/game/CountOnScreen';
 import NumberBondsScreen from './src/screens/game/NumberBondsScreen';
 import SessionSummaryScreen from './src/screens/SessionSummaryScreen';
+import PerformanceDashboardScreen from './src/screens/PerformanceDashboardScreen';
 
 export type RootStackParamList = {
   Splash: undefined;
@@ -23,6 +25,7 @@ export type RootStackParamList = {
   CountOn: undefined;
   NumberBonds: undefined;
   SessionSummary: { stars: number; activities: number; correct: number };
+  PerformanceDashboard: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -33,6 +36,7 @@ export default function App() {
   useEffect(() => {
     async function init() {
       try {
+        await DatabaseHelper.getInstance().initDB();
         await GameManager.getInstance().initialize();
         setIsReady(true);
       } catch (e) {
@@ -60,6 +64,7 @@ export default function App() {
           <Stack.Screen name="CountOn" component={CountOnScreen} />
           <Stack.Screen name="NumberBonds" component={NumberBondsScreen} />
           <Stack.Screen name="SessionSummary" component={SessionSummaryScreen} />
+          <Stack.Screen name="PerformanceDashboard" component={PerformanceDashboardScreen} />
         </Stack.Navigator>
       </NavigationContainer>
     </GestureHandlerRootView>
