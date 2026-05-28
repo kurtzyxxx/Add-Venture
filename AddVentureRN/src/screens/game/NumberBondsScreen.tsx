@@ -78,8 +78,9 @@ export default function NumberBondsScreen({ navigation }: Props) {
 
     const opts = new Set([p.correctAnswer]);
     while (opts.size < 5) {
-      const rand = Math.floor(Math.random() * (p.num1 - 1)) + 1;
-      if (rand !== p.num2) opts.add(rand);
+      // Generate options from 1 to 9, ensuring enough possible unique choices
+      const rand = Math.floor(Math.random() * 9) + 1;
+      opts.add(rand);
     }
     setOptions(Array.from(opts).sort((a, b) => a - b));
   };
