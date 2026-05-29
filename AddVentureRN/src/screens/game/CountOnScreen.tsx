@@ -24,6 +24,7 @@ export default function CountOnScreen({ navigation }: Props) {
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [options, setOptions] = useState<number[]>([]);
   const [dropCounter, setDropCounter] = useState(0);
+  const [showCounter, setShowCounter] = useState(false);
   const [timer, setTimer] = useState(0);
   const [hintsDisabled, setHintsDisabled] = useState(false);
   const [hintsRemaining, setHintsRemaining] = useState(3);
@@ -89,6 +90,7 @@ export default function CountOnScreen({ navigation }: Props) {
 
     setFruits(newFruits);
     setDropCounter(0);
+    setShowCounter(false);
     setSelectedAnswer(null);
     setCurrentTry(1);
     setTimer(0);
@@ -106,6 +108,7 @@ export default function CountOnScreen({ navigation }: Props) {
       const next = prev.map(f => f.id === fruitId ? { ...f, dropped: true } : f);
       const droppedCount = next.filter(f => f.dropped).length;
       setDropCounter(droppedCount);
+      triggerDropCounter();
       const currentTotal = baseN + droppedCount;
       Speech.stop();
       if (droppedCount === next.length) {
@@ -118,9 +121,17 @@ export default function CountOnScreen({ navigation }: Props) {
     });
   };
 
+  const counterTimeout = useRef<any>(null);
+  const triggerDropCounter = () => {
+    setShowCounter(true);
+    if (counterTimeout.current) clearTimeout(counterTimeout.current);
+    counterTimeout.current = setTimeout(() => setShowCounter(false), 500);
+  };
+
   const handleReset = () => {
     setFruits(prev => prev.map(f => ({ ...f, dropped: false })));
     setDropCounter(0);
+    setShowCounter(false);
     setSelectedAnswer(null);
     Speech.stop();
   };
@@ -302,9 +313,6 @@ export default function CountOnScreen({ navigation }: Props) {
             <Text style={styles.treeIcon}>🧺</Text>
             <Text style={[styles.groupTitle, { color: '#8D6E63' }]}>Oliver's Basket</Text>
           </View>
-          <View style={styles.basketStats}>
-            <Text style={styles.basketStatsText}>Fruits inside: {baseN + dropCounter}</Text>
-          </View>
           <View style={styles.fruitRow}>
             <View style={styles.staticBasketBundle}>
               <Text style={{ fontSize: 44 }}>🧺</Text>
@@ -320,6 +328,11 @@ export default function CountOnScreen({ navigation }: Props) {
             ))}
             {!allDropped && <Text style={styles.dropZoneHint}>Drag fruits here!</Text>}
           </View>
+          {showCounter && (
+            <View style={styles.dropCounterBadge}>
+              <Text style={styles.dropCounterText}>{baseN + dropCounter}</Text>
+            </View>
+          )}
           <TouchableOpacity style={styles.resetButton} onPress={handleReset} activeOpacity={0.8}>
             <View style={styles.resetInner}>
               <Text style={styles.resetIcon}>↻</Text>
@@ -485,13 +498,13 @@ const styles = StyleSheet.create({
   fruitCircle: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#F1F8E9', justifyContent: 'center', alignItems: 'center', margin: 4, borderWidth: 2, borderColor: '#DCEDC8' },
   emoji: { fontSize: 30 },
   basketZone: { flex: 1, backgroundColor: '#EFEBE9', borderRadius: 16, borderWidth: 3, borderColor: '#BCAAA4', borderStyle: 'dashed', padding: 14, zIndex: 1, marginTop: 6 },
-  basketStats: { position: 'absolute', top: 12, right: 12, backgroundColor: '#8D6E63', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
-  basketStatsText: { color: '#FFF', fontWeight: 'bold', fontSize: 13 },
   staticBasketBundle: { position: 'relative', margin: 8 },
   basketCountBadge: { position: 'absolute', right: -10, bottom: -5, backgroundColor: '#FF5252', width: 28, height: 28, borderRadius: 14, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#FFF' },
   basketCountText: { color: '#FFF', fontWeight: 'bold', fontSize: 14 },
   dropZoneHint: { color: '#BCAAA4', fontSize: 16, fontWeight: 'bold', marginLeft: 12 },
   droppedFruitWrapper: { margin: 4, width: 48, height: 48, borderRadius: 24, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center', elevation: 1 },
+  dropCounterBadge: { position: 'absolute', top: 10, right: 10, backgroundColor: '#FF5252', borderRadius: 16, paddingHorizontal: 12, paddingVertical: 4 },
+  dropCounterText: { color: '#FFF', fontWeight: 'bold', fontSize: 20 },
   answerArea: { backgroundColor: 'transparent', padding: 10 },
   optionsContainer: { flexDirection: 'row', justifyContent: 'space-evenly', paddingHorizontal: 10, marginBottom: 14 },
   optionButton: { width: 58, height: 68, borderRadius: 16, justifyContent: 'center', alignItems: 'center', elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4 },
