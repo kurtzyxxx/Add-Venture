@@ -10,11 +10,11 @@ import SplashScreen from './src/screens/SplashScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import AdventureMapScreen from './src/screens/AdventureMapScreen';
 import ProgressScreen from './src/screens/ProgressScreen';
-import CountAllScreen from './src/screens/game/CountAllScreen';
-import CountOnScreen from './src/screens/game/CountOnScreen';
-import NumberBondsScreen from './src/screens/game/NumberBondsScreen';
+import CountAllActivityScreen from './src/screens/game/CountAllActivityScreen';
+import CountOnActivityScreen from './src/screens/game/CountOnActivityScreen';
+import NumberBondsActivityScreen from './src/screens/game/NumberBondsActivityScreen';
 import SessionSummaryScreen from './src/screens/SessionSummaryScreen';
-import PerformanceDashboardScreen from './src/screens/PerformanceDashboardScreen';
+import ProgressSummaryView from './src/screens/ProgressSummaryView';
 
 export type RootStackParamList = {
   Splash: undefined;
@@ -60,11 +60,11 @@ export default function App() {
           <Stack.Screen name="AdventureMap" component={AdventureMapScreen} />
           <Stack.Screen name="Progress" component={ProgressScreen} />
           
-          <Stack.Screen name="CountAll" component={CountAllScreen} />
-          <Stack.Screen name="CountOn" component={CountOnScreen} />
-          <Stack.Screen name="NumberBonds" component={NumberBondsScreen} />
+          <Stack.Screen name="CountAll" component={CountAllActivityScreen} />
+          <Stack.Screen name="CountOn" component={CountOnActivityScreen} />
+          <Stack.Screen name="NumberBonds" component={NumberBondsActivityScreen} />
           <Stack.Screen name="SessionSummary" component={SessionSummaryScreen} />
-          <Stack.Screen name="PerformanceDashboard" component={PerformanceDashboardScreen} />
+          <Stack.Screen name="PerformanceDashboard" component={ProgressSummaryView} />
         </Stack.Navigator>
       </NavigationContainer>
     </GestureHandlerRootView>

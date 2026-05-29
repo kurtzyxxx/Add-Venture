@@ -9,19 +9,19 @@ import { GameManager, MAX_ACTIVITIES_PER_SESSION } from '../../core/GameManager'
 import { Problem } from '../../core/ProblemGenerator';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Speech from 'expo-speech';
-import { IncorrectModal } from '../../components/IncorrectModal';
-import { HintModal } from '../../components/HintModal';
+import { RetryActivityScreen } from '../../components/RetryActivityScreen';
+import { HintPopupOverlay } from '../../components/HintPopupOverlay';
 
 const { width } = Dimensions.get('window');
 
 type Props = NativeStackScreenProps<RootStackParamList, 'NumberBonds'>;
 
-export default function NumberBondsScreen({ navigation }: Props) {
+export default function NumberBondsActivityScreen({ navigation }: Props) {
   const [problem, setProblem] = useState<Problem | null>(null);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [hintsDisabled, setHintsDisabled] = useState(false);
   const [hintsRemaining, setHintsRemaining] = useState(3);
-  const [showIncorrectModal, setShowIncorrectModal] = useState(false);
+  const [showRetryActivityScreen, setShowRetryActivityScreen] = useState(false);
   const [options, setOptions] = useState<number[]>([]);
   const [timer, setTimer] = useState(0);
 
@@ -109,7 +109,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
         animateGreatJob();
         setShowGreatJob(true);
       } else {
-        setShowIncorrectModal(true);
+        setShowRetryActivityScreen(true);
       }
     }
   };
@@ -124,7 +124,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
   };
 
   const handleTryAgainAfterFail = async () => {
-    setShowIncorrectModal(false);
+    setShowRetryActivityScreen(false);
     if (currentTry >= 3) {
       setCurrentTry(1);
       const newCount = GameManager.getInstance().getSessionActivityCount();
@@ -149,7 +149,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
     setSelectedOption(null);
   };
 
-  const [showHintModal, setShowHintModal] = useState(false);
+  const [showHintPopupOverlay, setShowHintPopupOverlay] = useState(false);
   const [currentHintText, setCurrentHintText] = useState("");
 
   const useHint = () => {
@@ -158,7 +158,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
     const hintText = GameManager.getInstance().getHint(problem);
     setCurrentHintText(hintText);
     Speech.speak(hintText, { rate: 0.95, pitch: 1.2 });
-    setShowHintModal(true);
+    setShowHintPopupOverlay(true);
   };
 
   const finishSession = async () => {
@@ -313,18 +313,18 @@ export default function NumberBondsScreen({ navigation }: Props) {
         </TouchableOpacity>
       </View>
 
-      <IncorrectModal
-        visible={showIncorrectModal}
+      <RetryActivityScreen
+        visible={showRetryActivityScreen}
         onTryAgain={handleTryAgainAfterFail}
-        onHint={() => { setShowIncorrectModal(false); useHint(); }}
+        onHint={() => { setShowRetryActivityScreen(false); useHint(); }}
         hintsRemaining={hintsRemaining}
         isTryLimitReached={currentTry >= 3}
       />
 
-      <HintModal
-        visible={showHintModal}
+      <HintPopupOverlay
+        visible={showHintPopupOverlay}
         hintText={currentHintText}
-        onClose={() => setShowHintModal(false)}
+        onClose={() => setShowHintPopupOverlay(false)}
       />
 
       <GreatJobOverlay

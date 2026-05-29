@@ -1,13 +1,13 @@
 import React, { useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, Animated, PanResponder } from 'react-native';
 
-interface DraggableFruitProps {
+interface DraggableFruitItemProps {
   fruit: { id: string; emoji: string; dropped: boolean; group?: 1 | 2 };
   onDrop: () => void;
   disabled?: boolean;
 }
 
-export function DraggableFruit({ fruit, onDrop, disabled = false }: DraggableFruitProps) {
+export function DraggableFruitItem({ fruit, onDrop, disabled = false }: DraggableFruitItemProps) {
   const pan = useRef(new Animated.ValueXY()).current;
   const disabledRef = useRef(disabled);
 

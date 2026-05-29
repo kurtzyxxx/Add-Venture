@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal, Animated } from 'react-native';
 
-interface IncorrectModalProps {
+interface RetryActivityScreenProps {
   visible: boolean;
   onTryAgain: () => void;
   onHint: () => void;
@@ -9,7 +9,7 @@ interface IncorrectModalProps {
   isTryLimitReached?: boolean;
 }
 
-export const IncorrectModal: React.FC<IncorrectModalProps> = ({ visible, onTryAgain, onHint, hintsRemaining, isTryLimitReached }) => {
+export const RetryActivityScreen: React.FC<RetryActivityScreenProps> = ({ visible, onTryAgain, onHint, hintsRemaining, isTryLimitReached }) => {
   return (
     <Modal
       visible={visible}

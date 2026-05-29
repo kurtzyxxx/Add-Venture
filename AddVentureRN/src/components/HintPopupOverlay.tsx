@@ -1,13 +1,13 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal, Animated } from 'react-native';
 
-interface HintModalProps {
+interface HintPopupOverlayProps {
   visible: boolean;
   hintText: string;
   onClose: () => void;
 }
 
-export const HintModal: React.FC<HintModalProps> = ({ visible, hintText, onClose }) => {
+export const HintPopupOverlay: React.FC<HintPopupOverlayProps> = ({ visible, hintText, onClose }) => {
   return (
     <Modal
       visible={visible}

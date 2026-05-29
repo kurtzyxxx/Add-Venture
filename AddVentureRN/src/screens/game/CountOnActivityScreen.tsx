@@ -4,8 +4,8 @@ import {
   PanResponder, SafeAreaView, Modal
 } from 'react-native';
 import * as Speech from 'expo-speech';
-import { IncorrectModal } from '../../components/IncorrectModal';
-import { HintModal } from '../../components/HintModal';
+import { RetryActivityScreen } from '../../components/RetryActivityScreen';
+import { HintPopupOverlay } from '../../components/HintPopupOverlay';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../../App';
 import { GameManager, MAX_ACTIVITIES_PER_SESSION } from '../../core/GameManager';
@@ -17,7 +17,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'CountOn'>;
 
 const FRUITS = ['🍎', '🍌', '🍇', '🍉', '🍓', '🍑', '🍍', '🍊'];
 
-export default function CountOnScreen({ navigation }: Props) {
+export default function CountOnActivityScreen({ navigation }: Props) {
   const [problem, setProblem] = useState<Problem | null>(null);
   const [baseN, setBaseN] = useState(0);
   const [extraM, setExtraM] = useState(0);
@@ -29,7 +29,7 @@ export default function CountOnScreen({ navigation }: Props) {
   const [timer, setTimer] = useState(0);
   const [hintsDisabled, setHintsDisabled] = useState(false);
   const [hintsRemaining, setHintsRemaining] = useState(3);
-  const [showIncorrectModal, setShowIncorrectModal] = useState(false);
+  const [showRetryActivityScreen, setShowRetryActivityScreen] = useState(false);
 
   // 3-try system
   const [currentTry, setCurrentTry] = useState(1);
@@ -168,7 +168,7 @@ export default function CountOnScreen({ navigation }: Props) {
         animateGreatJob();
         setShowGreatJob(true);
       } else {
-        setShowIncorrectModal(true);
+        setShowRetryActivityScreen(true);
       }
     }
   };
@@ -183,7 +183,7 @@ export default function CountOnScreen({ navigation }: Props) {
   };
 
   const handleTryAgainAfterFail = async () => {
-    setShowIncorrectModal(false);
+    setShowRetryActivityScreen(false);
     if (currentTry >= 3) {
       setCurrentTry(1);
       const newCount = GameManager.getInstance().getSessionActivityCount();
@@ -208,7 +208,7 @@ export default function CountOnScreen({ navigation }: Props) {
     setSelectedAnswer(null);
   };
 
-  const [showHintModal, setShowHintModal] = useState(false);
+  const [showHintPopupOverlay, setShowHintPopupOverlay] = useState(false);
   const [currentHintText, setCurrentHintText] = useState("");
 
   const useHint = () => {
@@ -217,7 +217,7 @@ export default function CountOnScreen({ navigation }: Props) {
     const hintText = GameManager.getInstance().getHint(problem);
     setCurrentHintText(hintText);
     Speech.speak(hintText, { rate: 0.95, pitch: 1.2 });
-    setShowHintModal(true);
+    setShowHintPopupOverlay(true);
   };
 
   const finishSession = async () => {
@@ -322,7 +322,7 @@ export default function CountOnScreen({ navigation }: Props) {
             </View>
             <View style={styles.fruitRow}>
               {fruits.filter(f => !f.dropped).map(fruit => (
-                <DraggableFruit key={fruit.id} fruit={fruit} onDrop={() => handleDrop(fruit.id)} />
+                <DraggableFruitItem key={fruit.id} fruit={fruit} onDrop={() => handleDrop(fruit.id)} />
               ))}
             </View>
           </View>
@@ -399,18 +399,18 @@ export default function CountOnScreen({ navigation }: Props) {
         </View>
       )}
 
-      <IncorrectModal
-        visible={showIncorrectModal}
+      <RetryActivityScreen
+        visible={showRetryActivityScreen}
         onTryAgain={handleTryAgainAfterFail}
-        onHint={() => { setShowIncorrectModal(false); useHint(); }}
+        onHint={() => { setShowRetryActivityScreen(false); useHint(); }}
         hintsRemaining={hintsRemaining}
         isTryLimitReached={currentTry >= 3}
       />
 
-      <HintModal
-        visible={showHintModal}
+      <HintPopupOverlay
+        visible={showHintPopupOverlay}
         hintText={currentHintText}
-        onClose={() => setShowHintModal(false)}
+        onClose={() => setShowHintPopupOverlay(false)}
       />
 
       <GreatJobOverlay
@@ -468,7 +468,7 @@ function GreatJobOverlay({ visible, stars, activityCount, onContinue, starScale,
 }
 
 // ─── Draggable Fruit ──────────────────────────────────────────────────────────
-const DraggableFruit = ({ fruit, onDrop }: any) => {
+const DraggableFruitItem = ({ fruit, onDrop }: any) => {
   const pan = useRef(new Animated.ValueXY()).current;
   const panResponder = useRef(
     PanResponder.create({

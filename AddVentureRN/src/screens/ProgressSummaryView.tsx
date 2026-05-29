@@ -9,7 +9,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'PerformanceDashboard'>;
 
 import { GameManager } from '../core/GameManager';
 
-export default function PerformanceDashboardScreen({ navigation }: Props) {
+export default function ProgressSummaryView({ navigation }: Props) {
   const [trends, setTrends] = useState<any[]>([]);
   const [misconceptions, setMisconceptions] = useState<any[]>([]);
 

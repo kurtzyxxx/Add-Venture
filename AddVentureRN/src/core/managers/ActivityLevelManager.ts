@@ -1,4 +1,4 @@
-import { DifficultyEngine } from '../DifficultyEngine';
+import { AdaptiveDifficultyEngine } from '../engines/AdaptiveDifficultyEngine';
 
 export enum VisualGuidanceLevel {
   HIGH = 3,    // All manipulatives, outlines, hints
@@ -7,13 +7,13 @@ export enum VisualGuidanceLevel {
 }
 
 export class ActivityLevelManager {
-  private difficultyEngine: DifficultyEngine;
+  private difficultyEngine: AdaptiveDifficultyEngine;
 
   constructor() {
-    this.difficultyEngine = new DifficultyEngine();
+    this.difficultyEngine = new AdaptiveDifficultyEngine();
   }
 
-  public getDifficultyEngine(): DifficultyEngine {
+  public getDifficultyEngine(): AdaptiveDifficultyEngine {
     return this.difficultyEngine;
   }
 
