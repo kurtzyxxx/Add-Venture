@@ -71,13 +71,16 @@ export class SessionManager {
 
   public async completeAndResetSession(): Promise<SessionRecord> {
     const p = this.saveSystem.getProgress(this.currentStrategy);
+    const recurringErrors = this.activityManager ? this.activityManager.getRecurringErrors() : [];
+    
     const summary: SessionRecord = {
       strategy: this.currentStrategy,
       totalActivities: p.sessionActivitiesCount,
       totalStars: p.sessionStarsCount,
       totalCorrect: p.sessionCorrectCount,
       totalAttempts: p.sessionActivitiesCount, // In a batch, attempts = activities
-      startedAt: this.sessionStartTime
+      startedAt: this.sessionStartTime,
+      recurringErrors: recurringErrors
     };
     
     await this.saveSystem.completeAndResetSession(this.currentStrategy);

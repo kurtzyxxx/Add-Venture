@@ -9,6 +9,7 @@ import { HintModal } from '../../components/HintModal';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../../App';
 import { GameManager, MAX_ACTIVITIES_PER_SESSION } from '../../core/GameManager';
+import { VisualGuidanceLevel } from '../../core/managers/ActivityLevelManager';
 import { Problem } from '../../core/ProblemGenerator';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -121,13 +122,24 @@ export default function CountAllScreen({ navigation }: Props) {
       const next = prev.map(f => f.id === fruitId ? { ...f, dropped: true } : f);
       const droppedCount = next.filter(f => f.dropped).length;
       setDropCounter(droppedCount);
-      triggerDropCounter();
+      
+      const profile = GameManager.getInstance().saveSystem.getProfile();
+      const isLowGuidance = GameManager.getInstance().levelManager.getVisualGuidanceLevel(profile.currentDifficulty, profile.consecutiveCorrect) === VisualGuidanceLevel.LOW;
+
+      if (!isLowGuidance) {
+        triggerDropCounter();
+      }
+
       Speech.stop();
       if (droppedCount === next.length) {
-        Speech.speak(droppedCount.toString(), { rate: 0.95, pitch: 1.4 });
+        if (!isLowGuidance) {
+          Speech.speak(droppedCount.toString(), { rate: 0.95, pitch: 1.4 });
+        }
         Speech.speak('How many fruits in all?', { rate: 0.95, pitch: 1.4 });
       } else {
-        Speech.speak(droppedCount.toString(), { rate: 0.95, pitch: 1.4 });
+        if (!isLowGuidance) {
+          Speech.speak(droppedCount.toString(), { rate: 0.95, pitch: 1.4 });
+        }
       }
       return next;
     });
@@ -229,7 +241,8 @@ export default function CountAllScreen({ navigation }: Props) {
     navigation.replace('SessionSummary', {
       stars: session.totalStars,
       activities: session.totalActivities,
-      correct: session.totalCorrect
+      correct: session.totalCorrect,
+      recurringErrors: session.recurringErrors
     });
   };
 
@@ -239,9 +252,9 @@ export default function CountAllScreen({ navigation }: Props) {
 
   if (!problem) return <View style={styles.container}><Text>Loading...</Text></View>;
 
+  const profile = GameManager.getInstance().saveSystem.getProfile();
   const allDropped = fruits.every(f => f.dropped);
   const isGroup1Finished = fruits.filter(f => f.group === 1 && !f.dropped).length === 0;
-  const profile = GameManager.getInstance().saveSystem.getProfile();
 
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60).toString().padStart(2, '0');

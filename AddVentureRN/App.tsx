@@ -24,7 +24,7 @@ export type RootStackParamList = {
   CountAll: undefined;
   CountOn: undefined;
   NumberBonds: undefined;
-  SessionSummary: { stars: number; activities: number; correct: number };
+  SessionSummary: { stars: number; activities: number; correct: number; recurringErrors?: string[] };
   PerformanceDashboard: undefined;
 };
 

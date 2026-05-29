@@ -30,6 +30,7 @@ export interface SessionRecord {
   totalCorrect: number;
   totalAttempts: number;
   startedAt: number;
+  recurringErrors?: string[];
 }
 
 interface SaveData {

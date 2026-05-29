@@ -166,7 +166,8 @@ export default function NumberBondsScreen({ navigation }: Props) {
     navigation.replace('SessionSummary', {
       stars: session.totalStars,
       activities: session.totalActivities,
-      correct: session.totalCorrect
+      correct: session.totalCorrect,
+      recurringErrors: session.recurringErrors
     });
   };
 

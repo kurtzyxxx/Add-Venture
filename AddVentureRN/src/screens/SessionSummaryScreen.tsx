@@ -6,7 +6,7 @@ import { RootStackParamList } from '../../App';
 type Props = NativeStackScreenProps<RootStackParamList, 'SessionSummary'>;
 
 export default function SessionSummaryScreen({ route, navigation }: Props) {
-  const { stars, activities, correct } = route.params;
+  const { stars, activities, correct, recurringErrors } = route.params;
 
   return (
     <View style={styles.container}>
@@ -20,7 +20,9 @@ export default function SessionSummaryScreen({ route, navigation }: Props) {
         <View style={styles.practiceBox}>
           <Text style={styles.practiceTitle}>Areas Needing Practice:</Text>
           <Text style={styles.practiceText}>
-            {correct === activities ? "None! Perfect Score!" : "Counting larger numbers"}
+            {recurringErrors && recurringErrors.length > 0 
+              ? recurringErrors.join(', ')
+              : (correct === activities ? "None! Perfect Score!" : "Keep practicing!")}
           </Text>
         </View>
       </View>
