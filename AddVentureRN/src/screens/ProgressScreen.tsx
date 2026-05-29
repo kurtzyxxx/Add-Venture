@@ -66,8 +66,8 @@ export default function ProgressScreen({ navigation }: Props) {
     setStreakUnlocked(profile.consecutiveCorrect >= 5);
   };
 
-  // Progress bar max reference (30 activities per stage feels full)
-  const BAR_MAX = 30;
+  // Progress bar max reference (10 activities per stage feels full)
+  const BAR_MAX = 10;
   const caProgress = Math.min(1, countAllCompleted / BAR_MAX);
   const coProgress = Math.min(1, countOnCompleted / BAR_MAX);
   const nbProgress = Math.min(1, numberBondsCompleted / BAR_MAX);

@@ -27,6 +27,7 @@ export class ActivityManager {
   private currentStrategy: string;
   private currentProblem: Problem | null = null;
   private activityStartTime: number = 0;
+  private _hasResolved: boolean = false;
 
   constructor(
     strategy: string,
@@ -56,6 +57,7 @@ export class ActivityManager {
     }
     
     this.retryManager.reset(this.currentProblem);
+    this._hasResolved = false;
     this.startTimer();
     return this.currentProblem;
   }
@@ -98,9 +100,33 @@ export class ActivityManager {
     
     const isResolved = this.retryManager.isActivityResolved(evaluation.isCorrect);
     const stars = this.retryManager.getStarsEarned(evaluation.isCorrect);
-    const responseTime = Date.now() - this.activityStartTime;
+    this.stopTimer();
+    const responseTime = this.calculateResponseTime();
+    
+    // Insert into Activity_Attempt Database Table
+    let attemptId = 1;
+    try {
+      const { DatabaseHelper } = require('../../database/DatabaseHelper');
+      const db = DatabaseHelper.getInstance().getDB();
+      const profile = this.saveSystem.getProfile();
+      
+      const result = await db.runAsync(
+        `INSERT INTO Activity_Attempt (progress_id, attempt_number, response, is_correct, response_time)
+         VALUES (?, ?, ?, ?, ?)`,
+        [profile.id || 1, this.retryManager.getCurrentTries(), answer.toString(), evaluation.isCorrect ? 1 : 0, responseTime]
+      );
+      attemptId = result.lastInsertRowId;
+    } catch (e) {
+      console.warn("[ActivityManager] Could not insert Activity_Attempt to DB:", e);
+    }
+    
+    // UC-4.1 Analyze Error Patterns
+    if (!evaluation.isCorrect) {
+      this.feedbackManager.analyzeError(attemptId, this.currentStrategy, evaluation.misconception || "GENERAL_ERROR", this.progressTracker);
+    }
 
-    if (isResolved) {
+    if (isResolved && !this._hasResolved) {
+      this._hasResolved = true;
       await this.resolveActivity(evaluation.isCorrect, responseTime, stars, this.retryManager.getCurrentTries());
     }
 
@@ -109,7 +135,8 @@ export class ActivityManager {
       activityResolved: isResolved,
       starsEarned: stars,
       feedback: this.feedbackManager.getFeedback(evaluation.isCorrect),
-      misconception: evaluation.misconception
+      misconception: evaluation.misconception,
+      hintText: evaluation.hint?.hintMessage
     };
   }
 

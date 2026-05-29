@@ -151,11 +151,12 @@ export class SaveSystem {
 
     // Cumulative totals
     record.totalAttempts++;
+    record.completedActivities++;
+    record.starsEarned += stars;
+
     if (isCorrect) {
       record.totalCorrect++;
-      record.starsEarned += stars;
-      record.completedActivities++;
-      if (record.completedActivities % 3 === 0) record.unlockedLevel++;
+      if (record.totalCorrect % 3 === 0) record.unlockedLevel++;
     }
 
     // Persistent session counters

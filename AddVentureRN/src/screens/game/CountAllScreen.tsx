@@ -163,9 +163,12 @@ export default function CountAllScreen({ navigation }: Props) {
       setShowGreatJob(true);
     } else {
       if (currentTry >= 3) {
-        // We will NOT queue a new problem. We just show the incorrect modal.
-        // We don't increment the session count here because they haven't finished this problem successfully yet.
-        setShowIncorrectModal(true);
+        // Exhausted tries - show 0 stars and continue
+        const newCount = GameManager.getInstance().getSessionActivityCount();
+        setActivityCount(newCount);
+        setGreatJobStars(0);
+        animateGreatJob();
+        setShowGreatJob(true);
       } else {
         setShowIncorrectModal(true);
       }
@@ -184,13 +187,20 @@ export default function CountAllScreen({ navigation }: Props) {
   const handleTryAgainAfterFail = async () => {
     setShowIncorrectModal(false);
     
-    // If exhausted tries, reset tries to let them retry the exact same problem.
+    // If exhausted tries, load a new problem and proceed to next activity
     if (currentTry >= 3) {
       setCurrentTry(1);
-    } else {
-      setCurrentTry(prev => prev + 1);
+      const newCount = GameManager.getInstance().getSessionActivityCount();
+      setActivityCount(newCount);
+      if (newCount >= MAX_ACTIVITIES_PER_SESSION) {
+        await finishSession();
+      } else {
+        loadNewProblem();
+      }
+      return;
     }
     
+    setCurrentTry(prev => prev + 1);
     setOptions(prev => {
       const shuffled = [...prev];
       for (let i = shuffled.length - 1; i > 0; i--) {
@@ -418,6 +428,7 @@ export default function CountAllScreen({ navigation }: Props) {
           useHint();
         }}
         hintsRemaining={hintsRemaining}
+        isTryLimitReached={currentTry >= 3}
       />
 
       {/* Hint Modal */}
@@ -480,11 +491,11 @@ function GreatJobOverlay({ visible, stars, activityCount, onContinue, starScale,
 
           {/* Big star */}
           <Animated.Text style={[gjStyles.bigStar, { transform: [{ scale: starScale }] }]}>
-            ⭐
+            {stars > 0 ? '⭐' : '💡'}
           </Animated.Text>
 
           {/* Great Job! */}
-          <Text style={gjStyles.greatJobText}>Great Job!</Text>
+          <Text style={gjStyles.greatJobText}>{stars > 0 ? 'Great Job!' : "Keep Going!"}</Text>
 
           {/* Stars earned */}
           <View style={gjStyles.starsEarnedRow}>

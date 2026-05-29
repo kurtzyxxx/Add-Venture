@@ -6,9 +6,10 @@ interface IncorrectModalProps {
   onTryAgain: () => void;
   onHint: () => void;
   hintsRemaining: number;
+  isTryLimitReached?: boolean;
 }
 
-export const IncorrectModal: React.FC<IncorrectModalProps> = ({ visible, onTryAgain, onHint, hintsRemaining }) => {
+export const IncorrectModal: React.FC<IncorrectModalProps> = ({ visible, onTryAgain, onHint, hintsRemaining, isTryLimitReached }) => {
   return (
     <Modal
       visible={visible}
@@ -24,9 +25,19 @@ export const IncorrectModal: React.FC<IncorrectModalProps> = ({ visible, onTryAg
             <Text style={[styles.titleText, { color: '#29B6F6' }]}>quite.</Text>
           </View>
           <View style={styles.row}>
-            <Text style={[styles.titleText, { color: '#FF9800' }]}>Let's </Text>
-            <Text style={[styles.titleText, { color: '#66BB6A' }]}>try </Text>
-            <Text style={[styles.titleText, { color: '#9C27B0' }]}>again!</Text>
+            {isTryLimitReached ? (
+              <>
+                <Text style={[styles.titleText, { color: '#FF9800' }]}>Let's </Text>
+                <Text style={[styles.titleText, { color: '#66BB6A' }]}>move </Text>
+                <Text style={[styles.titleText, { color: '#9C27B0' }]}>on!</Text>
+              </>
+            ) : (
+              <>
+                <Text style={[styles.titleText, { color: '#FF9800' }]}>Let's </Text>
+                <Text style={[styles.titleText, { color: '#66BB6A' }]}>try </Text>
+                <Text style={[styles.titleText, { color: '#9C27B0' }]}>again!</Text>
+              </>
+            )}
           </View>
         </View>
 
@@ -50,7 +61,7 @@ export const IncorrectModal: React.FC<IncorrectModalProps> = ({ visible, onTryAg
             activeOpacity={0.8}
             onPress={onTryAgain}
           >
-            <Text style={styles.primaryBtnText}>↻ Try Again</Text>
+            <Text style={styles.primaryBtnText}>{isTryLimitReached ? 'Next Problem →' : '↻ Try Again'}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity 

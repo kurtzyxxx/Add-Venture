@@ -103,10 +103,12 @@ export default function NumberBondsScreen({ navigation }: Props) {
       setShowGreatJob(true);
     } else {
       if (currentTry >= 3) {
-        setShowIncorrectModal(true);
+        const newCount = GameManager.getInstance().getSessionActivityCount();
+        setActivityCount(newCount);
+        setGreatJobStars(0);
+        animateGreatJob();
+        setShowGreatJob(true);
       } else {
-        setCurrentTry(prev => prev + 1);
-        setSelectedOption(null);
         setShowIncorrectModal(true);
       }
     }
@@ -125,7 +127,17 @@ export default function NumberBondsScreen({ navigation }: Props) {
     setShowIncorrectModal(false);
     if (currentTry >= 3) {
       setCurrentTry(1);
+      const newCount = GameManager.getInstance().getSessionActivityCount();
+      setActivityCount(newCount);
+      if (newCount >= MAX_ACTIVITIES_PER_SESSION) {
+        await finishSession();
+      } else {
+        loadNewProblem();
+      }
+      return;
     }
+    
+    setCurrentTry(prev => prev + 1);
     setOptions(prev => {
       const shuffled = [...prev];
       for (let i = shuffled.length - 1; i > 0; i--) {
@@ -305,6 +317,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
         onTryAgain={handleTryAgainAfterFail}
         onHint={() => { setShowIncorrectModal(false); useHint(); }}
         hintsRemaining={hintsRemaining}
+        isTryLimitReached={currentTry >= 3}
       />
 
       <HintModal
@@ -343,8 +356,10 @@ function GreatJobOverlay({ visible, stars, activityCount, onContinue, starScale,
               }]}>{c}</Animated.Text>
             ))}
           </View>
-          <Animated.Text style={[gjStyles.bigStar, { transform: [{ scale: starScale }] }]}>⭐</Animated.Text>
-          <Text style={gjStyles.greatJobText}>Great Job!</Text>
+          <Animated.Text style={[gjStyles.bigStar, { transform: [{ scale: starScale }] }]}>
+            {stars > 0 ? '⭐' : '💡'}
+          </Animated.Text>
+          <Text style={gjStyles.greatJobText}>{stars > 0 ? 'Great Job!' : "Keep Going!"}</Text>
           <View style={gjStyles.starsEarnedRow}>
             <Text style={gjStyles.plusStars}>+{stars} {stars === 1 ? 'Star' : 'Stars'}</Text>
             <View style={gjStyles.starIconsRow}>
