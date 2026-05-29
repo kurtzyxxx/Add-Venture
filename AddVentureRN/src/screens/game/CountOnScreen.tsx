@@ -118,6 +118,13 @@ export default function CountOnScreen({ navigation }: Props) {
     });
   };
 
+  const handleReset = () => {
+    setFruits(prev => prev.map(f => ({ ...f, dropped: false })));
+    setDropCounter(0);
+    setSelectedAnswer(null);
+    Speech.stop();
+  };
+
   const submitAnswer = async () => {
     if (selectedAnswer === null || !problem) return;
 
@@ -313,6 +320,11 @@ export default function CountOnScreen({ navigation }: Props) {
             ))}
             {!allDropped && <Text style={styles.dropZoneHint}>Drag fruits here!</Text>}
           </View>
+          <TouchableOpacity style={styles.resetButton} onPress={handleReset} activeOpacity={0.8}>
+            <View style={styles.resetInner}>
+              <Text style={styles.resetIcon}>↻</Text>
+            </View>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -489,6 +501,9 @@ const styles = StyleSheet.create({
   actionsContainer: { flexDirection: 'row', justifyContent: 'center', paddingHorizontal: 20, marginBottom: 16 },
   actionBtn: { width: '60%', paddingVertical: 14, borderRadius: 30, justifyContent: 'center', alignItems: 'center', elevation: 4, borderWidth: 3, borderColor: '#FFF' },
   actionBtnText: { fontSize: 22, fontWeight: '900', color: '#FFF', textShadowColor: 'rgba(0,0,0,0.2)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 },
+  resetButton: { zIndex: 100, position: 'absolute', bottom: 12, alignSelf: 'center', width: 56, height: 56, borderRadius: 28, backgroundColor: '#FFCA28', justifyContent: 'center', alignItems: 'center', elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4 },
+  resetInner: { width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', borderTopWidth: 2, borderTopColor: 'rgba(255,255,255,0.4)', borderRadius: 28 },
+  resetIcon: { fontSize: 32, color: '#5D4037', fontWeight: 'bold', marginTop: -3 },
 });
 
 const gjStyles = StyleSheet.create({
