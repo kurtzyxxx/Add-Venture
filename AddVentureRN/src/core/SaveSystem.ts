@@ -7,6 +7,7 @@ export interface LearnerProfile {
   currentDifficulty: number;
   consecutiveCorrect: number;
   consecutiveWrong: number;
+  fastResponseStreak: number; // consecutive answers under 20 s
   createdAt: number;
 }
 
@@ -16,11 +17,12 @@ export interface ProgressRecord {
   completedActivities: number; // total ever answered correctly (any try)
   starsEarned: number;
   totalCorrect: number;        // activities answered correctly (any try)
-  totalAttempts: number;       // total activities attempted (resolved, not try presses)
+  totalAttempts: number;       // total activities attempted (resolved)
   // --- Persistent session state (survives app exit) ---
   sessionActivitiesCount: number; // position in current 10-activity batch (0–10)
-  sessionStarsCount: number;      // stars earned so far in this batch
-  sessionCorrectCount: number;    // correct so far in this batch
+  sessionStarsCount: number;
+  sessionCorrectCount: number;
+  sessionStartTime: number;    // epoch ms of when the current batch started
 }
 
 export interface SessionRecord {
@@ -29,17 +31,40 @@ export interface SessionRecord {
   totalStars: number;
   totalCorrect: number;
   totalAttempts: number;
+  accuracyPct: number;          // 0-100
+  avgResponseTimeMs: number;    // average response time for the session
   startedAt: number;
+  completedAt: number;
+}
+
+export interface ResponseRecord {
+  strategy: string;
+  num1: number;
+  num2: number;
+  givenAnswer: number;
+  correctAnswer: number;
+  isCorrect: boolean;
+  responseTimeMs: number;
+  tryNumber: number;
+  timestamp: number;
 }
 
 interface SaveData {
   profile: LearnerProfile;
   progressRecords: ProgressRecord[];
+  sessionHistory: SessionRecord[];   // persisted across launches (last 20 sessions)
+  responseLog: ResponseRecord[];     // persisted (last 200 responses)
 }
 
+const MAX_SESSION_HISTORY = 20;
+const MAX_RESPONSE_LOG = 200;
+
 export class SaveSystem {
-  private static readonly SAVE_KEY = '@addventure_save';
+  private static readonly SAVE_KEY = '@addventure_save_v2';
   private data: SaveData;
+
+  // Tracks response times for the current in-progress session (reset on completeAndResetSession)
+  private currentSessionResponseTimes: number[] = [];
 
   constructor() {
     this.data = this.createFreshSave();
@@ -54,13 +79,31 @@ export class SaveSystem {
         currentDifficulty: 1,
         consecutiveCorrect: 0,
         consecutiveWrong: 0,
+        fastResponseStreak: 0,
         createdAt: Date.now()
       },
       progressRecords: [
-        { strategy: 'COUNT_ALL', unlockedLevel: 1, completedActivities: 0, starsEarned: 0, totalCorrect: 0, totalAttempts: 0, sessionActivitiesCount: 0, sessionStarsCount: 0, sessionCorrectCount: 0 },
-        { strategy: 'COUNT_ON', unlockedLevel: 1, completedActivities: 0, starsEarned: 0, totalCorrect: 0, totalAttempts: 0, sessionActivitiesCount: 0, sessionStarsCount: 0, sessionCorrectCount: 0 },
-        { strategy: 'NUMBER_BONDS', unlockedLevel: 1, completedActivities: 0, starsEarned: 0, totalCorrect: 0, totalAttempts: 0, sessionActivitiesCount: 0, sessionStarsCount: 0, sessionCorrectCount: 0 }
-      ]
+        this.freshProgress('COUNT_ALL'),
+        this.freshProgress('COUNT_ON'),
+        this.freshProgress('NUMBER_BONDS'),
+      ],
+      sessionHistory: [],
+      responseLog: [],
+    };
+  }
+
+  private freshProgress(strategy: string): ProgressRecord {
+    return {
+      strategy,
+      unlockedLevel: 1,
+      completedActivities: 0,
+      starsEarned: 0,
+      totalCorrect: 0,
+      totalAttempts: 0,
+      sessionActivitiesCount: 0,
+      sessionStarsCount: 0,
+      sessionCorrectCount: 0,
+      sessionStartTime: Date.now(),
     };
   }
 
@@ -69,13 +112,24 @@ export class SaveSystem {
       const json = await AsyncStorage.getItem(SaveSystem.SAVE_KEY);
       if (json) {
         const loaded = JSON.parse(json) as SaveData;
-        // Migrate old records missing session fields
+        // Migrate progress records
         loaded.progressRecords = loaded.progressRecords.map((r: any) => ({
+          ...this.freshProgress(r.strategy),
           ...r,
           sessionActivitiesCount: r.sessionActivitiesCount ?? 0,
           sessionStarsCount: r.sessionStarsCount ?? 0,
           sessionCorrectCount: r.sessionCorrectCount ?? 0,
+          sessionStartTime: r.sessionStartTime ?? Date.now(),
         }));
+        // Migrate profile
+        loaded.profile = {
+          ...this.createFreshSave().profile,
+          ...loaded.profile,
+          fastResponseStreak: loaded.profile.fastResponseStreak ?? 0,
+        };
+        // Migrate new top-level arrays
+        loaded.sessionHistory = loaded.sessionHistory ?? [];
+        loaded.responseLog = loaded.responseLog ?? [];
         this.data = loaded;
       } else {
         this.data = this.createFreshSave();
@@ -95,6 +149,8 @@ export class SaveSystem {
     }
   }
 
+  // ── Profile ───────────────────────────────────────────────────────────────
+
   public getProfile(): LearnerProfile {
     return this.data.profile;
   }
@@ -104,13 +160,13 @@ export class SaveSystem {
     await this.save();
   }
 
+  // ── Progress ──────────────────────────────────────────────────────────────
+
   public getProgress(strategy: string): ProgressRecord {
-    const record = this.data.progressRecords.find(r => r.strategy === strategy);
-    return record || {
-      strategy, unlockedLevel: 1, completedActivities: 0, starsEarned: 0,
-      totalCorrect: 0, totalAttempts: 0,
-      sessionActivitiesCount: 0, sessionStarsCount: 0, sessionCorrectCount: 0
-    };
+    return (
+      this.data.progressRecords.find(r => r.strategy === strategy) ??
+      this.freshProgress(strategy)
+    );
   }
 
   public getAllProgress(): ProgressRecord[] {
@@ -136,15 +192,22 @@ export class SaveSystem {
     return r.totalAttempts >= 10 && this.getAccuracy('COUNT_ON') >= 60;
   }
 
+  // ── Activity Recording ────────────────────────────────────────────────────
+
   /**
    * Called each time an activity is resolved (correct or all tries exhausted).
-   * Updates cumulative totals AND the persistent session counters.
+   * Updates cumulative totals, session counters, response log, and fast-streak.
    */
   public async recordActivity(
     strategy: string,
     isCorrect: boolean,
     stars: number,
-    tryNumber: number
+    tryNumber: number,
+    responseTimeMs: number,
+    num1: number,
+    num2: number,
+    givenAnswer: number,
+    correctAnswer: number,
   ): Promise<void> {
     const record = this.getProgress(strategy);
 
@@ -163,21 +226,141 @@ export class SaveSystem {
     if (isCorrect) record.sessionCorrectCount++;
 
     this.upsertRecord(record);
+
+    // Response log
+    const entry: ResponseRecord = {
+      strategy,
+      num1,
+      num2,
+      givenAnswer,
+      correctAnswer,
+      isCorrect,
+      responseTimeMs,
+      tryNumber,
+      timestamp: Date.now(),
+    };
+    this.data.responseLog.push(entry);
+    if (this.data.responseLog.length > MAX_RESPONSE_LOG) {
+      this.data.responseLog = this.data.responseLog.slice(-MAX_RESPONSE_LOG);
+    }
+
+    // Current-session response time (for session summary)
+    this.currentSessionResponseTimes.push(responseTimeMs);
+
+    // Fast response streak (< 20 s)
+    const profile = this.data.profile;
+    if (isCorrect && responseTimeMs < 20000) {
+      profile.fastResponseStreak++;
+    } else {
+      profile.fastResponseStreak = 0;
+    }
+    this.data.profile = profile;
+
     await this.save();
   }
 
   /**
    * Called when the learner completes the 10-activity session.
-   * Resets session counters so the next session starts fresh.
+   * Persists a SessionRecord, resets session counters.
    */
-  public async completeAndResetSession(strategy: string): Promise<void> {
+  public async completeAndResetSession(strategy: string): Promise<SessionRecord> {
     const record = this.getProgress(strategy);
+    const accuracyPct =
+      record.sessionActivitiesCount > 0
+        ? Math.round((record.sessionCorrectCount / record.sessionActivitiesCount) * 100)
+        : 0;
+    const avgMs =
+      this.currentSessionResponseTimes.length > 0
+        ? Math.round(
+            this.currentSessionResponseTimes.reduce((a, b) => a + b, 0) /
+              this.currentSessionResponseTimes.length
+          )
+        : 0;
+
+    const sessionRecord: SessionRecord = {
+      strategy,
+      totalActivities: record.sessionActivitiesCount,
+      totalStars: record.sessionStarsCount,
+      totalCorrect: record.sessionCorrectCount,
+      totalAttempts: record.sessionActivitiesCount,
+      accuracyPct,
+      avgResponseTimeMs: avgMs,
+      startedAt: record.sessionStartTime,
+      completedAt: Date.now(),
+    };
+
+    // Persist to history
+    this.data.sessionHistory.push(sessionRecord);
+    if (this.data.sessionHistory.length > MAX_SESSION_HISTORY) {
+      this.data.sessionHistory = this.data.sessionHistory.slice(-MAX_SESSION_HISTORY);
+    }
+
+    // Reset session counters
     record.sessionActivitiesCount = 0;
     record.sessionStarsCount = 0;
     record.sessionCorrectCount = 0;
+    record.sessionStartTime = Date.now();
     this.upsertRecord(record);
+    this.currentSessionResponseTimes = [];
+
     await this.save();
+    return sessionRecord;
   }
+
+  // ── Query Helpers ─────────────────────────────────────────────────────────
+
+  public getSessionHistory(): SessionRecord[] {
+    return [...this.data.sessionHistory].reverse(); // most recent first
+  }
+
+  public getSessionHistoryForStrategy(strategy: string): SessionRecord[] {
+    return this.data.sessionHistory
+      .filter(s => s.strategy === strategy)
+      .slice()
+      .reverse();
+  }
+
+  public getResponseLog(): ResponseRecord[] {
+    return this.data.responseLog;
+  }
+
+  /** Average response time (ms) for a strategy, from the persisted response log. */
+  public getAverageResponseTime(strategy: string): number {
+    const entries = this.data.responseLog.filter(r => r.strategy === strategy);
+    if (entries.length === 0) return 0;
+    return Math.round(entries.reduce((s, r) => s + r.responseTimeMs, 0) / entries.length);
+  }
+
+  /**
+   * Returns up to `limit` problem combos that have been failed the most times.
+   * Key format: "num1+num2".
+   */
+  public getMisconceptionPatterns(
+    strategy: string,
+    limit = 3
+  ): { combo: string; failCount: number }[] {
+    const failures = this.data.responseLog.filter(
+      r => r.strategy === strategy && !r.isCorrect
+    );
+    const counts: Record<string, number> = {};
+    for (const r of failures) {
+      const key = `${r.num1}+${r.num2}`;
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
+    return Object.entries(counts)
+      .map(([combo, failCount]) => ({ combo, failCount }))
+      .filter(({ failCount }) => failCount >= 2)
+      .sort((a, b) => b.failCount - a.failCount)
+      .slice(0, limit);
+  }
+
+  /** Last session for a given strategy, or null. */
+  public getLastSession(strategy: string): SessionRecord | null {
+    const hist = this.getSessionHistoryForStrategy(strategy);
+    return hist.length > 0 ? hist[0] : null;
+  }
+
+  // ── Internals ─────────────────────────────────────────────────────────────
 
   private upsertRecord(record: ProgressRecord): void {
     const index = this.data.progressRecords.findIndex(r => r.strategy === record.strategy);

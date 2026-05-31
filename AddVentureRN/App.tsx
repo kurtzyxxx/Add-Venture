@@ -22,7 +22,7 @@ export type RootStackParamList = {
   CountAll: undefined;
   CountOn: undefined;
   NumberBonds: undefined;
-  SessionSummary: { stars: number; activities: number; correct: number };
+  SessionSummary: { stars: number; activities: number; correct: number; strategy: string };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
