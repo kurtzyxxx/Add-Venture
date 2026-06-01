@@ -12,6 +12,7 @@ import * as Speech from 'expo-speech';
 import { IncorrectModal } from '../../components/IncorrectModal';
 import { GreatJobOverlay } from '../../components/GreatJobOverlay';
 import { PulseView } from '../../components/animations/PulseView';
+import { TimerBar } from '../../components/TimerBar';
 
 const { width } = Dimensions.get('window');
 type Props = NativeStackScreenProps<RootStackParamList, 'NumberBonds'>;
@@ -25,7 +26,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
   const [hintsRemaining, setHintsRemaining] = useState(3);
   const [showIncorrectModal, setShowIncorrectModal] = useState(false);
   const [options, setOptions] = useState<number[]>([]);
-  const [timer, setTimer] = useState(0);
+  const [timeLeft, setTimeLeft] = useState(120);
   const [isMasteryProblem, setIsMasteryProblem] = useState(false);
 
   const [currentTry, setCurrentTry] = useState(1);
@@ -38,15 +39,40 @@ export default function NumberBondsScreen({ navigation }: Props) {
   const unknownPulse = useRef(new Animated.Value(1)).current;
   const unknownPulseLoop = useRef<Animated.CompositeAnimation | null>(null);
 
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
   useEffect(() => {
     Speech.speak('Number Bonds! Find the missing part to complete the bond!', { rate: 0.9, pitch: 1.3 });
     loadNewProblem();
-    const interval = setInterval(() => setTimer(t => t + 1), 1000);
+    timerRef.current = setInterval(() => setTimeLeft(t => t > 0 ? t - 1 : 0), 1000);
     return () => {
-      clearInterval(interval);
+      if (timerRef.current) clearInterval(timerRef.current);
       unknownPulseLoop.current?.stop();
     };
   }, []);
+
+  useEffect(() => {
+    if (timeLeft === 0 && !showIncorrectModal && !showGreatJob && problem && selectedOption === null) {
+      handleTimeUp();
+    }
+  }, [timeLeft, showIncorrectModal, showGreatJob, problem, selectedOption]);
+
+  const handleTimeUp = async () => {
+    if (!problem) return;
+    const gm = GameManager.getInstance();
+    setCurrentTry(3);
+    const responseTimeMs = gm.sessionTimerLimit * 1000;
+    const { starsEarned } = await gm.submitAnswer(false, 3, responseTimeMs, problem, -1);
+    
+    if (isMasteryProblem) {
+      gm.recordMasteryIncorrect(problem);
+    } else {
+      gm.addToMasteryQueue(problem);
+    }
+    const newCount = gm.getSessionActivityCount();
+    setActivityCount(newCount);
+    setShowIncorrectModal(true);
+  };
 
   // Pulse the unknown circle when no answer is selected
   useEffect(() => {
@@ -81,7 +107,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
     setProblem(p);
     setSelectedOption(null);
     setCurrentTry(1);
-    setTimer(0);
+    setTimeLeft(gm.sessionTimerLimit);
     setJustMastered(false);
 
     const pCount = gm.getSessionActivityCount();
@@ -116,7 +142,8 @@ export default function NumberBondsScreen({ navigation }: Props) {
     if (selectedOption === null || !problem) return;
     const gm = GameManager.getInstance();
     const isCorrect = selectedOption === problem.correctAnswer;
-    const { starsEarned } = await gm.submitAnswer(isCorrect, currentTry, timer * 1000, problem, selectedOption);
+    const responseTimeMs = (gm.sessionTimerLimit - timeLeft) * 1000;
+    const { starsEarned } = await gm.submitAnswer(isCorrect, currentTry, responseTimeMs, problem, selectedOption);
 
     if (isCorrect) {
       let wasMastered = false;
@@ -206,7 +233,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
           <Text style={styles.backIcon}>{'<'}</Text>
         </TouchableOpacity>
         <View style={styles.topCenter}>
-          <Text style={styles.timeText}>⏱ {formatTime(timer)}</Text>
+          <TimerBar timeLeft={timeLeft} totalTime={GameManager.getInstance().sessionTimerLimit} />
           <Text style={styles.activityProgress}>{activityCount}/{MAX_ACTIVITIES_PER_SESSION}</Text>
         </View>
         <View style={styles.badgesContainer}>

@@ -39,6 +39,9 @@ export class GameManager {
   // Per-session mastery queue (not persisted; resets when the session ends)
   private masteryQueue: MasteryItem[] = [];
 
+  // Dynamic countdown timer limit
+  public sessionTimerLimit: number = 120;
+
   private constructor() {
     this.saveSystem = new SaveSystem();
     this.difficultyEngine = new DifficultyEngine();
@@ -67,6 +70,7 @@ export class GameManager {
     this.currentStrategy = strategy;
     this.sessionStartTime = Date.now();
     this.masteryQueue = [];
+    this.sessionTimerLimit = 120; // reset to 2 mins at the start of a session
   }
 
   public generateProblem(): Problem {
@@ -208,6 +212,13 @@ export class GameManager {
 
     const activityResolved = isCorrect || tryNumber >= 3;
     if (activityResolved) {
+      // Dynamic timer adjustment
+      if (isCorrect) {
+        this.sessionTimerLimit = Math.max(15, this.sessionTimerLimit - 5); // reduce by 5s, min 15s
+      } else {
+        this.sessionTimerLimit += 5; // increase by 5s
+      }
+
       profile.currentDifficulty = this.difficultyEngine.evaluatePerformance(
         profile.currentDifficulty,
         isCorrect,

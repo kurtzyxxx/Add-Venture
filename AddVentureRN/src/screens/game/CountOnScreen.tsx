@@ -12,6 +12,7 @@ import { RootStackParamList } from '../../../App';
 import { GameManager, MAX_ACTIVITIES_PER_SESSION } from '../../core/GameManager';
 import { Problem } from '../../core/ProblemGenerator';
 import { LinearGradient } from 'expo-linear-gradient';
+import { TimerBar } from '../../components/TimerBar';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CountOn'>;
 
@@ -30,7 +31,7 @@ export default function CountOnScreen({ navigation }: Props) {
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [options, setOptions] = useState<number[]>([]);
   const [dropCounter, setDropCounter] = useState(0);
-  const [timer, setTimer] = useState(0);
+  const [timeLeft, setTimeLeft] = useState(120);
   const [hintsDisabled, setHintsDisabled] = useState(false);
   const [hintsRemaining, setHintsRemaining] = useState(3);
   const [showIncorrectModal, setShowIncorrectModal] = useState(false);
@@ -46,14 +47,41 @@ export default function CountOnScreen({ navigation }: Props) {
   const fruitTapAnims = useRef<Record<string, Animated.Value>>({});
   const fruitGlowAnims = useRef<Record<string, Animated.Value>>({});
 
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
   useEffect(() => {
     Speech.speak('Count On! Oliver already has some fruits. Help him count on more!', {
       rate: 0.9, pitch: 1.3,
     });
     loadNewProblem();
-    const interval = setInterval(() => setTimer(t => t + 1), 1000);
-    return () => clearInterval(interval);
+    timerRef.current = setInterval(() => setTimeLeft(t => t > 0 ? t - 1 : 0), 1000);
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
   }, []);
+
+  useEffect(() => {
+    if (timeLeft === 0 && !showIncorrectModal && !showGreatJob && problem && selectedAnswer === null) {
+      handleTimeUp();
+    }
+  }, [timeLeft, showIncorrectModal, showGreatJob, problem, selectedAnswer]);
+
+  const handleTimeUp = async () => {
+    if (!problem) return;
+    const gm = GameManager.getInstance();
+    setCurrentTry(3);
+    const responseTimeMs = gm.sessionTimerLimit * 1000;
+    const { starsEarned } = await gm.submitAnswer(false, 3, responseTimeMs, problem, -1);
+    
+    if (isMasteryProblem) {
+      gm.recordMasteryIncorrect(problem);
+    } else {
+      gm.addToMasteryQueue(problem);
+    }
+    const newCount = gm.getSessionActivityCount();
+    setActivityCount(newCount);
+    setShowIncorrectModal(true);
+  };
 
   const loadNewProblem = () => {
     const gm = GameManager.getInstance();
@@ -98,7 +126,7 @@ export default function CountOnScreen({ navigation }: Props) {
     setDropCounter(0);
     setSelectedAnswer(null);
     setCurrentTry(1);
-    setTimer(0);
+    setTimeLeft(gm.sessionTimerLimit);
     setJustMastered(false);
 
     const opts = new Set([p.correctAnswer]);
@@ -161,7 +189,8 @@ export default function CountOnScreen({ navigation }: Props) {
     if (selectedAnswer === null || !problem) return;
     const gm = GameManager.getInstance();
     const isCorrect = selectedAnswer === problem.correctAnswer;
-    const { starsEarned } = await gm.submitAnswer(isCorrect, currentTry, timer * 1000, problem, selectedAnswer);
+    const responseTimeMs = (gm.sessionTimerLimit - timeLeft) * 1000;
+    const { starsEarned } = await gm.submitAnswer(isCorrect, currentTry, responseTimeMs, problem, selectedAnswer);
 
     if (isCorrect) {
       let wasMastered = false;
@@ -252,7 +281,7 @@ export default function CountOnScreen({ navigation }: Props) {
           <Text style={styles.backIcon}>{'<'}</Text>
         </TouchableOpacity>
         <View style={styles.topCenter}>
-          <Text style={styles.timeText}>⏱ {formatTime(timer)}</Text>
+          <TimerBar timeLeft={timeLeft} totalTime={GameManager.getInstance().sessionTimerLimit} />
           <Text style={styles.activityProgress}>{activityCount}/{MAX_ACTIVITIES_PER_SESSION}</Text>
         </View>
         <View style={styles.badgesContainer}>
