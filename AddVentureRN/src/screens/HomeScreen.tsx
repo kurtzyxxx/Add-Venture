@@ -406,6 +406,7 @@ export default function HomeScreen({ navigation }: Props) {
 
       {/* ── Animated player avatar ────────────────────────────────────────── */}
       <Animated.View
+        pointerEvents="none"
         style={[
           styles.avatarContainer,
           {
@@ -466,7 +467,7 @@ export default function HomeScreen({ navigation }: Props) {
       <View style={[styles.nodeContainer, { left: N2.cx - 50, top: N2.cy - 50 }]}>
         {countOnUnlocked && <GlowRing color="#D500F9" pulse={!numberBondsUnlocked} />}
         {/* Sparkle burst on unlock */}
-        <View style={styles.sparkleAnchor}>
+        <View style={styles.sparkleAnchor} pointerEvents="none">
           <SparkleParticles trigger={coTrigger} />
         </View>
         <TouchableOpacity
@@ -499,7 +500,7 @@ export default function HomeScreen({ navigation }: Props) {
       ═══════════════════════════════════════════════════════════════════ */}
       <View style={[styles.nodeContainer, { left: N3.cx - 50, top: N3.cy - 50 }]}>
         {numberBondsUnlocked && <GlowRing color="#00BFFF" pulse />}
-        <View style={styles.sparkleAnchor}>
+        <View style={styles.sparkleAnchor} pointerEvents="none">
           <SparkleParticles trigger={nbTrigger} />
         </View>
         <TouchableOpacity

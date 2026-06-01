@@ -18,6 +18,7 @@ export interface ProgressRecord {
   starsEarned: number;
   totalCorrect: number;        // activities answered correctly (any try)
   totalAttempts: number;       // total activities attempted (resolved)
+  currentDifficulty: number;   // Independent difficulty per strategy
   // --- Persistent session state (survives app exit) ---
   sessionActivitiesCount: number; // position in current 10-activity batch (0–10)
   sessionStarsCount: number;
@@ -100,6 +101,7 @@ export class SaveSystem {
       starsEarned: 0,
       totalCorrect: 0,
       totalAttempts: 0,
+      currentDifficulty: 1,
       sessionActivitiesCount: 0,
       sessionStarsCount: 0,
       sessionCorrectCount: 0,
@@ -120,6 +122,7 @@ export class SaveSystem {
           sessionStarsCount: r.sessionStarsCount ?? 0,
           sessionCorrectCount: r.sessionCorrectCount ?? 0,
           sessionStartTime: r.sessionStartTime ?? Date.now(),
+          currentDifficulty: r.currentDifficulty ?? loaded.profile?.currentDifficulty ?? 1,
         }));
         // Migrate profile
         loaded.profile = {
@@ -167,6 +170,13 @@ export class SaveSystem {
       this.data.progressRecords.find(r => r.strategy === strategy) ??
       this.freshProgress(strategy)
     );
+  }
+
+  public async updateStrategyDifficulty(strategy: string, newDifficulty: number): Promise<void> {
+    const record = this.getProgress(strategy);
+    record.currentDifficulty = newDifficulty;
+    this.upsertRecord(record);
+    await this.save();
   }
 
   public getAllProgress(): ProgressRecord[] {

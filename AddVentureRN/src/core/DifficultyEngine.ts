@@ -3,43 +3,29 @@ export const TARGET_RESPONSE_MS = 20000; // 20 seconds — the pedagogical targe
 export class DifficultyEngine {
 
   /**
-   * Adjusts difficulty based on correctness and response time.
-   * Returns a number between 1 (easiest) and 5 (hardest).
+   * Adjusts difficulty based on the entire session's performance.
+   * Increments exactly by 1 level if mastered.
    */
-  public evaluatePerformance(
+  public evaluateSession(
     currentDifficulty: number,
-    isCorrect: boolean,
-    responseTimeMs: number
+    accuracyPct: number,
+    avgResponseTimeMs: number
   ): number {
-    let newDifficulty = currentDifficulty;
+    let newDifficulty = Math.floor(currentDifficulty); // Normalize to current integer level
 
-    if (isCorrect) {
-      if (responseTimeMs < 10000) {
-        // Very fast and correct → increase difficulty faster
-        newDifficulty += 0.5;
-      } else if (responseTimeMs < TARGET_RESPONSE_MS) {
-        // Correct and within the 20-second target → moderate increase
-        newDifficulty += 0.2;
-      } else {
-        // Correct but slow → tiny increase (still progressing)
-        newDifficulty += 0.1;
-      }
-    } else {
-      newDifficulty -= 0.5; // Incorrect → easier
+    if (accuracyPct >= 70) {
+      newDifficulty += 1; // Level up!
+    } else if (accuracyPct < 40) {
+      newDifficulty -= 1; // Level down!
     }
+    // else stay the same
 
-    // Clamp between 1 and 5
-    return Math.max(1, Math.min(5, Math.floor(newDifficulty)));
+    // Clamp between 1.0 and 9.9
+    return Math.max(1.0, Math.min(9.9, newDifficulty));
   }
 
   public getDifficultyLabel(level: number): string {
-    switch (Math.floor(level)) {
-      case 1: return 'Easy';
-      case 2: return 'Medium';
-      case 3: return 'Hard';
-      case 4: return 'Expert';
-      case 5: return 'Master';
-      default: return 'Easy';
-    }
+    const addPair = Math.floor(level);
+    return `Adding ${addPair}s`;
   }
 }

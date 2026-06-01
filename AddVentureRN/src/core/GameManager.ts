@@ -39,6 +39,10 @@ export class GameManager {
   // Per-session mastery queue (not persisted; resets when the session ends)
   private masteryQueue: MasteryItem[] = [];
 
+  // Session-locked difficulty parameters
+  public sessionAddPair: number = 1;
+  public sessionOperands: number[] = [];
+
   // Dynamic countdown timer limit
   public sessionTimerLimit: number = 120;
 
@@ -71,13 +75,27 @@ export class GameManager {
     this.sessionStartTime = Date.now();
     this.masteryQueue = [];
     this.sessionTimerLimit = 120; // reset to 2 mins at the start of a session
+
+    // Lock the add-pair for the session based on current difficulty
+    const record = this.saveSystem.getProgress(strategy);
+    this.sessionAddPair = Math.floor(record.currentDifficulty);
+
+    // Create a shuffled deck of operands 1 through 9, plus one random duplicate to make 10
+    const baseOperands = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+    const extraOperand = Math.floor(Math.random() * 9) + 1;
+    this.sessionOperands = [...baseOperands, extraOperand].sort(() => Math.random() - 0.5);
   }
 
   public generateProblem(): Problem {
-    const profile = this.saveSystem.getProfile();
     const generator = this.generators[this.currentStrategy];
     if (!generator) throw new Error('Invalid strategy: ' + this.currentStrategy);
-    return generator.generateProblem(profile.currentDifficulty);
+    
+    // Pop a unique operand from the deck. If exhausted, pick random.
+    const operand = this.sessionOperands.length > 0 
+      ? this.sessionOperands.pop()! 
+      : Math.floor(Math.random() * 9) + 1;
+      
+    return generator.generateProblemFromPair(this.sessionAddPair, operand);
   }
 
   /**
@@ -86,10 +104,10 @@ export class GameManager {
    */
   public generateSimilarProblem(original: Problem): Problem {
     const generator = this.generators[this.currentStrategy];
-    const profile = this.saveSystem.getProfile();
     let attempt = 0;
     while (attempt < 10) {
-      const candidate = generator.generateProblem(profile.currentDifficulty);
+      const randomOperand = Math.floor(Math.random() * 9) + 1;
+      const candidate = generator.generateProblemFromPair(this.sessionAddPair, randomOperand);
       // Accept if it targets the same approximate range but has a different answer
       const diff = Math.abs(candidate.correctAnswer - original.correctAnswer);
       if (diff <= 2 && diff >= 0 && candidate.correctAnswer !== original.correctAnswer) {
@@ -98,7 +116,8 @@ export class GameManager {
       attempt++;
     }
     // Fallback: return a fresh problem
-    return generator.generateProblem(profile.currentDifficulty);
+    const fallbackOperand = Math.floor(Math.random() * 9) + 1;
+    return generator.generateProblemFromPair(this.sessionAddPair, fallbackOperand);
   }
 
   // ── Mastery Queue API ────────────────────────────────────────────────────
@@ -219,11 +238,6 @@ export class GameManager {
         this.sessionTimerLimit += 5; // increase by 5s
       }
 
-      profile.currentDifficulty = this.difficultyEngine.evaluatePerformance(
-        profile.currentDifficulty,
-        isCorrect,
-        responseTimeMs
-      );
       await this.saveSystem.saveProfile(profile);
       await this.saveSystem.recordActivity(
         this.currentStrategy,
@@ -234,7 +248,7 @@ export class GameManager {
         problem.num1,
         problem.num2,
         givenAnswer,
-        problem.correctAnswer,
+        problem.correctAnswer
       );
     } else {
       await this.saveSystem.saveProfile(profile);
@@ -264,7 +278,18 @@ export class GameManager {
    */
   public async completeAndResetSession(): Promise<SessionRecord> {
     this.masteryQueue = [];
-    return this.saveSystem.completeAndResetSession(this.currentStrategy);
+    const sessionRecord = await this.saveSystem.completeAndResetSession(this.currentStrategy);
+    
+    // Evaluate session performance and potentially level up
+    const record = this.saveSystem.getProgress(this.currentStrategy);
+    const newDifficulty = this.difficultyEngine.evaluateSession(
+      record.currentDifficulty,
+      sessionRecord.accuracyPct,
+      sessionRecord.avgResponseTimeMs
+    );
+    await this.saveSystem.updateStrategyDifficulty(this.currentStrategy, newDifficulty);
+    
+    return sessionRecord;
   }
 
   /** Fast response streak (< 20 s consecutive) from the persisted profile. */
