@@ -151,13 +151,15 @@ export default function CountOnScreen({ navigation }: Props) {
       setDropCounter(droppedCount);
       const currentTotal = baseN + droppedCount;
       const profile = GameManager.getInstance().saveSystem.getProfile();
-      const verbose = profile.consecutiveCorrect < HINT_DISABLE_THRESHOLD;
+      const verboseMode = profile.consecutiveCorrect < HINT_DISABLE_THRESHOLD;
 
       Speech.stop();
       if (droppedCount === next.length) {
-        Speech.speak(currentTotal.toString(), { rate: 0.95, pitch: 1.4 });
+        if (verboseMode) {
+          Speech.speak(currentTotal.toString(), { rate: 0.95, pitch: 1.4 });
+        }
         Speech.speak('How many fruits in all?', { rate: 0.95, pitch: 1.4 });
-      } else if (verbose) {
+      } else if (verboseMode) {
         Speech.speak(currentTotal.toString(), { rate: 0.95, pitch: 1.4 });
       }
       return next;
@@ -363,9 +365,6 @@ export default function CountOnScreen({ navigation }: Props) {
           <View style={styles.groupHeader}>
             <Text style={styles.treeIcon}>🧺</Text>
             <Text style={[styles.groupTitle, { color: '#8D6E63' }]}>Oliver's Basket</Text>
-          </View>
-          <View style={styles.basketStats}>
-            <Text style={styles.basketStatsText}>Fruits: {baseN + dropCounter}</Text>
           </View>
           <View style={styles.fruitRow}>
             {/* Static base bundle */}

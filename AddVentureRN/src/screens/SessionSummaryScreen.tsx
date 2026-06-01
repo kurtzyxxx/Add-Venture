@@ -64,6 +64,16 @@ export default function SessionSummaryScreen({ route, navigation }: Props) {
       : '= Same as last session';
   const deltaColor = delta === null ? '#9E9E9E' : delta > 0 ? '#43A047' : delta < 0 ? '#FF5252' : '#FF9800';
 
+  const handleContinue = () => {
+    const routeName =
+      strategy === 'COUNT_ALL' ? 'CountAll' :
+      strategy === 'COUNT_ON' ? 'CountOn' :
+      'NumberBonds';
+    
+    GameManager.getInstance().startSession(strategy);
+    navigation.replace(routeName);
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <LinearGradient
@@ -144,19 +154,29 @@ export default function SessionSummaryScreen({ route, navigation }: Props) {
           {/* Action buttons */}
           <TouchableOpacity
             style={styles.primaryBtn}
-            onPress={() => navigation.navigate('Home')}
+            onPress={handleContinue}
             activeOpacity={0.85}
           >
-            <Text style={styles.primaryBtnText}>🏠 Back to Map</Text>
+            <Text style={styles.primaryBtnText}>▶️ Continue to Next Session</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.secondaryBtn}
-            onPress={() => navigation.navigate('Progress')}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.secondaryBtnText}>📊 View Progress</Text>
-          </TouchableOpacity>
+          <View style={styles.secondaryActionsRow}>
+            <TouchableOpacity
+              style={styles.secondaryBtn}
+              onPress={() => navigation.navigate('Home')}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.secondaryBtnText}>🏠 Back to Map</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.secondaryBtn}
+              onPress={() => navigation.navigate('Progress')}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.secondaryBtnText}>📊 View Progress</Text>
+            </TouchableOpacity>
+          </View>
         </Animated.View>
       </ScrollView>
     </SafeAreaView>
@@ -265,15 +285,21 @@ const styles = StyleSheet.create({
     borderColor: '#FF8F00',
   },
   primaryBtnText: { fontSize: 20, fontWeight: '900', color: '#5D4037' },
+  secondaryActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
   secondaryBtn: {
+    flex: 1,
     backgroundColor: 'rgba(255,255,255,0.15)',
-    paddingVertical: 16,
-    borderRadius: 30,
+    paddingVertical: 14,
+    borderRadius: 24,
     alignItems: 'center',
     borderWidth: 2,
     borderColor: 'rgba(255,255,255,0.4)',
   },
-  secondaryBtnText: { fontSize: 18, fontWeight: '900', color: '#FFF' },
+  secondaryBtnText: { fontSize: 16, fontWeight: '900', color: '#FFF' },
 });
 
 const chipStyles = StyleSheet.create({

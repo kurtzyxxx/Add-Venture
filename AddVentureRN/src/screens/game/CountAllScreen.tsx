@@ -166,7 +166,9 @@ export default function CountAllScreen({ navigation }: Props) {
 
       Speech.stop();
       if (droppedCount === next.length) {
-        Speech.speak(droppedCount.toString(), { rate: 0.95, pitch: 1.4 });
+        if (verboseMode) {
+          Speech.speak(droppedCount.toString(), { rate: 0.95, pitch: 1.4 });
+        }
         Speech.speak('How many fruits in all?', { rate: 0.95, pitch: 1.4 });
       } else if (verboseMode) {
         Speech.speak(droppedCount.toString(), { rate: 0.95, pitch: 1.4 });
