@@ -9,7 +9,7 @@ import {
   NumberBondsGenerator,
   Problem,
 } from './ProblemGenerator';
-import * as Speech from 'expo-speech';
+import { AudioManager } from './AudioManager';
 
 export { TARGET_RESPONSE_MS };
 export const MAX_ACTIVITIES_PER_SESSION = 10;
@@ -21,6 +21,11 @@ export interface MasteryItem {
   originalProblem: Problem;
   consecutiveCorrect: number;
   totalAttempts: number;
+}
+
+export interface SessionIncorrectProblem extends Problem {
+  givenAnswer: number;
+  strategy: string;
 }
 
 export class GameManager {
@@ -38,6 +43,7 @@ export class GameManager {
 
   // Per-session mastery queue (not persisted; resets when the session ends)
   private masteryQueue: MasteryItem[] = [];
+  private sessionIncorrectProblems: SessionIncorrectProblem[] = [];
 
   // Session-locked difficulty parameters
   public sessionAddPair: number = 1;
@@ -74,6 +80,7 @@ export class GameManager {
     this.currentStrategy = strategy;
     this.sessionStartTime = Date.now();
     this.masteryQueue = [];
+    this.sessionIncorrectProblems = [];
     this.sessionTimerLimit = 120; // reset to 2 mins at the start of a session
 
     // Lock the add-pair for the session based on current difficulty
@@ -196,6 +203,18 @@ export class GameManager {
     return this.getCurrentProgress().sessionActivitiesCount;
   }
 
+  public getSessionHintsRemaining(): number {
+    return this.saveSystem.getSessionHintsRemaining(this.currentStrategy);
+  }
+
+  public async consumeSessionHint(): Promise<number> {
+    return this.saveSystem.consumeSessionHint(this.currentStrategy);
+  }
+
+  public getSessionIncorrectProblems(): SessionIncorrectProblem[] {
+    return [...this.sessionIncorrectProblems];
+  }
+
   public isSessionComplete(): boolean {
     return this.getSessionActivityCount() >= MAX_ACTIVITIES_PER_SESSION;
   }
@@ -204,7 +223,8 @@ export class GameManager {
     if (!isCorrect) return 0;
     if (tryNumber === 1) return 3;
     if (tryNumber === 2) return 2;
-    return 1;
+    if (tryNumber === 3) return 1;
+    return 0;
   }
 
   // ── Answer Submission ────────────────────────────────────────────────────
@@ -215,6 +235,7 @@ export class GameManager {
     responseTimeMs: number,
     problem: Problem,
     givenAnswer: number,
+    forceResolve = false,
   ): Promise<{ feedback: string; starsEarned: number }> {
     const profile = this.saveSystem.getProfile();
     const starsEarned = GameManager.starsForTry(tryNumber, isCorrect);
@@ -225,11 +246,12 @@ export class GameManager {
       profile.consecutiveWrong = 0;
       profile.totalStars += starsEarned;
     } else {
+      this.recordSessionIncorrectProblem(problem, givenAnswer);
       profile.consecutiveCorrect = 0;
       profile.consecutiveWrong++;
     }
 
-    const activityResolved = isCorrect || tryNumber >= 3;
+    const activityResolved = forceResolve || isCorrect;
     if (activityResolved) {
       // Dynamic timer adjustment
       if (isCorrect) {
@@ -266,7 +288,7 @@ export class GameManager {
 
   private async playSuccessSound() {
     try {
-      Speech.stop();
+      AudioManager.stopSpeech();
     } catch (e) {
       console.log('Success sound failed', e);
     }
@@ -278,6 +300,7 @@ export class GameManager {
    */
   public async completeAndResetSession(): Promise<SessionRecord> {
     this.masteryQueue = [];
+    this.sessionIncorrectProblems = [];
     const sessionRecord = await this.saveSystem.completeAndResetSession(this.currentStrategy);
     
     // Evaluate session performance and potentially level up
@@ -295,5 +318,34 @@ export class GameManager {
   /** Fast response streak (< 20 s consecutive) from the persisted profile. */
   public getFastResponseStreak(): number {
     return this.saveSystem.getProfile().fastResponseStreak;
+  }
+
+  public async resetProgress(): Promise<void> {
+    this.currentStrategy = 'COUNT_ALL';
+    this.sessionStartTime = Date.now();
+    this.masteryQueue = [];
+    this.sessionIncorrectProblems = [];
+    this.sessionAddPair = 1;
+    this.sessionOperands = [];
+    this.sessionTimerLimit = 120;
+    await this.saveSystem.resetProgress();
+  }
+
+  private recordSessionIncorrectProblem(problem: Problem, givenAnswer: number): void {
+    const exists = this.sessionIncorrectProblems.some(
+      p =>
+        p.strategy === this.currentStrategy &&
+        p.num1 === problem.num1 &&
+        p.num2 === problem.num2 &&
+        p.correctAnswer === problem.correctAnswer
+    );
+
+    if (!exists) {
+      this.sessionIncorrectProblems.push({
+        ...problem,
+        givenAnswer,
+        strategy: this.currentStrategy,
+      });
+    }
   }
 }

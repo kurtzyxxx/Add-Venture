@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AudioManager, AudioSettings } from './AudioManager';
 
 export interface LearnerProfile {
   name: string;
@@ -24,6 +25,7 @@ export interface ProgressRecord {
   sessionStarsCount: number;
   sessionCorrectCount: number;
   sessionStartTime: number;    // epoch ms of when the current batch started
+  sessionHintsRemaining: number;
 }
 
 export interface SessionRecord {
@@ -55,6 +57,8 @@ interface SaveData {
   progressRecords: ProgressRecord[];
   sessionHistory: SessionRecord[];   // persisted across launches (last 20 sessions)
   responseLog: ResponseRecord[];     // persisted (last 200 responses)
+  settings: AudioSettings;
+  adaptiveReviewPending: Record<string, boolean>;
 }
 
 const MAX_SESSION_HISTORY = 20;
@@ -90,6 +94,15 @@ export class SaveSystem {
       ],
       sessionHistory: [],
       responseLog: [],
+      settings: {
+        musicEnabled: true,
+        soundsEnabled: true,
+      },
+      adaptiveReviewPending: {
+        COUNT_ALL: false,
+        COUNT_ON: false,
+        NUMBER_BONDS: false,
+      },
     };
   }
 
@@ -106,6 +119,7 @@ export class SaveSystem {
       sessionStarsCount: 0,
       sessionCorrectCount: 0,
       sessionStartTime: Date.now(),
+      sessionHintsRemaining: 3,
     };
   }
 
@@ -122,6 +136,7 @@ export class SaveSystem {
           sessionStarsCount: r.sessionStarsCount ?? 0,
           sessionCorrectCount: r.sessionCorrectCount ?? 0,
           sessionStartTime: r.sessionStartTime ?? Date.now(),
+          sessionHintsRemaining: r.sessionHintsRemaining ?? 3,
           currentDifficulty: r.currentDifficulty ?? loaded.profile?.currentDifficulty ?? 1,
         }));
         // Migrate profile
@@ -133,14 +148,24 @@ export class SaveSystem {
         // Migrate new top-level arrays
         loaded.sessionHistory = loaded.sessionHistory ?? [];
         loaded.responseLog = loaded.responseLog ?? [];
+        loaded.settings = {
+          ...this.createFreshSave().settings,
+          ...(loaded as any).settings,
+        };
+        loaded.adaptiveReviewPending = {
+          ...this.createFreshSave().adaptiveReviewPending,
+          ...(loaded as any).adaptiveReviewPending,
+        };
         this.data = loaded;
       } else {
         this.data = this.createFreshSave();
         await this.save();
       }
+      AudioManager.hydrate(this.data.settings);
     } catch (e) {
       console.warn('[SaveSystem] Failed to load save, starting fresh.', e);
       this.data = this.createFreshSave();
+      AudioManager.hydrate(this.data.settings);
     }
   }
 
@@ -160,6 +185,27 @@ export class SaveSystem {
 
   public async saveProfile(profile: LearnerProfile): Promise<void> {
     this.data.profile = profile;
+    await this.save();
+  }
+
+  public getSettings(): AudioSettings {
+    return this.data.settings;
+  }
+
+  public async updateSettings(settings: AudioSettings): Promise<void> {
+    this.data.settings = settings;
+    AudioManager.hydrate(settings);
+    await this.save();
+  }
+
+  public async resetProgress(): Promise<void> {
+    const currentSettings = this.data.settings;
+    this.data = {
+      ...this.createFreshSave(),
+      settings: currentSettings,
+    };
+    this.currentSessionResponseTimes = [];
+    AudioManager.hydrate(this.data.settings);
     await this.save();
   }
 
@@ -183,6 +229,18 @@ export class SaveSystem {
     return this.data.progressRecords;
   }
 
+  public getSessionHintsRemaining(strategy: string): number {
+    return this.getProgress(strategy).sessionHintsRemaining;
+  }
+
+  public async consumeSessionHint(strategy: string): Promise<number> {
+    const record = this.getProgress(strategy);
+    record.sessionHintsRemaining = Math.max(0, record.sessionHintsRemaining - 1);
+    this.upsertRecord(record);
+    await this.save();
+    return record.sessionHintsRemaining;
+  }
+
   /** Accuracy = % of activities eventually answered correctly (any try), 0–100 */
   public getAccuracy(strategy: string): number {
     const r = this.getProgress(strategy);
@@ -193,13 +251,33 @@ export class SaveSystem {
   /** Count On unlocks when Count All: accuracy >= 60% AND totalAttempts >= 10 */
   public isCountOnUnlocked(): boolean {
     const r = this.getProgress('COUNT_ALL');
-    return r.totalAttempts >= 10 && this.getAccuracy('COUNT_ALL') >= 60;
+    return (
+      r.totalAttempts >= 10 &&
+      this.getAccuracy('COUNT_ALL') >= 60 &&
+      !this.hasAdaptiveReviewPending('COUNT_ALL')
+    );
   }
 
   /** Number Bonds unlocks when Count On: accuracy >= 60% AND totalAttempts >= 10 */
   public isNumberBondsUnlocked(): boolean {
     const r = this.getProgress('COUNT_ON');
-    return r.totalAttempts >= 10 && this.getAccuracy('COUNT_ON') >= 60;
+    return (
+      r.totalAttempts >= 10 &&
+      this.getAccuracy('COUNT_ON') >= 60 &&
+      !this.hasAdaptiveReviewPending('COUNT_ON')
+    );
+  }
+
+  public hasAdaptiveReviewPending(strategy: string): boolean {
+    return this.data.adaptiveReviewPending[strategy] === true;
+  }
+
+  public async setAdaptiveReviewPending(strategy: string, pending: boolean): Promise<void> {
+    this.data.adaptiveReviewPending = {
+      ...this.data.adaptiveReviewPending,
+      [strategy]: pending,
+    };
+    await this.save();
   }
 
   // ── Activity Recording ────────────────────────────────────────────────────
@@ -310,6 +388,7 @@ export class SaveSystem {
     record.sessionStarsCount = 0;
     record.sessionCorrectCount = 0;
     record.sessionStartTime = Date.now();
+    record.sessionHintsRemaining = 3;
     this.upsertRecord(record);
     this.currentSessionResponseTimes = [];
 

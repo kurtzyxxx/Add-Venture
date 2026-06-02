@@ -8,7 +8,7 @@ import { RootStackParamList } from '../../App';
 import { GameManager } from '../core/GameManager';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path, Circle, Defs, RadialGradient, Stop } from 'react-native-svg';
-import * as Speech from 'expo-speech';
+import { AudioManager } from '../core/AudioManager';
 
 const { width, height } = Dimensions.get('window');
 type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
@@ -56,19 +56,19 @@ interface TwinkleStarProps { x: number | string; y: number | string; size: numbe
 
 const TwinkleStar: React.FC<TwinkleStarProps> = ({ x, y, size, speed, delay = 0 }) => {
   const opacity = useRef(new Animated.Value(0.3)).current;
-  const scale   = useRef(new Animated.Value(0.8)).current;
+  const scale = useRef(new Animated.Value(0.8)).current;
 
   useEffect(() => {
     const t = setTimeout(() => {
       Animated.loop(
         Animated.sequence([
           Animated.parallel([
-            Animated.timing(opacity, { toValue: 1,   duration: speed, useNativeDriver: true }),
-            Animated.timing(scale,   { toValue: 1.3, duration: speed, useNativeDriver: true }),
+            Animated.timing(opacity, { toValue: 1, duration: speed, useNativeDriver: true }),
+            Animated.timing(scale, { toValue: 1.3, duration: speed, useNativeDriver: true }),
           ]),
           Animated.parallel([
             Animated.timing(opacity, { toValue: 0.3, duration: speed, useNativeDriver: true }),
-            Animated.timing(scale,   { toValue: 0.8, duration: speed, useNativeDriver: true }),
+            Animated.timing(scale, { toValue: 0.8, duration: speed, useNativeDriver: true }),
           ]),
         ])
       ).start();
@@ -93,19 +93,19 @@ interface GlowRingProps { color: string; pulse: boolean }
 
 const GlowRing: React.FC<GlowRingProps> = ({ color, pulse }) => {
   const opacity = useRef(new Animated.Value(pulse ? 0.5 : 0.35)).current;
-  const scale   = useRef(new Animated.Value(1)).current;
+  const scale = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     if (!pulse) return;
     Animated.loop(
       Animated.sequence([
         Animated.parallel([
-          Animated.timing(opacity, { toValue: 0.9,  duration: 900, useNativeDriver: true }),
-          Animated.timing(scale,   { toValue: 1.18, duration: 900, useNativeDriver: true }),
+          Animated.timing(opacity, { toValue: 0.9, duration: 900, useNativeDriver: true }),
+          Animated.timing(scale, { toValue: 1.18, duration: 900, useNativeDriver: true }),
         ]),
         Animated.parallel([
-          Animated.timing(opacity, { toValue: 0.4,  duration: 900, useNativeDriver: true }),
-          Animated.timing(scale,   { toValue: 1.0,  duration: 900, useNativeDriver: true }),
+          Animated.timing(opacity, { toValue: 0.4, duration: 900, useNativeDriver: true }),
+          Animated.timing(scale, { toValue: 1.0, duration: 900, useNativeDriver: true }),
         ]),
       ])
     ).start();
@@ -143,17 +143,17 @@ const SparkleParticles: React.FC<SparklesProps> = ({ trigger }) => {
       p.opacity.setValue(1); p.scale.setValue(0);
 
       const angle = (i / particles.length) * Math.PI * 2;
-      const dist  = 65 + Math.random() * 40;
-      const tx    = Math.cos(angle) * dist;
-      const ty    = Math.sin(angle) * dist;
+      const dist = 65 + Math.random() * 40;
+      const tx = Math.cos(angle) * dist;
+      const ty = Math.sin(angle) * dist;
 
       Animated.parallel([
-        Animated.timing(p.tx,      { toValue: tx, duration: 700, useNativeDriver: true }),
-        Animated.timing(p.ty,      { toValue: ty, duration: 700, useNativeDriver: true }),
+        Animated.timing(p.tx, { toValue: tx, duration: 700, useNativeDriver: true }),
+        Animated.timing(p.ty, { toValue: ty, duration: 700, useNativeDriver: true }),
         Animated.sequence([
-          Animated.spring(p.scale,  { toValue: 1, friction: 4, useNativeDriver: true }),
+          Animated.spring(p.scale, { toValue: 1, friction: 4, useNativeDriver: true }),
           Animated.delay(200),
-          Animated.timing(p.scale,  { toValue: 0, duration: 300, useNativeDriver: true }),
+          Animated.timing(p.scale, { toValue: 0, duration: 300, useNativeDriver: true }),
         ]),
         Animated.sequence([
           Animated.delay(300),
@@ -215,12 +215,14 @@ const CompletionStars: React.FC<{ count: number }> = ({ count }) => {
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function HomeScreen({ navigation }: Props) {
-  const [stars,               setStars]               = useState(0);
-  const [countOnUnlocked,     setCountOnUnlocked]     = useState(false);
+  const [stars, setStars] = useState(0);
+  const [countOnUnlocked, setCountOnUnlocked] = useState(false);
   const [numberBondsUnlocked, setNumberBondsUnlocked] = useState(false);
-  const [caAcc,               setCaAcc]               = useState(0);
-  const [coAcc,               setCoAcc]               = useState(0);
-  const [nbAcc,               setNbAcc]               = useState(0);
+  const [caAcc, setCaAcc] = useState(0);
+  const [coAcc, setCoAcc] = useState(0);
+  const [nbAcc, setNbAcc] = useState(0);
+  const [countAllAdaptivePending, setCountAllAdaptivePending] = useState(false);
+  const [countOnAdaptivePending, setCountOnAdaptivePending] = useState(false);
 
   // ── Avatar path (native driver: translateX / translateY from origin 0,0) ──
   // Avatar destinations: just above each node circle center
@@ -247,7 +249,7 @@ export default function HomeScreen({ navigation }: Props) {
     Animated.loop(
       Animated.sequence([
         Animated.timing(headerFloat, { toValue: -8, duration: 2000, useNativeDriver: true }),
-        Animated.timing(headerFloat, { toValue: 0,  duration: 2000, useNativeDriver: true }),
+        Animated.timing(headerFloat, { toValue: 0, duration: 2000, useNativeDriver: true }),
       ])
     ).start();
 
@@ -257,15 +259,15 @@ export default function HomeScreen({ navigation }: Props) {
   }, [navigation]);
 
   const refreshData = useCallback(() => {
-    const gm      = GameManager.getInstance();
+    const gm = GameManager.getInstance();
     const profile = gm.saveSystem.getProfile();
-    const ss       = gm.saveSystem;
+    const ss = gm.saveSystem;
 
     const newStars = profile.totalStars;
     if (newStars !== stars) {
       Animated.sequence([
         Animated.spring(starsBadgeScale, { toValue: 1.35, friction: 3, useNativeDriver: true }),
-        Animated.spring(starsBadgeScale, { toValue: 1,    friction: 4, useNativeDriver: true }),
+        Animated.spring(starsBadgeScale, { toValue: 1, friction: 4, useNativeDriver: true }),
       ]).start();
     }
     setStars(newStars);
@@ -276,13 +278,13 @@ export default function HomeScreen({ navigation }: Props) {
     // Detect new unlocks
     if (coOk && !prevCoUnlocked.current) {
       setCoTrigger(t => t + 1);
-      Speech.stop();
-      setTimeout(() => Speech.speak('Wow! Count On is now unlocked! Great work!', { rate: 0.9, pitch: 1.3 }), 400);
+      AudioManager.stopSpeech();
+      setTimeout(() => AudioManager.speak('Wow! Count On is now unlocked! Great work!', { rate: 0.9, pitch: 1.3 }), 400);
     }
     if (nbOk && !prevNbUnlocked.current) {
       setNbTrigger(t => t + 1);
-      Speech.stop();
-      setTimeout(() => Speech.speak('Amazing! Number Bonds is now unlocked! You are a superstar!', { rate: 0.9, pitch: 1.3 }), 400);
+      AudioManager.stopSpeech();
+      setTimeout(() => AudioManager.speak('Amazing! Number Bonds is now unlocked! You are a superstar!', { rate: 0.9, pitch: 1.3 }), 400);
     }
     prevCoUnlocked.current = coOk;
     prevNbUnlocked.current = nbOk;
@@ -292,13 +294,15 @@ export default function HomeScreen({ navigation }: Props) {
     setCaAcc(ss.getAccuracy('COUNT_ALL'));
     setCoAcc(ss.getAccuracy('COUNT_ON'));
     setNbAcc(ss.getAccuracy('NUMBER_BONDS'));
+    setCountAllAdaptivePending(ss.hasAdaptiveReviewPending('COUNT_ALL'));
+    setCountOnAdaptivePending(ss.hasAdaptiveReviewPending('COUNT_ON'));
 
     // Move avatar along path based on unlock state
     const target = nbOk
       ? { x: N3.cx - 22, y: N3.cy - 80 }
       : coOk
-      ? { x: N2.cx - 22, y: N2.cy - 80 }
-      : { x: N1.cx - 22, y: N1.cy - 80 };
+        ? { x: N2.cx - 22, y: N2.cy - 80 }
+        : { x: N1.cx - 22, y: N1.cy - 80 };
 
     Animated.parallel([
       Animated.spring(avatarX, { toValue: target.x, friction: 7, tension: 40, useNativeDriver: true }),
@@ -307,7 +311,7 @@ export default function HomeScreen({ navigation }: Props) {
       // Bounce on arrival
       Animated.sequence([
         Animated.timing(avatarBounce, { toValue: 1.25, duration: 180, useNativeDriver: true }),
-        Animated.spring(avatarBounce, { toValue: 1,    friction: 4,   useNativeDriver: true }),
+        Animated.spring(avatarBounce, { toValue: 1, friction: 4, useNativeDriver: true }),
       ]).start();
     });
   }, [stars]);
@@ -342,14 +346,14 @@ export default function HomeScreen({ navigation }: Props) {
 
       {/* Stars field */}
       {[
-        { x: '8%',  y: '8%',  s: 14, sp: 1200, d: 0    },
-        { x: '75%', y: '6%',  s: 18, sp: 900,  d: 300  },
-        { x: '45%', y: '12%', s: 12, sp: 1500, d: 600  },
-        { x: '88%', y: '18%', s: 16, sp: 1100, d: 100  },
-        { x: '20%', y: '20%', s: 10, sp: 1300, d: 700  },
-        { x: '60%', y: '35%', s: 14, sp: 800,  d: 200  },
-        { x: '5%',  y: '42%', s: 12, sp: 1400, d: 450  },
-        { x: '92%', y: '38%', s: 10, sp: 1000, d: 350  },
+        { x: '8%', y: '8%', s: 14, sp: 1200, d: 0 },
+        { x: '75%', y: '6%', s: 18, sp: 900, d: 300 },
+        { x: '45%', y: '12%', s: 12, sp: 1500, d: 600 },
+        { x: '88%', y: '18%', s: 16, sp: 1100, d: 100 },
+        { x: '20%', y: '20%', s: 10, sp: 1300, d: 700 },
+        { x: '60%', y: '35%', s: 14, sp: 800, d: 200 },
+        { x: '5%', y: '42%', s: 12, sp: 1400, d: 450 },
+        { x: '92%', y: '38%', s: 10, sp: 1000, d: 350 },
       ].map((s, i) => (
         <TwinkleStar key={i} x={s.x} y={s.y} size={s.s} speed={s.sp} delay={s.d} />
       ))}
@@ -490,7 +494,9 @@ export default function HomeScreen({ navigation }: Props) {
         )}
         {!countOnUnlocked && (
           <View style={styles.lockHint}>
-            <Text style={styles.lockHintText}>60% on Count All</Text>
+            <Text style={styles.lockHintText}>
+              {countAllAdaptivePending ? 'Finish Adaptive Mode' : '60% on Count All'}
+            </Text>
           </View>
         )}
       </View>
@@ -523,23 +529,11 @@ export default function HomeScreen({ navigation }: Props) {
         )}
         {!numberBondsUnlocked && (
           <View style={styles.lockHint}>
-            <Text style={styles.lockHintText}>60% on Count On</Text>
+            <Text style={styles.lockHintText}>
+              {countOnAdaptivePending ? 'Finish Adaptive Mode' : '60% on Count On'}
+            </Text>
           </View>
         )}
-      </View>
-
-      {/* ═══════════════════════════════════════════════════════════════════
-          OVERALL PROGRESS RIBBON
-      ═══════════════════════════════════════════════════════════════════ */}
-      <View style={styles.progressRibbon}>
-        <Text style={styles.ribbonLabel}>
-          🗺️ Adventure Progress — {totalActivities} / 30 activities
-        </Text>
-        <View style={styles.ribbonTrack}>
-          <View style={[styles.ribbonFill, { width: `${Math.round(overallProgress * 100)}%` }]} />
-          <View style={[styles.ribbonMarker, { left: `${Math.round(overallProgress * 100)}%` }]} />
-        </View>
-        <Text style={styles.ribbonPct}>{Math.round(overallProgress * 100)}% complete</Text>
       </View>
 
       {/* ═══════════════════════════════════════════════════════════════════
@@ -554,7 +548,7 @@ export default function HomeScreen({ navigation }: Props) {
           <Text style={styles.navIcon}>📊</Text>
           <Text style={styles.navText}>Progress</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem}>
+        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Settings')}>
           <Text style={styles.navIcon}>⚙️</Text>
           <Text style={styles.navText}>Settings</Text>
         </TouchableOpacity>
@@ -568,15 +562,15 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0D1B6E', overflow: 'hidden' },
 
   // Background
-  cloud:       { position: 'absolute' },
+  cloud: { position: 'absolute' },
   twinkleStar: { position: 'absolute' },
-  groundRow:   { position: 'absolute', bottom: 76, left: 0, right: 0 },
-  hillsSvg:    { position: 'absolute', bottom: 0 },
+  groundRow: { position: 'absolute', bottom: 76, left: 0, right: 0 },
+  hillsSvg: { position: 'absolute', bottom: 0 },
 
   // Avatar
   avatarContainer: { position: 'absolute', left: 0, top: 0, alignItems: 'center', zIndex: 25 },
-  avatarEmoji:     { fontSize: 40 },
-  avatarShadow:    {
+  avatarEmoji: { fontSize: 40 },
+  avatarShadow: {
     width: 34, height: 8, borderRadius: 4,
     backgroundColor: 'rgba(0,0,0,0.25)',
     marginTop: -4,
@@ -623,7 +617,7 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.45, shadowRadius: 8,
   },
   nodeLocked: { backgroundColor: '#37474F', borderColor: 'rgba(255,255,255,0.35)', opacity: 0.75 },
-  nodeIcon:   { fontSize: 42 },
+  nodeIcon: { fontSize: 42 },
   nodeLabel: {
     marginTop: 74, // below the 100px node
     position: 'absolute',
@@ -691,14 +685,14 @@ const styles = StyleSheet.create({
   },
   ribbonLabel: { color: 'rgba(255,255,255,0.85)', fontSize: 11, fontWeight: 'bold', marginBottom: 7, textAlign: 'center' },
   ribbonTrack: { height: 10, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 5, overflow: 'visible', marginBottom: 5 },
-  ribbonFill:  { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: '#FFCA28', borderRadius: 5 },
+  ribbonFill: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: '#FFCA28', borderRadius: 5 },
   ribbonMarker: {
     position: 'absolute',
     top: -5, width: 20, height: 20, borderRadius: 10,
     backgroundColor: '#FFF', marginLeft: -10,
     elevation: 4,
   },
-  ribbonPct:   { color: '#FFCA28', fontSize: 11, fontWeight: '900', textAlign: 'right' },
+  ribbonPct: { color: '#FFCA28', fontSize: 11, fontWeight: '900', textAlign: 'right' },
 
   // Bottom nav
   bottomNav: {

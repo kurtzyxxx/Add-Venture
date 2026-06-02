@@ -3,9 +3,10 @@ import {
   View, Text, StyleSheet, TouchableOpacity, Animated,
   PanResponder, SafeAreaView,
 } from 'react-native';
-import * as Speech from 'expo-speech';
 import { IncorrectModal } from '../../components/IncorrectModal';
 import { GreatJobOverlay } from '../../components/GreatJobOverlay';
+import { HintConfirmModal } from '../../components/HintConfirmModal';
+import { HintBox } from '../../components/HintBox';
 import { PulseView } from '../../components/animations/PulseView';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../../App';
@@ -13,6 +14,7 @@ import { GameManager, MAX_ACTIVITIES_PER_SESSION } from '../../core/GameManager'
 import { Problem } from '../../core/ProblemGenerator';
 import { LinearGradient } from 'expo-linear-gradient';
 import { TimerBar } from '../../components/TimerBar';
+import { AudioManager } from '../../core/AudioManager';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CountOn'>;
 
@@ -22,6 +24,7 @@ const FRUIT_NAMES: Record<string, string> = {
   '🍓': 'strawberry', '🍑': 'peach', '🍍': 'pineapple', '🍊': 'orange',
 };
 const HINT_DISABLE_THRESHOLD = 5;
+const MAX_WRONG_TRIES = 4;
 
 export default function CountOnScreen({ navigation }: Props) {
   const [problem, setProblem] = useState<Problem | null>(null);
@@ -33,9 +36,12 @@ export default function CountOnScreen({ navigation }: Props) {
   const [dropCounter, setDropCounter] = useState(0);
   const [timeLeft, setTimeLeft] = useState(120);
   const [hintsDisabled, setHintsDisabled] = useState(false);
-  const [hintsRemaining, setHintsRemaining] = useState(3);
+  const [hintsRemaining, setHintsRemaining] = useState(() => GameManager.getInstance().getSessionHintsRemaining());
+  const [showHintConfirm, setShowHintConfirm] = useState(false);
+  const [activeHint, setActiveHint] = useState<string | null>(null);
   const [showIncorrectModal, setShowIncorrectModal] = useState(false);
   const [isMasteryProblem, setIsMasteryProblem] = useState(false);
+  const [incorrectModalTry, setIncorrectModalTry] = useState(1);
 
   const [currentTry, setCurrentTry] = useState(1);
   const [activityCount, setActivityCount] = useState(0);
@@ -48,9 +54,10 @@ export default function CountOnScreen({ navigation }: Props) {
   const fruitGlowAnims = useRef<Record<string, Animated.Value>>({});
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const pendingHintAction = useRef<(() => void) | null>(null);
 
   useEffect(() => {
-    Speech.speak('Count On! Oliver already has some fruits. Help him count on more!', {
+    AudioManager.speak('Count On! Oliver already has some fruits. Help him count on more!', {
       rate: 0.9, pitch: 1.3,
     });
     loadNewProblem();
@@ -70,8 +77,9 @@ export default function CountOnScreen({ navigation }: Props) {
     if (!problem) return;
     const gm = GameManager.getInstance();
     setCurrentTry(3);
+    setIncorrectModalTry(MAX_WRONG_TRIES);
     const responseTimeMs = gm.sessionTimerLimit * 1000;
-    const { starsEarned } = await gm.submitAnswer(false, 3, responseTimeMs, problem, -1);
+    const { starsEarned } = await gm.submitAnswer(false, 3, responseTimeMs, problem, -1, true);
     
     if (isMasteryProblem) {
       gm.recordMasteryIncorrect(problem);
@@ -125,6 +133,7 @@ export default function CountOnScreen({ navigation }: Props) {
     setFruits(newFruits);
     setDropCounter(0);
     setSelectedAnswer(null);
+    setActiveHint(null);
     setCurrentTry(1);
     setTimeLeft(gm.sessionTimerLimit);
     setJustMastered(false);
@@ -135,12 +144,12 @@ export default function CountOnScreen({ navigation }: Props) {
     }
     setOptions(Array.from(opts).sort((a, b) => a - b));
 
-    Speech.stop();
+    AudioManager.stopSpeech();
     setTimeout(() => {
       const msg = isMastery
         ? `Keep going! Count on from ${base} again!`
         : `Oliver already has ${base} fruits! Help him count on ${extra} more!`;
-      Speech.speak(msg, { rate: 0.95, pitch: 1.4 });
+      AudioManager.speak(msg, { rate: 0.95, pitch: 1.4 });
     }, 300);
   };
 
@@ -153,14 +162,14 @@ export default function CountOnScreen({ navigation }: Props) {
       const profile = GameManager.getInstance().saveSystem.getProfile();
       const verboseMode = profile.consecutiveCorrect < HINT_DISABLE_THRESHOLD;
 
-      Speech.stop();
+      AudioManager.stopSpeech();
       if (droppedCount === next.length) {
         if (verboseMode) {
-          Speech.speak(currentTotal.toString(), { rate: 0.95, pitch: 1.4 });
+          AudioManager.speak(currentTotal.toString(), { rate: 0.95, pitch: 1.4 });
         }
-        Speech.speak('How many fruits in all?', { rate: 0.95, pitch: 1.4 });
+        AudioManager.speak('How many fruits in all?', { rate: 0.95, pitch: 1.4 });
       } else if (verboseMode) {
-        Speech.speak(currentTotal.toString(), { rate: 0.95, pitch: 1.4 });
+        AudioManager.speak(currentTotal.toString(), { rate: 0.95, pitch: 1.4 });
       }
       return next;
     });
@@ -168,8 +177,8 @@ export default function CountOnScreen({ navigation }: Props) {
 
   const handleBasketFruitTap = (fruit: { id: string; emoji: string }, index: number) => {
     const name = FRUIT_NAMES[fruit.emoji] ?? 'fruit';
-    Speech.stop();
-    Speech.speak(`${name}! That's number ${baseN + index} in the basket.`, { rate: 0.9, pitch: 1.3 });
+    AudioManager.stopSpeech();
+    AudioManager.speak(`${name}! That's number ${baseN + index} in the basket.`, { rate: 0.9, pitch: 1.3 });
 
     const tapAnim = fruitTapAnims.current[fruit.id];
     const glowAnim = fruitGlowAnims.current[fruit.id];
@@ -191,8 +200,11 @@ export default function CountOnScreen({ navigation }: Props) {
     if (selectedAnswer === null || !problem) return;
     const gm = GameManager.getInstance();
     const isCorrect = selectedAnswer === problem.correctAnswer;
+    const shouldMoveOnAfterWrong = !isCorrect && currentTry >= MAX_WRONG_TRIES;
     const responseTimeMs = (gm.sessionTimerLimit - timeLeft) * 1000;
-    const { starsEarned } = await gm.submitAnswer(isCorrect, currentTry, responseTimeMs, problem, selectedAnswer);
+    const { starsEarned } = await gm.submitAnswer(
+      isCorrect, currentTry, responseTimeMs, problem, selectedAnswer, shouldMoveOnAfterWrong
+    );
 
     if (isCorrect) {
       let wasMastered = false;
@@ -204,12 +216,13 @@ export default function CountOnScreen({ navigation }: Props) {
       setShowGreatJob(true);
     } else {
       if (isMasteryProblem) gm.recordMasteryIncorrect(problem);
-      if (currentTry >= 3) {
-        if (!isMasteryProblem) gm.addToMasteryQueue(problem);
+      if (shouldMoveOnAfterWrong) {
         const newCount = gm.getSessionActivityCount();
         setActivityCount(newCount);
+        setIncorrectModalTry(MAX_WRONG_TRIES);
         setShowIncorrectModal(true);
       } else {
+        setIncorrectModalTry(currentTry);
         setCurrentTry(prev => prev + 1);
         setShowIncorrectModal(true);
       }
@@ -225,9 +238,11 @@ export default function CountOnScreen({ navigation }: Props) {
   const handleTryAgainAfterFail = async () => {
     setShowIncorrectModal(false);
     if (activityCount >= MAX_ACTIVITIES_PER_SESSION) { await finishSession(); return; }
-    if (currentTry >= 3) {
+    if (incorrectModalTry >= MAX_WRONG_TRIES) {
       loadNewProblem();
     } else {
+      setFruits(prev => prev.map(fruit => ({ ...fruit, dropped: false })));
+      setDropCounter(0);
       setOptions(prev => {
         const s = [...prev];
         for (let i = s.length - 1; i > 0; i--) {
@@ -242,18 +257,41 @@ export default function CountOnScreen({ navigation }: Props) {
 
   const useHint = () => {
     if (!problem || hintsRemaining <= 0) return;
-    setHintsRemaining(prev => prev - 1);
-    Speech.stop();
-    Speech.speak(GameManager.getInstance().getHint(problem), { rate: 0.95, pitch: 1.2 });
+    const gm = GameManager.getInstance();
+    const hint = gm.getHint(problem);
+    setActiveHint(hint);
+    gm.consumeSessionHint().then(setHintsRemaining);
+  };
+
+  const confirmUseHint = (beforeConfirm?: () => void) => {
+    if (!problem || hintsRemaining <= 0) return;
+    pendingHintAction.current = beforeConfirm ?? null;
+    setShowHintConfirm(true);
+  };
+
+  const handleConfirmHint = () => {
+    setShowHintConfirm(false);
+    pendingHintAction.current?.();
+    pendingHintAction.current = null;
+    useHint();
+  };
+
+  const handleCancelHint = () => {
+    pendingHintAction.current = null;
+    setShowHintConfirm(false);
   };
 
   const finishSession = async () => {
-    const session = await GameManager.getInstance().completeAndResetSession();
+    const gm = GameManager.getInstance();
+    const incorrectProblems = gm.getSessionIncorrectProblems();
+    const session = await gm.completeAndResetSession();
+    await gm.saveSystem.setAdaptiveReviewPending('COUNT_ON', incorrectProblems.length > 0);
     navigation.replace('SessionSummary', {
       stars: session.totalStars,
       activities: session.totalActivities,
       correct: session.totalCorrect,
       strategy: 'COUNT_ON',
+      incorrectProblems,
     });
   };
 
@@ -269,6 +307,7 @@ export default function CountOnScreen({ navigation }: Props) {
     return `${m}:${(s % 60).toString().padStart(2, '0')}`;
   };
   const optionColors = ['#FF5252', '#FF9800', '#FFCA28', '#66BB6A', '#29B6F6'];
+  const displayedActivityCount = Math.min(activityCount + 1, MAX_ACTIVITIES_PER_SESSION);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -284,7 +323,7 @@ export default function CountOnScreen({ navigation }: Props) {
         </TouchableOpacity>
         <View style={styles.topCenter}>
           <TimerBar timeLeft={timeLeft} totalTime={GameManager.getInstance().sessionTimerLimit} />
-          <Text style={styles.activityProgress}>{activityCount}/{MAX_ACTIVITIES_PER_SESSION}</Text>
+          <Text style={styles.activityProgress}>{displayedActivityCount}/{MAX_ACTIVITIES_PER_SESSION}</Text>
         </View>
         <View style={styles.badgesContainer}>
           <View style={styles.badge}>
@@ -307,7 +346,7 @@ export default function CountOnScreen({ navigation }: Props) {
               <PulseView active={hintsRemaining > 0} maxScale={1.1} duration={800}>
                 <TouchableOpacity
                   style={[styles.smallHintBtn, { opacity: hintsRemaining <= 0 ? 0.5 : 1 }]}
-                  onPress={useHint}
+                  onPress={() => confirmUseHint()}
                   disabled={hintsRemaining <= 0}
                 >
                   <Text style={styles.smallHintText}>💡 {hintsRemaining}</Text>
@@ -331,6 +370,7 @@ export default function CountOnScreen({ navigation }: Props) {
             Oliver already has {baseN} fruits. Count on {extraM} more from the tree!
           </Text>
         </View>
+        <HintBox text={activeHint} onDismiss={() => setActiveHint(null)} />
 
         {/* Equation */}
         <View style={styles.equationContainer}>
@@ -428,9 +468,17 @@ export default function CountOnScreen({ navigation }: Props) {
       <IncorrectModal
         visible={showIncorrectModal}
         onTryAgain={handleTryAgainAfterFail}
-        onHint={() => { setShowIncorrectModal(false); useHint(); }}
+        onHint={() => confirmUseHint(() => setShowIncorrectModal(false))}
         hintsRemaining={hintsRemaining}
-        currentTry={currentTry}
+        currentTry={incorrectModalTry}
+        isFinalWrong={incorrectModalTry >= MAX_WRONG_TRIES}
+      />
+
+      <HintConfirmModal
+        visible={showHintConfirm}
+        hintsRemaining={hintsRemaining}
+        onCancel={handleCancelHint}
+        onConfirm={handleConfirmHint}
       />
 
       <GreatJobOverlay

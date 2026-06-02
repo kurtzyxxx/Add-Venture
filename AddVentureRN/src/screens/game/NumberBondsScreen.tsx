@@ -8,26 +8,32 @@ import { RootStackParamList } from '../../../App';
 import { GameManager, MAX_ACTIVITIES_PER_SESSION } from '../../core/GameManager';
 import { Problem } from '../../core/ProblemGenerator';
 import { LinearGradient } from 'expo-linear-gradient';
-import * as Speech from 'expo-speech';
 import { IncorrectModal } from '../../components/IncorrectModal';
 import { GreatJobOverlay } from '../../components/GreatJobOverlay';
+import { HintConfirmModal } from '../../components/HintConfirmModal';
+import { HintBox } from '../../components/HintBox';
 import { PulseView } from '../../components/animations/PulseView';
 import { TimerBar } from '../../components/TimerBar';
+import { AudioManager } from '../../core/AudioManager';
 
 const { width } = Dimensions.get('window');
 type Props = NativeStackScreenProps<RootStackParamList, 'NumberBonds'>;
 
 const HINT_DISABLE_THRESHOLD = 5;
+const MAX_WRONG_TRIES = 4;
 
 export default function NumberBondsScreen({ navigation }: Props) {
   const [problem, setProblem] = useState<Problem | null>(null);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [hintsDisabled, setHintsDisabled] = useState(false);
-  const [hintsRemaining, setHintsRemaining] = useState(3);
+  const [hintsRemaining, setHintsRemaining] = useState(() => GameManager.getInstance().getSessionHintsRemaining());
+  const [showHintConfirm, setShowHintConfirm] = useState(false);
+  const [activeHint, setActiveHint] = useState<string | null>(null);
   const [showIncorrectModal, setShowIncorrectModal] = useState(false);
   const [options, setOptions] = useState<number[]>([]);
   const [timeLeft, setTimeLeft] = useState(120);
   const [isMasteryProblem, setIsMasteryProblem] = useState(false);
+  const [incorrectModalTry, setIncorrectModalTry] = useState(1);
 
   const [currentTry, setCurrentTry] = useState(1);
   const [activityCount, setActivityCount] = useState(0);
@@ -40,9 +46,10 @@ export default function NumberBondsScreen({ navigation }: Props) {
   const unknownPulseLoop = useRef<Animated.CompositeAnimation | null>(null);
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const pendingHintAction = useRef<(() => void) | null>(null);
 
   useEffect(() => {
-    Speech.speak('Number Bonds! Find the missing part to complete the bond!', { rate: 0.9, pitch: 1.3 });
+    AudioManager.speak('Number Bonds! Find the missing part to complete the bond!', { rate: 0.9, pitch: 1.3 });
     loadNewProblem();
     timerRef.current = setInterval(() => setTimeLeft(t => t > 0 ? t - 1 : 0), 1000);
     return () => {
@@ -61,8 +68,9 @@ export default function NumberBondsScreen({ navigation }: Props) {
     if (!problem) return;
     const gm = GameManager.getInstance();
     setCurrentTry(3);
+    setIncorrectModalTry(MAX_WRONG_TRIES);
     const responseTimeMs = gm.sessionTimerLimit * 1000;
-    const { starsEarned } = await gm.submitAnswer(false, 3, responseTimeMs, problem, -1);
+    const { starsEarned } = await gm.submitAnswer(false, 3, responseTimeMs, problem, -1, true);
     
     if (isMasteryProblem) {
       gm.recordMasteryIncorrect(problem);
@@ -106,6 +114,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
     setIsMasteryProblem(isMastery);
     setProblem(p);
     setSelectedOption(null);
+    setActiveHint(null);
     setCurrentTry(1);
     setTimeLeft(gm.sessionTimerLimit);
     setJustMastered(false);
@@ -122,28 +131,31 @@ export default function NumberBondsScreen({ navigation }: Props) {
     }
     setOptions(Array.from(opts).sort((a, b) => a - b));
 
-    Speech.stop();
+    AudioManager.stopSpeech();
     setTimeout(() => {
       const msg = isMastery
         ? `Keep going! What goes with ${p.num2} to make ${p.num1}?`
         : `What number goes with ${p.num2} to make ${p.num1}?`;
-      Speech.speak(msg, { rate: 0.95, pitch: 1.4 });
+      AudioManager.speak(msg, { rate: 0.95, pitch: 1.4 });
     }, 300);
   };
 
   const handleSelectOption = (opt: number) => {
     setSelectedOption(prev => (prev === opt ? null : opt));
     // Speak the selected number
-    Speech.stop();
-    Speech.speak(`${opt}`, { rate: 0.9, pitch: 1.3 });
+    AudioManager.stopSpeech();
+    AudioManager.speak(`${opt}`, { rate: 0.9, pitch: 1.3 });
   };
 
   const submitCheck = async () => {
     if (selectedOption === null || !problem) return;
     const gm = GameManager.getInstance();
     const isCorrect = selectedOption === problem.correctAnswer;
+    const shouldMoveOnAfterWrong = !isCorrect && currentTry >= MAX_WRONG_TRIES;
     const responseTimeMs = (gm.sessionTimerLimit - timeLeft) * 1000;
-    const { starsEarned } = await gm.submitAnswer(isCorrect, currentTry, responseTimeMs, problem, selectedOption);
+    const { starsEarned } = await gm.submitAnswer(
+      isCorrect, currentTry, responseTimeMs, problem, selectedOption, shouldMoveOnAfterWrong
+    );
 
     if (isCorrect) {
       let wasMastered = false;
@@ -155,12 +167,13 @@ export default function NumberBondsScreen({ navigation }: Props) {
       setShowGreatJob(true);
     } else {
       if (isMasteryProblem) gm.recordMasteryIncorrect(problem);
-      if (currentTry >= 3) {
-        if (!isMasteryProblem) gm.addToMasteryQueue(problem);
+      if (shouldMoveOnAfterWrong) {
         const newCount = gm.getSessionActivityCount();
         setActivityCount(newCount);
+        setIncorrectModalTry(MAX_WRONG_TRIES);
         setShowIncorrectModal(true);
       } else {
+        setIncorrectModalTry(currentTry);
         setCurrentTry(prev => prev + 1);
         setSelectedOption(null);
         setShowIncorrectModal(true);
@@ -177,7 +190,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
   const handleTryAgainAfterFail = async () => {
     setShowIncorrectModal(false);
     if (activityCount >= MAX_ACTIVITIES_PER_SESSION) { await finishSession(); return; }
-    if (currentTry >= 3) {
+    if (incorrectModalTry >= MAX_WRONG_TRIES) {
       loadNewProblem();
     } else {
       setOptions(prev => {
@@ -194,18 +207,41 @@ export default function NumberBondsScreen({ navigation }: Props) {
 
   const useHint = () => {
     if (!problem || hintsRemaining <= 0) return;
-    setHintsRemaining(prev => prev - 1);
-    Speech.stop();
-    Speech.speak(GameManager.getInstance().getHint(problem), { rate: 0.95, pitch: 1.2 });
+    const gm = GameManager.getInstance();
+    const hint = gm.getHint(problem);
+    setActiveHint(hint);
+    gm.consumeSessionHint().then(setHintsRemaining);
+  };
+
+  const confirmUseHint = (beforeConfirm?: () => void) => {
+    if (!problem || hintsRemaining <= 0) return;
+    pendingHintAction.current = beforeConfirm ?? null;
+    setShowHintConfirm(true);
+  };
+
+  const handleConfirmHint = () => {
+    setShowHintConfirm(false);
+    pendingHintAction.current?.();
+    pendingHintAction.current = null;
+    useHint();
+  };
+
+  const handleCancelHint = () => {
+    pendingHintAction.current = null;
+    setShowHintConfirm(false);
   };
 
   const finishSession = async () => {
-    const session = await GameManager.getInstance().completeAndResetSession();
+    const gm = GameManager.getInstance();
+    const incorrectProblems = gm.getSessionIncorrectProblems();
+    const session = await gm.completeAndResetSession();
+    await gm.saveSystem.setAdaptiveReviewPending('NUMBER_BONDS', incorrectProblems.length > 0);
     navigation.replace('SessionSummary', {
       stars: session.totalStars,
       activities: session.totalActivities,
       correct: session.totalCorrect,
       strategy: 'NUMBER_BONDS',
+      incorrectProblems,
     });
   };
 
@@ -219,6 +255,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
     const m = Math.floor(s / 60).toString().padStart(2, '0');
     return `${m}:${(s % 60).toString().padStart(2, '0')}`;
   };
+  const displayedActivityCount = Math.min(activityCount + 1, MAX_ACTIVITIES_PER_SESSION);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -234,7 +271,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
         </TouchableOpacity>
         <View style={styles.topCenter}>
           <TimerBar timeLeft={timeLeft} totalTime={GameManager.getInstance().sessionTimerLimit} />
-          <Text style={styles.activityProgress}>{activityCount}/{MAX_ACTIVITIES_PER_SESSION}</Text>
+          <Text style={styles.activityProgress}>{displayedActivityCount}/{MAX_ACTIVITIES_PER_SESSION}</Text>
         </View>
         <View style={styles.badgesContainer}>
           <View style={styles.badge}>
@@ -255,7 +292,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
           <PulseView active={hintsRemaining > 0} maxScale={1.1} duration={800}>
             <TouchableOpacity
               style={[styles.smallHintBtn, { opacity: hintsRemaining <= 0 ? 0.5 : 1 }]}
-              onPress={useHint}
+              onPress={() => confirmUseHint()}
               disabled={hintsRemaining <= 0}
             >
               <Text style={styles.smallHintText}>💡 {hintsRemaining}</Text>
@@ -269,6 +306,10 @@ export default function NumberBondsScreen({ navigation }: Props) {
           <Text style={styles.masteryBadgeText}>🔥 Keep Going! Practice Round</Text>
         </View>
       )}
+
+      <View style={styles.hintBoxWrap}>
+        <HintBox text={activeHint} onDismiss={() => setActiveHint(null)} />
+      </View>
 
       {/* Bond Graphic */}
       <View style={styles.graphicContainer}>
@@ -357,9 +398,17 @@ export default function NumberBondsScreen({ navigation }: Props) {
       <IncorrectModal
         visible={showIncorrectModal}
         onTryAgain={handleTryAgainAfterFail}
-        onHint={() => { setShowIncorrectModal(false); useHint(); }}
+        onHint={() => confirmUseHint(() => setShowIncorrectModal(false))}
         hintsRemaining={hintsRemaining}
-        currentTry={currentTry}
+        currentTry={incorrectModalTry}
+        isFinalWrong={incorrectModalTry >= MAX_WRONG_TRIES}
+      />
+
+      <HintConfirmModal
+        visible={showHintConfirm}
+        hintsRemaining={hintsRemaining}
+        onCancel={handleCancelHint}
+        onConfirm={handleConfirmHint}
       />
 
       <GreatJobOverlay
@@ -395,6 +444,7 @@ const styles = StyleSheet.create({
   smallHintText: { fontSize: 14, fontWeight: 'bold', color: '#FFF' },
   masteryBadge: { backgroundColor: '#FF6F00', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 5, alignSelf: 'center', marginBottom: 6 },
   masteryBadgeText: { color: '#FFF', fontWeight: '900', fontSize: 13 },
+  hintBoxWrap: { paddingHorizontal: 20 },
   graphicContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   diagramBox: { width: 260, height: 230, position: 'relative', alignItems: 'center' },
   leftLine: { position: 'absolute', width: 4, height: 110, backgroundColor: '#4E342E', top: 60, left: 75, transform: [{ rotate: '40deg' }] },

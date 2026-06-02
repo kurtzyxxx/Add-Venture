@@ -6,7 +6,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
 import { GameManager } from '../core/GameManager';
 import { LinearGradient } from 'expo-linear-gradient';
-import * as Speech from 'expo-speech';
+import { AudioManager } from '../core/AudioManager';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SessionSummary'>;
 
@@ -17,8 +17,9 @@ const STRATEGY_LABELS: Record<string, string> = {
 };
 
 export default function SessionSummaryScreen({ route, navigation }: Props) {
-  const { stars, activities, correct, strategy } = route.params;
+  const { stars, activities, correct, strategy, incorrectProblems = [] } = route.params;
   const accuracyPct = activities > 0 ? Math.round((correct / activities) * 100) : 0;
+  const hasAdaptiveReview = incorrectProblems.length > 0;
 
   // Get session history for comparison
   const gm = GameManager.getInstance();
@@ -44,9 +45,9 @@ export default function SessionSummaryScreen({ route, navigation }: Props) {
     ]).start();
 
     const label = STRATEGY_LABELS[strategy] ?? strategy;
-    Speech.stop();
+    AudioManager.stopSpeech();
     setTimeout(() => {
-      Speech.speak(
+      AudioManager.speak(
         `Great session! You got ${correct} out of ${activities} right, with ${accuracyPct} percent accuracy. ${stars} stars earned!`,
         { rate: 0.9, pitch: 1.2 }
       );
@@ -66,11 +67,24 @@ export default function SessionSummaryScreen({ route, navigation }: Props) {
 
   const handleContinue = () => {
     const routeName =
-      strategy === 'COUNT_ALL' ? 'CountAll' :
-      strategy === 'COUNT_ON' ? 'CountOn' :
+      strategy === 'COUNT_ALL' ? 'CountOn' :
+      strategy === 'COUNT_ON' ? 'NumberBonds' :
       'NumberBonds';
+    const nextStrategy =
+      routeName === 'CountOn' ? 'COUNT_ON' :
+      routeName === 'NumberBonds' ? 'NUMBER_BONDS' :
+      'COUNT_ALL';
     
-    GameManager.getInstance().startSession(strategy);
+    if (hasAdaptiveReview) {
+      navigation.replace('AdaptiveMode', {
+        strategy,
+        targetRoute: routeName,
+        incorrectProblems,
+      });
+      return;
+    }
+
+    GameManager.getInstance().startSession(nextStrategy);
     navigation.replace(routeName);
   };
 
@@ -157,7 +171,9 @@ export default function SessionSummaryScreen({ route, navigation }: Props) {
             onPress={handleContinue}
             activeOpacity={0.85}
           >
-            <Text style={styles.primaryBtnText}>▶️ Continue to Next Session</Text>
+            <Text style={styles.primaryBtnText}>
+              {hasAdaptiveReview ? 'Review Mistakes First' : 'Continue to Next Level'}
+            </Text>
           </TouchableOpacity>
 
           <View style={styles.secondaryActionsRow}>

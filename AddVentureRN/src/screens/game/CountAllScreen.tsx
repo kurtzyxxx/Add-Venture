@@ -3,9 +3,10 @@ import {
   View, Text, StyleSheet, TouchableOpacity, Animated,
   PanResponder, SafeAreaView,
 } from 'react-native';
-import * as Speech from 'expo-speech';
 import { IncorrectModal } from '../../components/IncorrectModal';
 import { GreatJobOverlay } from '../../components/GreatJobOverlay';
+import { HintConfirmModal } from '../../components/HintConfirmModal';
+import { HintBox } from '../../components/HintBox';
 import { PulseView } from '../../components/animations/PulseView';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../../App';
@@ -13,15 +14,13 @@ import { GameManager, MAX_ACTIVITIES_PER_SESSION } from '../../core/GameManager'
 import { Problem } from '../../core/ProblemGenerator';
 import { LinearGradient } from 'expo-linear-gradient';
 import { TimerBar } from '../../components/TimerBar';
+import { AudioManager } from '../../core/AudioManager';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CountAll'>;
 
 const FRUITS = ['🍎', '🍌', '🍇', '🍉', '🍓', '🍑', '🍍', '🍊'];
-const FRUIT_NAMES: Record<string, string> = {
-  '🍎': 'apple', '🍌': 'banana', '🍇': 'grapes', '🍉': 'watermelon',
-  '🍓': 'strawberry', '🍑': 'peach', '🍍': 'pineapple', '🍊': 'orange',
-};
 const HINT_DISABLE_THRESHOLD = 5; // consecutive correct before hints are hidden
+const MAX_WRONG_TRIES = 3;
 
 export default function CountAllScreen({ navigation }: Props) {
   const [problem, setProblem] = useState<Problem | null>(null);
@@ -32,9 +31,13 @@ export default function CountAllScreen({ navigation }: Props) {
   const [showCounter, setShowCounter] = useState(false);
   const [timeLeft, setTimeLeft] = useState(120);
   const [hintsDisabled, setHintsDisabled] = useState(false);
-  const [hintsRemaining, setHintsRemaining] = useState(3);
+  const [hintsRemaining, setHintsRemaining] = useState(() => GameManager.getInstance().getSessionHintsRemaining());
+  const [showHintConfirm, setShowHintConfirm] = useState(false);
+  const [activeHint, setActiveHint] = useState<string | null>(null);
   const [showIncorrectModal, setShowIncorrectModal] = useState(false);
   const [isMasteryProblem, setIsMasteryProblem] = useState(false);
+  const [incorrectModalTry, setIncorrectModalTry] = useState(1);
+  const [advanceAfterIncorrectModal, setAdvanceAfterIncorrectModal] = useState(false);
 
   // 3-try system
   const [currentTry, setCurrentTry] = useState(1);
@@ -53,9 +56,10 @@ export default function CountAllScreen({ navigation }: Props) {
   const fruitGlowAnims = useRef<Record<string, Animated.Value>>({});
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pendingHintAction = useRef<(() => void) | null>(null);
 
   useEffect(() => {
-    Speech.speak('Count All! Help Oliver gather food! Count and drag the fruits to the basket!', {
+    AudioManager.speak('Count All! Help Oliver gather food! Count and drag the fruits to the basket!', {
       rate: 0.9,
       pitch: 1.3,
     });
@@ -80,8 +84,10 @@ export default function CountAllScreen({ navigation }: Props) {
     if (!problem) return;
     const gm = GameManager.getInstance();
     setCurrentTry(3);
+    setIncorrectModalTry(MAX_WRONG_TRIES);
+    setAdvanceAfterIncorrectModal(true);
     const responseTimeMs = gm.sessionTimerLimit * 1000;
-    const { starsEarned } = await gm.submitAnswer(false, 3, responseTimeMs, problem, -1);
+    const { starsEarned } = await gm.submitAnswer(false, 3, responseTimeMs, problem, -1, true);
     
     if (isMasteryProblem) {
       gm.recordMasteryIncorrect(problem);
@@ -136,7 +142,10 @@ export default function CountAllScreen({ navigation }: Props) {
     setDropCounter(0);
     setShowCounter(false);
     setSelectedAnswer(null);
+    setActiveHint(null);
     setCurrentTry(1);
+    setIncorrectModalTry(1);
+    setAdvanceAfterIncorrectModal(false);
     setJustMastered(false);
     resetTimer(gm.sessionTimerLimit);
 
@@ -147,9 +156,9 @@ export default function CountAllScreen({ navigation }: Props) {
     setOptions(Array.from(opts).sort((a, b) => a - b));
 
     if (isMastery) {
-      Speech.stop();
+      AudioManager.stopSpeech();
       setTimeout(() => {
-        Speech.speak(`Keep going! Practice makes perfect. Count all the fruits!`, { rate: 0.9, pitch: 1.3 });
+        AudioManager.speak(`Keep going! Practice makes perfect. Count all the fruits!`, { rate: 0.9, pitch: 1.3 });
       }, 300);
     }
   };
@@ -164,24 +173,32 @@ export default function CountAllScreen({ navigation }: Props) {
       const profile = GameManager.getInstance().saveSystem.getProfile();
       const verboseMode = profile.consecutiveCorrect < HINT_DISABLE_THRESHOLD;
 
-      Speech.stop();
+      AudioManager.stopSpeech();
       if (droppedCount === next.length) {
         if (verboseMode) {
-          Speech.speak(droppedCount.toString(), { rate: 0.95, pitch: 1.4 });
+          AudioManager.speak(droppedCount.toString(), { rate: 0.95, pitch: 1.4 });
         }
-        Speech.speak('How many fruits in all?', { rate: 0.95, pitch: 1.4 });
+        AudioManager.speak('How many fruits in all?', { rate: 0.95, pitch: 1.4 });
       } else if (verboseMode) {
-        Speech.speak(droppedCount.toString(), { rate: 0.95, pitch: 1.4 });
+        AudioManager.speak(droppedCount.toString(), { rate: 0.95, pitch: 1.4 });
       }
       return next;
     });
   };
 
+  const resetDroppedFruits = () => {
+    setFruits(prev => prev.map(fruit => ({ ...fruit, dropped: false })));
+    setDropCounter(0);
+    setShowCounter(false);
+    setSelectedAnswer(null);
+    AudioManager.stopSpeech();
+    AudioManager.speak('Fruits reset.', { rate: 0.95, pitch: 1.25 });
+  };
+
   const handleBasketFruitTap = (fruit: { id: string; emoji: string }) => {
     const position = fruits.filter(f => f.dropped).findIndex(f => f.id === fruit.id) + 1;
-    const name = FRUIT_NAMES[fruit.emoji] ?? 'fruit';
-    Speech.stop();
-    Speech.speak(`${name}! Fruit number ${position} in the basket.`, { rate: 0.9, pitch: 1.3 });
+    AudioManager.stopSpeech();
+    AudioManager.speak(`${position}`, { rate: 0.9, pitch: 1.3 });
 
     // Bounce animation
     const tapAnim = fruitTapAnims.current[fruit.id];
@@ -211,10 +228,11 @@ export default function CountAllScreen({ navigation }: Props) {
     if (selectedAnswer === null || !problem) return;
 
     const isCorrect = selectedAnswer === problem.correctAnswer;
+    const shouldMoveOnAfterWrong = !isCorrect && currentTry >= MAX_WRONG_TRIES;
     const gm = GameManager.getInstance();
     const responseTimeMs = (gm.sessionTimerLimit - timeLeft) * 1000;
     const { starsEarned } = await gm.submitAnswer(
-      isCorrect, currentTry, responseTimeMs, problem, selectedAnswer
+      isCorrect, currentTry, responseTimeMs, problem, selectedAnswer, shouldMoveOnAfterWrong
     );
 
     if (isCorrect) {
@@ -231,12 +249,15 @@ export default function CountAllScreen({ navigation }: Props) {
       if (isMasteryProblem) {
         gm.recordMasteryIncorrect(problem);
       }
-      if (currentTry >= 3) {
-        if (!isMasteryProblem) gm.addToMasteryQueue(problem);
+      if (shouldMoveOnAfterWrong) {
         const newCount = gm.getSessionActivityCount();
         setActivityCount(newCount);
+        setIncorrectModalTry(MAX_WRONG_TRIES);
+        setAdvanceAfterIncorrectModal(true);
         setShowIncorrectModal(true);
       } else {
+        setIncorrectModalTry(currentTry);
+        setAdvanceAfterIncorrectModal(false);
         setCurrentTry(prev => prev + 1);
         setShowIncorrectModal(true);
       }
@@ -254,15 +275,20 @@ export default function CountAllScreen({ navigation }: Props) {
   };
 
   const handleTryAgainAfterFail = async () => {
+    const shouldAdvance = advanceAfterIncorrectModal;
     setShowIncorrectModal(false);
+    setAdvanceAfterIncorrectModal(false);
     if (activityCount >= MAX_ACTIVITIES_PER_SESSION) {
       await finishSession();
       return;
     }
-    if (currentTry >= 3) {
+    if (shouldAdvance) {
       loadNewProblem(); // will pull from mastery queue
     } else {
       // Shuffle options so it feels fresh
+      setFruits(prev => prev.map(fruit => ({ ...fruit, dropped: false })));
+      setDropCounter(0);
+      setShowCounter(false);
       setOptions(prev => {
         const s = [...prev];
         for (let i = s.length - 1; i > 0; i--) {
@@ -277,18 +303,41 @@ export default function CountAllScreen({ navigation }: Props) {
 
   const useHint = () => {
     if (!problem || hintsRemaining <= 0) return;
-    setHintsRemaining(prev => prev - 1);
-    Speech.stop();
-    Speech.speak(GameManager.getInstance().getHint(problem), { rate: 0.95, pitch: 1.2 });
+    const gm = GameManager.getInstance();
+    const hint = gm.getHint(problem);
+    setActiveHint(hint);
+    gm.consumeSessionHint().then(setHintsRemaining);
+  };
+
+  const confirmUseHint = (beforeConfirm?: () => void) => {
+    if (!problem || hintsRemaining <= 0) return;
+    pendingHintAction.current = beforeConfirm ?? null;
+    setShowHintConfirm(true);
+  };
+
+  const handleConfirmHint = () => {
+    setShowHintConfirm(false);
+    pendingHintAction.current?.();
+    pendingHintAction.current = null;
+    useHint();
+  };
+
+  const handleCancelHint = () => {
+    pendingHintAction.current = null;
+    setShowHintConfirm(false);
   };
 
   const finishSession = async () => {
-    const session = await GameManager.getInstance().completeAndResetSession();
+    const gm = GameManager.getInstance();
+    const incorrectProblems = gm.getSessionIncorrectProblems();
+    const session = await gm.completeAndResetSession();
+    await gm.saveSystem.setAdaptiveReviewPending('COUNT_ALL', incorrectProblems.length > 0);
     navigation.replace('SessionSummary', {
       stars: session.totalStars,
       activities: session.totalActivities,
       correct: session.totalCorrect,
       strategy: 'COUNT_ALL',
+      incorrectProblems,
     });
   };
 
@@ -306,6 +355,7 @@ export default function CountAllScreen({ navigation }: Props) {
 
   const optionColors = ['#FF5252', '#FF9800', '#FFCA28', '#66BB6A', '#29B6F6'];
   const masteryProgress = GameManager.getInstance().getMasteryProgress();
+  const displayedActivityCount = Math.min(activityCount + 1, MAX_ACTIVITIES_PER_SESSION);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -324,7 +374,7 @@ export default function CountAllScreen({ navigation }: Props) {
 
         <View style={styles.topCenter}>
           <TimerBar timeLeft={timeLeft} totalTime={GameManager.getInstance().sessionTimerLimit} />
-          <Text style={styles.activityProgress}>{activityCount}/{MAX_ACTIVITIES_PER_SESSION}</Text>
+          <Text style={styles.activityProgress}>{displayedActivityCount}/{MAX_ACTIVITIES_PER_SESSION}</Text>
         </View>
 
         <View style={styles.badgesContainer}>
@@ -348,7 +398,7 @@ export default function CountAllScreen({ navigation }: Props) {
               <PulseView active={hintsRemaining > 0 && !hintsDisabled} maxScale={1.1} duration={800}>
                 <TouchableOpacity
                   style={[styles.smallHintBtn, { opacity: hintsRemaining <= 0 ? 0.5 : 1 }]}
-                  onPress={useHint}
+                  onPress={() => confirmUseHint()}
                   disabled={hintsRemaining <= 0}
                 >
                   <Text style={styles.smallHintText}>💡 {hintsRemaining}</Text>
@@ -374,6 +424,7 @@ export default function CountAllScreen({ navigation }: Props) {
             Count and drag the fruits to the drop zone. You can submit any time!
           </Text>
         </View>
+        <HintBox text={activeHint} onDismiss={() => setActiveHint(null)} />
 
         {/* Equation */}
         <View style={styles.equationContainer}>
@@ -418,6 +469,11 @@ export default function CountAllScreen({ navigation }: Props) {
 
         {/* Drop Zone */}
         <View style={styles.dropZone}>
+          {droppedFruits.length > 0 && (
+            <TouchableOpacity style={styles.dropResetButton} onPress={resetDroppedFruits} activeOpacity={0.85}>
+              <Text style={styles.dropResetIcon}>↻</Text>
+            </TouchableOpacity>
+          )}
           {droppedFruits.length === 0 && (
             <Text style={styles.dropZoneHint}>Drag all fruits here to count!</Text>
           )}
@@ -482,9 +538,17 @@ export default function CountAllScreen({ navigation }: Props) {
       <IncorrectModal
         visible={showIncorrectModal}
         onTryAgain={handleTryAgainAfterFail}
-        onHint={() => { setShowIncorrectModal(false); useHint(); }}
+        onHint={() => confirmUseHint(() => setShowIncorrectModal(false))}
         hintsRemaining={hintsRemaining}
-        currentTry={currentTry}
+        currentTry={incorrectModalTry}
+        isFinalWrong={advanceAfterIncorrectModal}
+      />
+
+      <HintConfirmModal
+        visible={showHintConfirm}
+        hintsRemaining={hintsRemaining}
+        onCancel={handleCancelHint}
+        onConfirm={handleConfirmHint}
       />
 
       {/* Great Job Overlay */}
@@ -591,6 +655,27 @@ const styles = StyleSheet.create({
   dropZoneHint: { color: '#81D4FA', fontSize: 14, fontWeight: 'bold', position: 'absolute' },
   droppedFruitWrapper: { margin: 3, width: 48, height: 48, justifyContent: 'center', alignItems: 'center', borderRadius: 24, overflow: 'hidden' },
   fruitGlow: { backgroundColor: '#FFD700', borderRadius: 24 },
+  dropResetButton: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#FFCA28',
+    borderWidth: 2,
+    borderColor: '#FFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 20,
+    elevation: 4,
+  },
+  dropResetIcon: {
+    color: '#4E342E',
+    fontSize: 24,
+    fontWeight: '900',
+    lineHeight: 28,
+  },
   dropCounterBadge: { position: 'absolute', top: 8, right: 8, backgroundColor: '#FF5252', borderRadius: 14, paddingHorizontal: 10, paddingVertical: 3 },
   dropCounterText: { color: '#FFF', fontWeight: 'bold', fontSize: 18 },
   answerArea: { backgroundColor: 'transparent', paddingTop: 6, paddingBottom: 4 },

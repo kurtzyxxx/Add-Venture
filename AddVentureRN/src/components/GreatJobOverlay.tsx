@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Modal, View, Text, TouchableOpacity, Animated, StyleSheet } from 'react-native';
-import * as Speech from 'expo-speech';
+import { AudioManager } from '../core/AudioManager';
 import { MAX_ACTIVITIES_PER_SESSION } from '../core/GameManager';
 
 interface GreatJobOverlayProps {
@@ -56,8 +56,8 @@ export const GreatJobOverlay: React.FC<GreatJobOverlayProps> = ({
     const message = isMastery
       ? 'Incredible! You mastered it! Amazing work!'
       : `Amazing! You got it! ${stars} ${stars === 1 ? 'star' : 'stars'}!`;
-    Speech.stop();
-    Speech.speak(message, { rate: 0.9, pitch: 1.3 });
+    AudioManager.stopSpeech();
+    AudioManager.speak(message, { rate: 0.9, pitch: 1.3 });
 
     // Animate burst stars (radiate outward)
     const angles = Array.from({ length: STAR_COUNT }, (_, i) => (i * 360) / STAR_COUNT);

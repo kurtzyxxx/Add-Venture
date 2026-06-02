@@ -1,13 +1,14 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal, Animated } from 'react-native';
-import * as Speech from 'expo-speech';
+import { AudioManager } from '../core/AudioManager';
 
 interface IncorrectModalProps {
   visible: boolean;
   onTryAgain: () => void;
   onHint: () => void;
   hintsRemaining: number;
-  currentTry: number; // 1, 2, or 3
+  currentTry: number;
+  isFinalWrong?: boolean;
 }
 
 const MESSAGES_BY_TRY: Record<number, { title: string[]; subtitle: string; tts: string }> = {
@@ -17,14 +18,14 @@ const MESSAGES_BY_TRY: Record<number, { title: string[]; subtitle: string; tts: 
     tts: "Oops! Not quite. Let's try again. You can do it!",
   },
   2: {
-    title: ['Almost!', 'One more', 'chance!'],
+    title: ['Try', 'again', '!'],
     subtitle: 'You can do it! 💪',
-    tts: "Almost there! You have one more chance. Try your best!",
+    tts: "Try again. You can do it!",
   },
   3: {
-    title: ["Good try!", "Let's see", 'an example!'],
-    subtitle: "Here's a similar one for practice 🎯",
-    tts: "Good try! Let's look at a similar example to help you learn.",
+    title: ['Good try!', "Let's go", 'next!'],
+    subtitle: 'Keep going to the next question 🎯',
+    tts: "Good try! Let's go to the next question.",
   },
 };
 
@@ -34,12 +35,15 @@ export const IncorrectModal: React.FC<IncorrectModalProps> = ({
   onHint,
   hintsRemaining,
   currentTry,
+  isFinalWrong = false,
 }) => {
   // Shake animation for the star graphic
   const shakeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.5)).current;
 
-  const msg = MESSAGES_BY_TRY[currentTry] ?? MESSAGES_BY_TRY[1];
+  const visibleTry = Math.min(currentTry, 3);
+  const messageTry = isFinalWrong ? 3 : Math.min(currentTry, 2);
+  const msg = MESSAGES_BY_TRY[messageTry] ?? MESSAGES_BY_TRY[1];
 
   useEffect(() => {
     if (!visible) return;
@@ -62,14 +66,14 @@ export const IncorrectModal: React.FC<IncorrectModalProps> = ({
     ]).start();
 
     // TTS
-    Speech.stop();
+    AudioManager.stopSpeech();
     setTimeout(() => {
-      Speech.speak(msg.tts, { rate: 0.9, pitch: 1.2 });
+      AudioManager.speak(msg.tts, { rate: 0.9, pitch: 1.2 });
     }, 150);
   }, [visible, currentTry]);
 
   const tryColors = ['#FF5252', '#FF9800', '#9C27B0'];
-  const accentColor = tryColors[Math.min(currentTry - 1, 2)];
+  const accentColor = tryColors[Math.min(visibleTry - 1, 2)];
 
   return (
     <Modal visible={visible} animationType="fade" transparent={true}>
@@ -101,7 +105,7 @@ export const IncorrectModal: React.FC<IncorrectModalProps> = ({
           <Text style={[styles.heart, { top: 60, left: 20, fontSize: 18, transform: [{ rotate: '-15deg' }] }]}>💖</Text>
           <Text style={styles.starEmoji}>⭐</Text>
           <Text style={styles.faceEmoji}>
-            {currentTry <= 2 ? '🥺' : '😮'}
+            {isFinalWrong ? '😮' : '🥺'}
           </Text>
         </Animated.View>
 
@@ -114,10 +118,10 @@ export const IncorrectModal: React.FC<IncorrectModalProps> = ({
                 styles.tryDot,
                 {
                   backgroundColor: t < currentTry ? '#E0E0E0' : accentColor,
-                  opacity: t <= currentTry ? 1 : 0.3,
-                  width: t === currentTry ? 18 : 12,
-                  height: t === currentTry ? 18 : 12,
-                  borderRadius: t === currentTry ? 9 : 6,
+                  opacity: t <= visibleTry ? 1 : 0.3,
+                  width: t === visibleTry ? 18 : 12,
+                  height: t === visibleTry ? 18 : 12,
+                  borderRadius: t === visibleTry ? 9 : 6,
                 },
               ]}
             />
@@ -132,11 +136,11 @@ export const IncorrectModal: React.FC<IncorrectModalProps> = ({
             onPress={onTryAgain}
           >
             <Text style={styles.primaryBtnText}>
-              {currentTry >= 3 ? '➡ Next Example' : '↻ Try Again'}
+              {isFinalWrong ? '➡ Next Question' : '↻ Try Again'}
             </Text>
           </TouchableOpacity>
 
-          {hintsRemaining > 0 && currentTry < 3 && (
+          {hintsRemaining > 0 && !isFinalWrong && (
             <TouchableOpacity
               style={styles.secondaryBtn}
               activeOpacity={0.8}
