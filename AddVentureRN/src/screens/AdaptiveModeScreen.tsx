@@ -29,6 +29,12 @@ const ROUTE_STRATEGIES: Record<'CountAll' | 'CountOn' | 'NumberBonds', string> =
   NumberBonds: 'NUMBER_BONDS',
 };
 
+const STRATEGY_ROUTES: Record<string, 'CountAll' | 'CountOn' | 'NumberBonds'> = {
+  COUNT_ALL: 'CountAll',
+  COUNT_ON: 'CountOn',
+  NUMBER_BONDS: 'NumberBonds',
+};
+
 const FRUITS = ['🍎', '🍌', '🍇', '🍉', '🍓', '🍑', '🍍', '🍊'];
 
 type ReviewFruit = {
@@ -47,9 +53,14 @@ export default function AdaptiveModeScreen({ route, navigation }: Props) {
   const [reviewFruits, setReviewFruits] = useState<ReviewFruit[]>([]);
   const [reviewFruitsIndex, setReviewFruitsIndex] = useState(-1);
   const [isIntroVisible, setIsIntroVisible] = useState(true);
+  const [isReviewFinished, setIsReviewFinished] = useState(false);
   const canLeaveRef = React.useRef(false);
 
-  const currentProblem = incorrectProblems[currentIndex];
+  const reviewProblems = React.useMemo(() => {
+    return [...incorrectProblems, ...incorrectProblems];
+  }, [incorrectProblems]);
+
+  const currentProblem = reviewProblems[currentIndex];
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('beforeRemove', event => {
@@ -138,28 +149,71 @@ export default function AdaptiveModeScreen({ route, navigation }: Props) {
   };
 
   const handleNext = async () => {
-    if (currentIndex < incorrectProblems.length - 1) {
+    if (currentIndex < reviewProblems.length - 1) {
       setCurrentIndex(prev => prev + 1);
       return;
     }
 
     const gm = GameManager.getInstance();
-    const nextStrategy = ROUTE_STRATEGIES[targetRoute];
     await gm.saveSystem.setAdaptiveReviewPending(strategy, false);
-    gm.startSession(nextStrategy);
-    canLeaveRef.current = true;
-    navigation.replace(targetRoute);
+    setIsReviewFinished(true);
   };
 
-  if (!currentProblem) {
-    const gm = GameManager.getInstance();
-    const nextStrategy = ROUTE_STRATEGIES[targetRoute];
-    gm.saveSystem.setAdaptiveReviewPending(strategy, false).then(() => {
-      gm.startSession(nextStrategy);
-      canLeaveRef.current = true;
-      navigation.replace(targetRoute);
-    });
-    return null;
+  if (!currentProblem || isReviewFinished) {
+    if (!isReviewFinished && !currentProblem) {
+      const gm = GameManager.getInstance();
+      gm.saveSystem.setAdaptiveReviewPending(strategy, false).then(() => {
+        setIsReviewFinished(true);
+      });
+      return null;
+    }
+
+    return (
+      <SafeAreaView style={styles.container}>
+        <LinearGradient
+          colors={['#7E57C2', '#26A69A', '#9CCC65']}
+          style={StyleSheet.absoluteFill}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        />
+        <View style={styles.introWrap}>
+          <View style={styles.introBadge}>
+            <Text style={styles.introIcon}>🎉</Text>
+          </View>
+          <Text style={styles.introTitle}>Review Complete!</Text>
+          <Text style={styles.introSubtitle}>
+            Great job! You've successfully reviewed all your mistakes.
+          </Text>
+          
+          <View style={styles.completionActions}>
+            <TouchableOpacity
+              style={styles.primaryBtn}
+              onPress={() => {
+                const gm = GameManager.getInstance();
+                const nextRoute = STRATEGY_ROUTES[strategy] || targetRoute;
+                gm.startSession(strategy);
+                canLeaveRef.current = true;
+                navigation.replace(nextRoute);
+              }}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.primaryBtnText}>Proceed to Next Session</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.secondaryBtn}
+              onPress={() => {
+                canLeaveRef.current = true;
+                navigation.replace('Home');
+              }}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.secondaryBtnText}>🏠 Back to Map</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </SafeAreaView>
+    );
   }
 
   const optionColors = ['#FF5252', '#FF9800', '#FFCA28', '#66BB6A', '#29B6F6'];
@@ -206,7 +260,7 @@ export default function AdaptiveModeScreen({ route, navigation }: Props) {
 
       <View style={styles.progressPill}>
         <Text style={styles.progressText}>
-          Review {currentIndex + 1}/{incorrectProblems.length} · {STRATEGY_LABELS[strategy] ?? strategy}
+          Review {currentIndex + 1}/{reviewProblems.length} · {STRATEGY_LABELS[strategy] ?? strategy}
         </Text>
       </View>
 
@@ -215,11 +269,6 @@ export default function AdaptiveModeScreen({ route, navigation }: Props) {
           {isNumberBond ? 'Find the missing part' : 'Solve this again'}
         </Text>
         <Text style={styles.equation}>{prompt}</Text>
-        <View style={styles.oldAnswerBox}>
-          <Text style={styles.oldAnswerText}>
-            Last answer: {currentProblem.givenAnswer === -1 ? 'Time ran out' : currentProblem.givenAnswer}
-          </Text>
-        </View>
       </View>
 
       {requiresDrag && (
@@ -286,9 +335,9 @@ export default function AdaptiveModeScreen({ route, navigation }: Props) {
       >
         <Text style={styles.actionText}>
           {feedback === 'correct'
-            ? currentIndex < incorrectProblems.length - 1
+            ? currentIndex < reviewProblems.length - 1
               ? 'Loading Next Review...'
-              : 'Starting Next Level...'
+              : 'Completing Review...'
             : 'Check Answer'}
         </Text>
       </TouchableOpacity>
@@ -530,6 +579,31 @@ function shuffleOptions(options: number[]): number[] {
 
 const styles = StyleSheet.create({
   container: { flex: 1, paddingHorizontal: 20, paddingTop: 28, paddingBottom: 24 },
+  completionActions: {
+    marginTop: 40,
+    width: '100%',
+    paddingHorizontal: 10,
+  },
+  primaryBtn: {
+    backgroundColor: '#FFCA28',
+    paddingVertical: 18,
+    borderRadius: 30,
+    alignItems: 'center',
+    marginBottom: 14,
+    elevation: 6,
+    borderWidth: 3,
+    borderColor: '#FF8F00',
+  },
+  primaryBtnText: { fontSize: 20, fontWeight: '900', color: '#5D4037' },
+  secondaryBtn: {
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    paddingVertical: 14,
+    borderRadius: 24,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.4)',
+  },
+  secondaryBtnText: { fontSize: 16, fontWeight: '900', color: '#FFF' },
   introWrap: {
     flex: 1,
     justifyContent: 'center',
