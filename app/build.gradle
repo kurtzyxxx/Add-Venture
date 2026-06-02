@@ -81,6 +81,10 @@ tasks.register('runConsoleGame', JavaExec) {
     standardInput = System.in
     
     doFirst {
-        classpath = files("build/tmp/kotlin-classes/debug") + configurations.debugRuntimeClasspath
+        // Use the standard AGP compiled-classes path (works on macOS with AGP 8.x)
+        def classesDir = file("build/intermediates/classes/debug")
+        def fallbackDir = file("build/tmp/kotlin-classes/debug")
+        def kotlinClasses = classesDir.exists() ? classesDir : fallbackDir
+        classpath = files(kotlinClasses) + configurations.debugRuntimeClasspath
     }
 }

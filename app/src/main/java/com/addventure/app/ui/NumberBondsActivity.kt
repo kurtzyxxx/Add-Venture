@@ -178,10 +178,8 @@ class NumberBondsActivity : AppCompatActivity() {
                 if (!isSmoothMode) {
                     binding.tvFeedback.shake()
                 }
-                // Show owl librarian notification and encourage retry
-                showOwlLibrarianNotification(getString(R.string.feedback_incorrect))
-                // Start floating animation for visual feedback
-                binding.imgOwlCheer.startFloatingAnimation()
+                // Show retry dialog for consistent behavior across all activities
+                showRetryDialog()
             }
         }
 

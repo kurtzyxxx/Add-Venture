@@ -82,32 +82,19 @@ fun View.fadeInPop(delay: Long = 0) {
  * Continually bobs a view up and down in a gentle floating motion to add life.
  */
 fun View.startFloatingAnimation() {
-    // Slower, smoother bobbing for a calmer feel
+    // Cancel any existing animations to prevent stacking
+    this.animate().cancel()
+    // Single smooth bobbing animation chain
     this.animate()
-        .translationY(8f)
-        .setDuration(2000)
+        .translationY(10f)
+        .setDuration(1800)
         .setInterpolator(AccelerateDecelerateInterpolator())
         .withEndAction {
             this.animate()
-                .translationY(-8f)
-                .setDuration(2000)
+                .translationY(-10f)
+                .setDuration(1800)
                 .setInterpolator(AccelerateDecelerateInterpolator())
                 .withEndAction { this.startFloatingAnimation() }
-                .start()
-        }
-        .start()
-    this.animate()
-        .translationY(12f)
-        .setDuration(1500)
-        .setInterpolator(AccelerateDecelerateInterpolator())
-        .withEndAction {
-            this.animate()
-                .translationY(-12f)
-                .setDuration(1500)
-                .setInterpolator(AccelerateDecelerateInterpolator())
-                .withEndAction {
-                    this.startFloatingAnimation()
-                }
                 .start()
         }
         .start()
