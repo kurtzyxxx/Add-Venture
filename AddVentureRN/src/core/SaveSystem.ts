@@ -52,6 +52,15 @@ export interface ResponseRecord {
   timestamp: number;
 }
 
+export interface AdaptiveReviewProblem {
+  num1: number;
+  num2: number;
+  correctAnswer: number;
+  givenAnswer: number;
+  strategy: string;
+  isMissingPart?: boolean;
+}
+
 interface SaveData {
   profile: LearnerProfile;
   progressRecords: ProgressRecord[];
@@ -59,6 +68,7 @@ interface SaveData {
   responseLog: ResponseRecord[];     // persisted (last 200 responses)
   settings: AudioSettings;
   adaptiveReviewPending: Record<string, boolean>;
+  adaptiveReviewProblems: Record<string, AdaptiveReviewProblem[]>;
 }
 
 const MAX_SESSION_HISTORY = 20;
@@ -102,6 +112,11 @@ export class SaveSystem {
         COUNT_ALL: false,
         COUNT_ON: false,
         NUMBER_BONDS: false,
+      },
+      adaptiveReviewProblems: {
+        COUNT_ALL: [],
+        COUNT_ON: [],
+        NUMBER_BONDS: [],
       },
     };
   }
@@ -155,6 +170,10 @@ export class SaveSystem {
         loaded.adaptiveReviewPending = {
           ...this.createFreshSave().adaptiveReviewPending,
           ...(loaded as any).adaptiveReviewPending,
+        };
+        loaded.adaptiveReviewProblems = {
+          ...this.createFreshSave().adaptiveReviewProblems,
+          ...(loaded as any).adaptiveReviewProblems,
         };
         this.data = loaded;
       } else {
@@ -269,13 +288,30 @@ export class SaveSystem {
   }
 
   public hasAdaptiveReviewPending(strategy: string): boolean {
-    return this.data.adaptiveReviewPending[strategy] === true;
+    return (
+      this.data.adaptiveReviewPending[strategy] === true ||
+      (this.data.adaptiveReviewProblems[strategy]?.length ?? 0) > 0
+    );
   }
 
-  public async setAdaptiveReviewPending(strategy: string, pending: boolean): Promise<void> {
+  public getPendingAdaptiveReviewProblems(strategy: string): AdaptiveReviewProblem[] {
+    return [...(this.data.adaptiveReviewProblems[strategy] ?? [])];
+  }
+
+  public async setAdaptiveReviewPending(
+    strategy: string,
+    pending: boolean,
+    problems?: AdaptiveReviewProblem[]
+  ): Promise<void> {
     this.data.adaptiveReviewPending = {
       ...this.data.adaptiveReviewPending,
       [strategy]: pending,
+    };
+    this.data.adaptiveReviewProblems = {
+      ...this.data.adaptiveReviewProblems,
+      [strategy]: pending
+        ? problems ?? this.data.adaptiveReviewProblems[strategy] ?? []
+        : [],
     };
     await this.save();
   }
@@ -411,6 +447,41 @@ export class SaveSystem {
 
   public getResponseLog(): ResponseRecord[] {
     return this.data.responseLog;
+  }
+
+  public getLatestIncorrectProblemsForStrategy(strategy: string): AdaptiveReviewProblem[] {
+    const latestSession = this.getLastSession(strategy);
+    const sessionFailures = latestSession
+      ? this.data.responseLog.filter(
+          r =>
+            r.strategy === strategy &&
+            (!r.isCorrect || r.tryNumber > 1) &&
+            r.timestamp >= latestSession.startedAt &&
+            r.timestamp <= latestSession.completedAt
+        )
+      : [];
+    const failures = sessionFailures.length > 0
+      ? sessionFailures
+      : this.data.responseLog.filter(
+          r => r.strategy === strategy && (!r.isCorrect || r.tryNumber > 1)
+        );
+    const uniqueProblems = new Map<string, ResponseRecord>();
+
+    for (const failure of failures) {
+      const key = `${failure.strategy}:${failure.num1}:${failure.num2}:${failure.correctAnswer}`;
+      if (!uniqueProblems.has(key)) {
+        uniqueProblems.set(key, failure);
+      }
+    }
+
+    return Array.from(uniqueProblems.values()).map(failure => ({
+      num1: failure.num1,
+      num2: failure.num2,
+      givenAnswer: failure.givenAnswer,
+      correctAnswer: failure.correctAnswer,
+      strategy: failure.strategy,
+      isMissingPart: failure.strategy === 'NUMBER_BONDS',
+    }));
   }
 
   /** Average response time (ms) for a strategy, from the persisted response log. */

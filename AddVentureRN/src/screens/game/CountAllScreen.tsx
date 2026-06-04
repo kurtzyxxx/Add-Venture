@@ -9,7 +9,7 @@ import { HintConfirmModal } from '../../components/HintConfirmModal';
 import { HintBox } from '../../components/HintBox';
 import { PulseView } from '../../components/animations/PulseView';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../../../App';
+import { AdaptiveProblem, RootStackParamList } from '../../../App';
 import { GameManager, MAX_ACTIVITIES_PER_SESSION } from '../../core/GameManager';
 import { Problem } from '../../core/ProblemGenerator';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -59,6 +59,22 @@ export default function CountAllScreen({ navigation }: Props) {
   const pendingHintAction = useRef<(() => void) | null>(null);
 
   useEffect(() => {
+    const gm = GameManager.getInstance();
+    if (gm.saveSystem.hasAdaptiveReviewPending('COUNT_ALL')) {
+      const pendingProblems = gm.saveSystem.getPendingAdaptiveReviewProblems('COUNT_ALL');
+      const incorrectProblems = pendingProblems.length > 0
+        ? pendingProblems
+        : gm.saveSystem.getLatestIncorrectProblemsForStrategy('COUNT_ALL');
+      navigation.replace('AdaptiveMode', {
+        strategy: 'COUNT_ALL',
+        targetRoute: 'CountAll',
+        incorrectProblems: incorrectProblems.length > 0
+          ? incorrectProblems
+          : [createFallbackCountAllAdaptiveProblem()],
+      });
+      return;
+    }
+
     AudioManager.speak('Count All! Help Oliver gather food! Count and drag the fruits to the basket!', {
       rate: 0.9,
       pitch: 1.3,
@@ -68,7 +84,7 @@ export default function CountAllScreen({ navigation }: Props) {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, []);
+  }, [navigation]);
 
   const resetTimer = (limit: number) => {
     setTimeLeft(limit);
@@ -331,7 +347,11 @@ export default function CountAllScreen({ navigation }: Props) {
     const gm = GameManager.getInstance();
     const incorrectProblems = gm.getSessionIncorrectProblems();
     const session = await gm.completeAndResetSession();
-    await gm.saveSystem.setAdaptiveReviewPending('COUNT_ALL', incorrectProblems.length > 0);
+    await gm.saveSystem.setAdaptiveReviewPending(
+      'COUNT_ALL',
+      incorrectProblems.length > 0,
+      incorrectProblems
+    );
     navigation.replace('SessionSummary', {
       stars: session.totalStars,
       activities: session.totalActivities,
@@ -368,7 +388,7 @@ export default function CountAllScreen({ navigation }: Props) {
 
       {/* Top Bar */}
       <View style={styles.topBar}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.circleButton}>
+        <TouchableOpacity onPress={() => navigation.replace('Home')} style={styles.circleButton}>
           <Text style={styles.backIcon}>{'<'}</Text>
         </TouchableOpacity>
 
@@ -614,6 +634,16 @@ const DraggableFruit = ({ fruit, onDrop, disabled }: any) => {
     </Animated.View>
   );
 };
+
+function createFallbackCountAllAdaptiveProblem(): AdaptiveProblem {
+  return {
+    num1: 1,
+    num2: 1,
+    correctAnswer: 2,
+    givenAnswer: 0,
+    strategy: 'COUNT_ALL',
+  };
+}
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({

@@ -285,7 +285,11 @@ export default function CountOnScreen({ navigation }: Props) {
     const gm = GameManager.getInstance();
     const incorrectProblems = gm.getSessionIncorrectProblems();
     const session = await gm.completeAndResetSession();
-    await gm.saveSystem.setAdaptiveReviewPending('COUNT_ON', incorrectProblems.length > 0);
+    await gm.saveSystem.setAdaptiveReviewPending(
+      'COUNT_ON',
+      incorrectProblems.length > 0,
+      incorrectProblems
+    );
     navigation.replace('SessionSummary', {
       stars: session.totalStars,
       activities: session.totalActivities,

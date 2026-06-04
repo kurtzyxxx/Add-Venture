@@ -84,7 +84,11 @@ export default function App() {
           <Stack.Screen name="CountOn" component={CountOnScreen} />
           <Stack.Screen name="NumberBonds" component={NumberBondsScreen} />
           <Stack.Screen name="SessionSummary" component={SessionSummaryScreen} />
-          <Stack.Screen name="AdaptiveMode" component={AdaptiveModeScreen} />
+          <Stack.Screen
+            name="AdaptiveMode"
+            component={AdaptiveModeScreen}
+            options={{ headerBackButtonMenuEnabled: false }}
+          />
         </Stack.Navigator>
       </NavigationContainer>
     </GestureHandlerRootView>

@@ -235,7 +235,11 @@ export default function NumberBondsScreen({ navigation }: Props) {
     const gm = GameManager.getInstance();
     const incorrectProblems = gm.getSessionIncorrectProblems();
     const session = await gm.completeAndResetSession();
-    await gm.saveSystem.setAdaptiveReviewPending('NUMBER_BONDS', incorrectProblems.length > 0);
+    await gm.saveSystem.setAdaptiveReviewPending(
+      'NUMBER_BONDS',
+      incorrectProblems.length > 0,
+      incorrectProblems
+    );
     navigation.replace('SessionSummary', {
       stars: session.totalStars,
       activities: session.totalActivities,

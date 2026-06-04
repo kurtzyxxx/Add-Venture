@@ -23,17 +23,14 @@ const STRATEGY_LABELS: Record<string, string> = {
   NUMBER_BONDS: 'Number Bonds',
 };
 
-const ROUTE_STRATEGIES: Record<'CountAll' | 'CountOn' | 'NumberBonds', string> = {
-  CountAll: 'COUNT_ALL',
-  CountOn: 'COUNT_ON',
-  NumberBonds: 'NUMBER_BONDS',
-};
-
 const STRATEGY_ROUTES: Record<string, 'CountAll' | 'CountOn' | 'NumberBonds'> = {
   COUNT_ALL: 'CountAll',
   COUNT_ON: 'CountOn',
   NUMBER_BONDS: 'NumberBonds',
 };
+
+const ADAPTIVE_INTRO_NARRATION =
+  'You are entering Adaptive Mode. Let us review the questions you missed before the next level.';
 
 const FRUITS = ['🍎', '🍌', '🍇', '🍉', '🍓', '🍑', '🍍', '🍊'];
 
@@ -54,39 +51,116 @@ export default function AdaptiveModeScreen({ route, navigation }: Props) {
   const [reviewFruitsIndex, setReviewFruitsIndex] = useState(-1);
   const [isIntroVisible, setIsIntroVisible] = useState(true);
   const [isReviewFinished, setIsReviewFinished] = useState(false);
-  const canLeaveRef = React.useRef(false);
+  const introProgress = React.useRef(new Animated.Value(0)).current;
+
+  const reviewSourceProblems = React.useMemo(() => {
+    if (incorrectProblems.length > 0) return incorrectProblems;
+
+    const saveSystem = GameManager.getInstance().saveSystem;
+    const pendingProblems = saveSystem.getPendingAdaptiveReviewProblems(strategy);
+    if (pendingProblems.length > 0) return pendingProblems;
+
+    const latestProblems = saveSystem.getLatestIncorrectProblemsForStrategy(strategy);
+    return latestProblems.length > 0
+      ? latestProblems
+      : [createFallbackAdaptiveProblem(strategy)];
+  }, [incorrectProblems, strategy]);
 
   const reviewProblems = React.useMemo(() => {
-    return [...incorrectProblems, ...incorrectProblems];
-  }, [incorrectProblems]);
+    return [...reviewSourceProblems, ...reviewSourceProblems];
+  }, [reviewSourceProblems]);
 
   const currentProblem = reviewProblems[currentIndex];
+  const profile = GameManager.getInstance().saveSystem.getProfile();
 
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('beforeRemove', event => {
-      if (canLeaveRef.current) return;
-      event.preventDefault();
-    });
-    const backSubscription = BackHandler.addEventListener('hardwareBackPress', () => true);
+  const handleBackToMap = React.useCallback(async () => {
+    AudioManager.stopSpeech();
+    if (!isReviewFinished) {
+      await GameManager.getInstance().saveSystem.setAdaptiveReviewPending(
+        strategy,
+        true,
+        reviewSourceProblems
+      );
+    }
+    navigation.replace('Home');
+  }, [isReviewFinished, navigation, reviewSourceProblems, strategy]);
 
-    return () => {
-      unsubscribe();
-      backSubscription.remove();
-    };
+  const handleCompletedBackToMap = React.useCallback(() => {
+    AudioManager.stopSpeech();
+    navigation.replace('Home');
   }, [navigation]);
 
   useEffect(() => {
+    GameManager.getInstance().saveSystem.setAdaptiveReviewPending(
+      strategy,
+      true,
+      reviewSourceProblems
+    );
+  }, [reviewSourceProblems, strategy]);
+
+  useEffect(() => {
+    const backSubscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      handleBackToMap();
+      return true;
+    });
+
+    return () => {
+      backSubscription.remove();
+    };
+  }, [handleBackToMap]);
+
+  useEffect(() => {
+    let isActive = true;
+    let introSpeechTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const showQuestions = () => {
+      if (isActive) {
+        setIsIntroVisible(false);
+      }
+    };
+
+    const finishIntro = () => {
+      if (!isActive) return;
+      introProgress.stopAnimation();
+      Animated.timing(introProgress, {
+        toValue: 1,
+        duration: 180,
+        useNativeDriver: false,
+      }).start(showQuestions);
+    };
+
     AudioManager.stopSpeech();
-    const introTimer = setTimeout(() => setIsIntroVisible(false), 2600);
-    setTimeout(() => {
+    introProgress.setValue(0);
+    introSpeechTimer = setTimeout(() => {
+      if (!AudioManager.getSettings().soundsEnabled) {
+        introProgress.setValue(1);
+        showQuestions();
+        return;
+      }
+
+      Animated.timing(introProgress, {
+        toValue: 1,
+        duration: getEstimatedSpeechDurationMs(ADAPTIVE_INTRO_NARRATION, 0.9),
+        useNativeDriver: false,
+      }).start();
+
       AudioManager.speak(
-        'You are entering Adaptive Mode. Let us review the questions you missed before the next level.',
-        { rate: 0.9, pitch: 1.2 }
+        ADAPTIVE_INTRO_NARRATION,
+        {
+          rate: 0.9,
+          pitch: 1.2,
+          onDone: finishIntro,
+          onError: finishIntro,
+        }
       );
     }, 300);
 
-    return () => clearTimeout(introTimer);
-  }, []);
+    return () => {
+      isActive = false;
+      if (introSpeechTimer) clearTimeout(introSpeechTimer);
+      introProgress.stopAnimation();
+    };
+  }, [introProgress]);
 
   useEffect(() => {
     if (isIntroVisible) return;
@@ -148,6 +222,19 @@ export default function AdaptiveModeScreen({ route, navigation }: Props) {
     AudioManager.speak('Fruits reset.', { rate: 0.95, pitch: 1.25 });
   };
 
+  const handleDroppedFruitPress = (fruitId: string) => {
+    const droppedFruits = reviewFruits.filter(fruit => fruit.dropped);
+    const fruitIndex = droppedFruits.findIndex(fruit => fruit.id === fruitId);
+    if (fruitIndex === -1) return;
+
+    const countForSpeech = strategy === 'COUNT_ON'
+      ? getCountOnBase(currentProblem) + fruitIndex + 1
+      : fruitIndex + 1;
+
+    AudioManager.stopSpeech();
+    AudioManager.speak(`${countForSpeech}`, { rate: 0.9, pitch: 1.3 });
+  };
+
   const handleNext = async () => {
     if (currentIndex < reviewProblems.length - 1) {
       setCurrentIndex(prev => prev + 1);
@@ -161,10 +248,6 @@ export default function AdaptiveModeScreen({ route, navigation }: Props) {
 
   if (!currentProblem || isReviewFinished) {
     if (!isReviewFinished && !currentProblem) {
-      const gm = GameManager.getInstance();
-      gm.saveSystem.setAdaptiveReviewPending(strategy, false).then(() => {
-        setIsReviewFinished(true);
-      });
       return null;
     }
 
@@ -176,6 +259,28 @@ export default function AdaptiveModeScreen({ route, navigation }: Props) {
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
         />
+        <View style={styles.topBar}>
+          <TouchableOpacity
+            onPress={handleCompletedBackToMap}
+            style={styles.circleButton}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel="Back to map"
+          >
+            <Text style={styles.backIcon}>{'<'}</Text>
+          </TouchableOpacity>
+
+          <View style={styles.topCenter}>
+            <Text style={styles.activityProgress}>Review Complete</Text>
+          </View>
+
+          <View style={styles.badgesContainer}>
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>⭐ {profile.totalStars}</Text>
+            </View>
+          </View>
+        </View>
+
         <View style={styles.introWrap}>
           <View style={styles.introBadge}>
             <Text style={styles.introIcon}>🎉</Text>
@@ -192,23 +297,11 @@ export default function AdaptiveModeScreen({ route, navigation }: Props) {
                 const gm = GameManager.getInstance();
                 const nextRoute = STRATEGY_ROUTES[strategy] || targetRoute;
                 gm.startSession(strategy);
-                canLeaveRef.current = true;
                 navigation.replace(nextRoute);
               }}
               activeOpacity={0.85}
             >
               <Text style={styles.primaryBtnText}>Proceed to Next Session</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.secondaryBtn}
-              onPress={() => {
-                canLeaveRef.current = true;
-                navigation.replace('Home');
-              }}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.secondaryBtnText}>🏠 Back to Map</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -232,6 +325,28 @@ export default function AdaptiveModeScreen({ route, navigation }: Props) {
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
         />
+        <View style={styles.topBar}>
+          <TouchableOpacity
+            onPress={handleBackToMap}
+            style={styles.circleButton}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel="Back to map"
+          >
+            <Text style={styles.backIcon}>{'<'}</Text>
+          </TouchableOpacity>
+
+          <View style={styles.topCenter}>
+            <Text style={styles.activityProgress}>Adaptive Mode</Text>
+          </View>
+
+          <View style={styles.badgesContainer}>
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>⭐ {profile.totalStars}</Text>
+            </View>
+          </View>
+        </View>
+
         <View style={styles.introWrap}>
           <View style={styles.introBadge}>
             <Text style={styles.introIcon}>✨</Text>
@@ -242,7 +357,17 @@ export default function AdaptiveModeScreen({ route, navigation }: Props) {
             Review the questions you missed before moving to the next level.
           </Text>
           <View style={styles.introLoadingTrack}>
-            <View style={styles.introLoadingFill} />
+            <Animated.View
+              style={[
+                styles.introLoadingFill,
+                {
+                  width: introProgress.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: ['0%', '100%'],
+                  }),
+                },
+              ]}
+            />
           </View>
         </View>
       </SafeAreaView>
@@ -258,91 +383,134 @@ export default function AdaptiveModeScreen({ route, navigation }: Props) {
         end={{ x: 1, y: 1 }}
       />
 
-      <View style={styles.progressPill}>
-        <Text style={styles.progressText}>
-          Review {currentIndex + 1}/{reviewProblems.length} · {STRATEGY_LABELS[strategy] ?? strategy}
-        </Text>
-      </View>
+      <View style={styles.topBar}>
+        <TouchableOpacity
+          onPress={handleBackToMap}
+          style={styles.circleButton}
+          activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel="Back to map"
+        >
+          <Text style={styles.backIcon}>{'<'}</Text>
+        </TouchableOpacity>
 
-      <View style={styles.questionCard}>
-        <Text style={styles.questionLabel}>
-          {isNumberBond ? 'Find the missing part' : 'Solve this again'}
-        </Text>
-        <Text style={styles.equation}>{prompt}</Text>
-      </View>
-
-      {requiresDrag && (
-        <ReviewDragArea
-          strategy={strategy}
-          problem={currentProblem}
-          fruits={reviewFruits}
-          onDropFruit={handleDropFruit}
-          onResetFruits={handleResetFruits}
-        />
-      )}
-
-      <View style={styles.optionsContainer}>
-        {options.map((opt, index) => (
-          <TouchableOpacity
-            key={opt}
-            style={[
-              styles.optionButton,
-              { backgroundColor: optionColors[index % optionColors.length] },
-              selectedAnswer === opt && styles.optionSelected,
-            ]}
-            onPress={() => {
-              if (!canSelectAnswer) return;
-              setSelectedAnswer(opt);
-              setFeedback(null);
-            }}
-            disabled={!canSelectAnswer}
-            activeOpacity={0.8}
-          >
-            <View style={styles.optionInner}>
-              <Text style={styles.optionText}>{opt}</Text>
-            </View>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {feedback && (
-        <View style={[styles.feedbackBox, feedback === 'correct' ? styles.correctBox : styles.incorrectBox]}>
-          <Text style={styles.feedbackText}>
-            {feedback === 'correct'
-              ? 'Correct! You can continue.'
-              : 'Try again before moving on.'}
+        <View style={styles.topCenter}>
+          <Text style={styles.activityProgress}>
+            Review {currentIndex + 1}/{reviewProblems.length}
           </Text>
+          <Text style={styles.strategyProgress}>{STRATEGY_LABELS[strategy] ?? strategy}</Text>
         </View>
-      )}
 
-      <TouchableOpacity
-        style={[
-          styles.actionBtn,
-          {
-            backgroundColor:
-              feedback === 'correct'
-                ? '#43A047'
-                : canSubmit
-                ? '#FFCA28'
-                : '#9E9E9E',
-          },
-        ]}
-        onPress={() => {
-          if (canSubmit) handleSubmit();
-        }}
-        disabled={!canSubmit}
-        activeOpacity={0.85}
-      >
-        <Text style={styles.actionText}>
-          {feedback === 'correct'
-            ? currentIndex < reviewProblems.length - 1
-              ? 'Loading Next Review...'
-              : 'Completing Review...'
-            : 'Check Answer'}
-        </Text>
-      </TouchableOpacity>
+        <View style={styles.badgesContainer}>
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>⭐ {profile.totalStars}</Text>
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.content}>
+        <View style={styles.questionCard}>
+          <Text style={styles.questionLabel}>
+            {isNumberBond ? 'Find the missing part' : 'Solve this again'}
+          </Text>
+          <Text style={styles.equation}>{prompt}</Text>
+        </View>
+
+        {requiresDrag && (
+          <ReviewDragArea
+            strategy={strategy}
+            problem={currentProblem}
+            fruits={reviewFruits}
+            onDropFruit={handleDropFruit}
+            onDroppedFruitPress={handleDroppedFruitPress}
+            onResetFruits={handleResetFruits}
+          />
+        )}
+
+        <View style={styles.optionsContainer}>
+          {options.map((opt, index) => (
+            <TouchableOpacity
+              key={opt}
+              style={[
+                styles.optionButton,
+                { backgroundColor: optionColors[index % optionColors.length] },
+                selectedAnswer === opt && styles.optionSelected,
+              ]}
+              onPress={() => {
+                if (!canSelectAnswer) return;
+                setSelectedAnswer(opt);
+                setFeedback(null);
+              }}
+              disabled={!canSelectAnswer}
+              activeOpacity={0.8}
+            >
+              <View style={styles.optionInner}>
+                <Text style={styles.optionText}>{opt}</Text>
+              </View>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {feedback && (
+          <View style={[styles.feedbackBox, feedback === 'correct' ? styles.correctBox : styles.incorrectBox]}>
+            <Text style={styles.feedbackText}>
+              {feedback === 'correct'
+                ? 'Correct! You can continue.'
+                : 'Try again before moving on.'}
+            </Text>
+          </View>
+        )}
+
+        <TouchableOpacity
+          style={[
+            styles.actionBtn,
+            {
+              backgroundColor:
+                feedback === 'correct'
+                  ? '#43A047'
+                  : canSubmit
+                  ? '#FFCA28'
+                  : '#9E9E9E',
+            },
+          ]}
+          onPress={() => {
+            if (canSubmit) handleSubmit();
+          }}
+          disabled={!canSubmit}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.actionText}>
+            {feedback === 'correct'
+              ? currentIndex < reviewProblems.length - 1
+                ? 'Loading Next Review...'
+                : 'Completing Review...'
+              : 'Check Answer'}
+          </Text>
+        </TouchableOpacity>
+      </View>
     </SafeAreaView>
   );
+}
+
+function createFallbackAdaptiveProblem(strategy: string): AdaptiveProblem {
+  if (strategy === 'NUMBER_BONDS') {
+    return {
+      num1: 2,
+      num2: 1,
+      correctAnswer: 1,
+      givenAnswer: 0,
+      strategy,
+      isMissingPart: true,
+    };
+  }
+
+  return {
+    num1: 1,
+    num2: 1,
+    correctAnswer: 2,
+    givenAnswer: 0,
+    strategy,
+  };
 }
 
 function ReviewDragArea({
@@ -350,12 +518,14 @@ function ReviewDragArea({
   problem,
   fruits,
   onDropFruit,
+  onDroppedFruitPress,
   onResetFruits,
 }: {
   strategy: string;
   problem: AdaptiveProblem;
   fruits: ReviewFruit[];
   onDropFruit: (fruitId: string) => void;
+  onDroppedFruitPress: (fruitId: string) => void;
   onResetFruits: () => void;
 }) {
   const droppedFruits = fruits.filter(fruit => fruit.dropped);
@@ -388,9 +558,16 @@ function ReviewDragArea({
             </View>
           </View>
           {droppedFruits.map(fruit => (
-            <View key={fruit.id} style={styles.droppedFruitWrapper}>
+            <TouchableOpacity
+              key={fruit.id}
+              onPress={() => onDroppedFruitPress(fruit.id)}
+              activeOpacity={0.75}
+              accessibilityRole="button"
+              accessibilityLabel="Hear this fruit number"
+              style={styles.droppedFruitWrapper}
+            >
               <Text style={styles.fruitEmoji}>{fruit.emoji}</Text>
-            </View>
+            </TouchableOpacity>
           ))}
           {droppedFruits.length === 0 && <Text style={styles.dropHint}>Drop fruits here</Text>}
         </View>
@@ -427,9 +604,16 @@ function ReviewDragArea({
           </TouchableOpacity>
         )}
         {droppedFruits.map(fruit => (
-          <View key={fruit.id} style={styles.countAllDroppedFruitWrapper}>
+          <TouchableOpacity
+            key={fruit.id}
+            onPress={() => onDroppedFruitPress(fruit.id)}
+            activeOpacity={0.75}
+            accessibilityRole="button"
+            accessibilityLabel="Hear this fruit number"
+            style={styles.countAllDroppedFruitWrapper}
+          >
             <Text style={styles.fruitEmoji}>{fruit.emoji}</Text>
-          </View>
+          </TouchableOpacity>
         ))}
         {droppedFruits.length === 0 && <Text style={styles.countAllDropHint}>Drag all fruits here to count!</Text>}
       </View>
@@ -577,8 +761,14 @@ function shuffleOptions(options: number[]): number[] {
   return shuffled;
 }
 
+function getEstimatedSpeechDurationMs(text: string, rate: number): number {
+  const words = text.trim().split(/\s+/).filter(Boolean).length;
+  const wordsPerMinute = 145 * Math.max(rate, 0.5);
+  return Math.max(1800, Math.round((words / wordsPerMinute) * 60_000));
+}
+
 const styles = StyleSheet.create({
-  container: { flex: 1, paddingHorizontal: 20, paddingTop: 28, paddingBottom: 24 },
+  container: { flex: 1, backgroundColor: '#A5D6A7' },
   completionActions: {
     marginTop: 40,
     width: '100%',
@@ -661,7 +851,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   introLoadingFill: {
-    width: '68%',
     height: '100%',
     borderRadius: 5,
     backgroundColor: '#FFCA28',
@@ -691,17 +880,31 @@ const styles = StyleSheet.create({
     marginTop: 10,
     textAlign: 'center',
   },
-  progressPill: {
-    alignSelf: 'center',
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderColor: 'rgba(255,255,255,0.45)',
-    borderRadius: 18,
-    borderWidth: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    marginBottom: 18,
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 20,
+    zIndex: 10,
   },
-  progressText: { color: '#FFF', fontSize: 14, fontWeight: '900' },
+  circleButton: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#FFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 2,
+    zIndex: 5,
+  },
+  backIcon: { fontSize: 28, fontWeight: 'bold', color: '#4E342E' },
+  topCenter: { alignItems: 'center', flex: 1 },
+  activityProgress: { fontSize: 13, fontWeight: 'bold', color: '#4E342E', opacity: 0.75 },
+  strategyProgress: { fontSize: 16, fontWeight: '900', color: '#4E342E' },
+  badgesContainer: { flexDirection: 'row', minWidth: 50, justifyContent: 'flex-end' },
+  badge: { backgroundColor: '#FFF', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 15, elevation: 2 },
+  badgeText: { fontWeight: 'bold', color: '#FF9800' },
+  content: { flex: 1, paddingHorizontal: 20 },
   questionCard: {
     backgroundColor: 'rgba(255,255,255,0.96)',
     borderRadius: 8,
