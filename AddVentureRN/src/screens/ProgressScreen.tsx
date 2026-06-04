@@ -31,6 +31,10 @@ export default function ProgressScreen({ navigation }: Props) {
   const [coCompleted, setCoCompleted] = useState(0);
   const [nbCompleted, setNbCompleted] = useState(0);
 
+  const [caLevel, setCaLevel] = useState(1);
+  const [coLevel, setCoLevel] = useState(1);
+  const [nbLevel, setNbLevel] = useState(1);
+
   const [caAvgMs, setCaAvgMs] = useState(0);
   const [coAvgMs, setCoAvgMs] = useState(0);
   const [nbAvgMs, setNbAvgMs] = useState(0);
@@ -73,6 +77,10 @@ export default function ProgressScreen({ navigation }: Props) {
     setCaCompleted(ca.completedActivities);
     setCoCompleted(co.completedActivities);
     setNbCompleted(nb.completedActivities);
+
+    setCaLevel(Math.floor(ca.currentDifficulty));
+    setCoLevel(Math.floor(co.currentDifficulty));
+    setNbLevel(Math.floor(nb.currentDifficulty));
 
     setCaAvgMs(gm.saveSystem.getAverageResponseTime('COUNT_ALL'));
     setCoAvgMs(gm.saveSystem.getAverageResponseTime('COUNT_ON'));
@@ -134,15 +142,15 @@ export default function ProgressScreen({ navigation }: Props) {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>📈 Strategy Progress</Text>
           <ProgressBar
-            label="Count All" emoji="⭐" progress={Math.min(1, caCompleted / BAR_MAX)}
+            label={`Count All (Level ${caLevel})`} emoji="⭐" progress={Math.min(1, caLevel / 9)}
             accuracy={caAcc} completed={caCompleted} barColor="#66BB6A" unlocked
           />
           <ProgressBar
-            label="Count On" emoji="⚡" progress={Math.min(1, coCompleted / BAR_MAX)}
+            label={`Count On (Level ${coLevel})`} emoji="⚡" progress={Math.min(1, coLevel / 9)}
             accuracy={coAcc} completed={coCompleted} barColor="#29B6F6" unlocked={countOnUnlocked}
           />
           <ProgressBar
-            label="Number Bonds" emoji="🔗" progress={Math.min(1, nbCompleted / BAR_MAX)}
+            label={`Number Bonds (Level ${nbLevel})`} emoji="🔗" progress={Math.min(1, nbLevel / 9)}
             accuracy={nbAcc} completed={nbCompleted} barColor="#FF7043" unlocked={numberBondsUnlocked}
           />
           {!countOnUnlocked && (
@@ -165,37 +173,6 @@ export default function ProgressScreen({ navigation }: Props) {
           )}
         </View>
 
-        {/* Accuracy Summary */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>🎯 Accuracy</Text>
-          <View style={styles.accuracyRow}>
-            <AccuracyDot label="Count All" value={caAcc} color="#66BB6A" />
-            <AccuracyDot label="Count On" value={coAcc} color="#29B6F6" unlocked={countOnUnlocked} />
-            <AccuracyDot label="Number Bonds" value={nbAcc} color="#FF7043" unlocked={numberBondsUnlocked} />
-          </View>
-        </View>
-
-        {/* ── NEW: Response Time Section ─────────────────────────────────── */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>⏱ Response Time</Text>
-          <Text style={styles.cardSubtitle}>Target: under 20 seconds per answer</Text>
-
-          <ResponseTimeBar label="Count All" avgMs={caAvgMs} color="#66BB6A" unlocked />
-          <ResponseTimeBar label="Count On" avgMs={coAvgMs} color="#29B6F6" unlocked={countOnUnlocked} />
-          <ResponseTimeBar label="Number Bonds" avgMs={nbAvgMs} color="#FF7043" unlocked={numberBondsUnlocked} />
-
-          {/* Fast streak */}
-          <View style={styles.fastStreakRow}>
-            <Text style={styles.fastStreakIcon}>⚡</Text>
-            <View style={styles.fastStreakText}>
-              <Text style={styles.fastStreakTitle}>Fast Streak</Text>
-              <Text style={styles.fastStreakValue}>
-                {fastStreak} consecutive answers under 20s
-              </Text>
-            </View>
-          </View>
-        </View>
-
         {/* ── NEW: Session History Section ───────────────────────────────── */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>📅 Recent Sessions</Text>
@@ -206,31 +183,14 @@ export default function ProgressScreen({ navigation }: Props) {
           )}
         </View>
 
-        {/* ── NEW: Misconceptions / Focus Areas ─────────────────────────── */}
-        {allMisconceptions.length > 0 && (
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>🎯 Focus Areas</Text>
-            <Text style={styles.cardSubtitle}>Problems you've found tricky — keep practicing!</Text>
-            {allMisconceptions.map((m, i) => {
-              const stratInfo = STRATEGY_LABELS[m.strategy];
-              return (
-                <View key={i} style={styles.misconceptionRow}>
-                  <Text style={styles.misconceptionEmoji}>{stratInfo?.emoji ?? '❓'}</Text>
-                  <View style={styles.misconceptionInfo}>
-                    <Text style={styles.misconceptionCombo}>{m.combo}</Text>
-                    <Text style={styles.misconceptionStrategy}>{stratInfo?.label ?? m.strategy}</Text>
-                  </View>
-                  <View style={[styles.misconceptionBadge, { backgroundColor: stratInfo?.color ?? '#9E9E9E' }]}>
-                    <Text style={styles.misconceptionBadgeText}>{m.failCount}×</Text>
-                  </View>
-                </View>
-              );
-            })}
-            <Text style={styles.focusEncouragement}>
-              💪 Keep practicing these — you'll get them!
-            </Text>
-          </View>
-        )}
+        {/* ── Advanced Analytics Button ──────────────────────────────────── */}
+        <TouchableOpacity
+          style={styles.analyticsBtn}
+          onPress={() => navigation.navigate('AdvancedAnalytics')}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.analyticsBtnText}>📊 View Advanced Analytics</Text>
+        </TouchableOpacity>
 
         {/* Back Button */}
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
@@ -287,7 +247,7 @@ function ProgressBar({ label, emoji, progress, accuracy, completed, barColor, un
           <View style={[pbStyles.fill, { width: `${unlocked ? Math.round(progress * 100) : 0}%`, backgroundColor: unlocked ? barColor : '#BDBDBD' }]} />
         </View>
         <Text style={pbStyles.completed}>
-          {unlocked ? `${completed} activities completed` : 'Locked — complete previous stage first'}
+          {unlocked ? `${completed} correct answers` : 'Locked — complete previous stage first'}
         </Text>
       </View>
     </View>
@@ -393,6 +353,22 @@ const styles = StyleSheet.create({
   navItem: { alignItems: 'center', justifyContent: 'center', padding: 10 },
   navIcon: { fontSize: 24, marginBottom: 3 },
   navText: { fontSize: 12, fontWeight: 'bold', color: '#616161' },
+  analyticsBtn: {
+    marginHorizontal: 16,
+    backgroundColor: '#7E57C2',
+    paddingVertical: 16,
+    borderRadius: 20,
+    alignItems: 'center',
+    marginBottom: 20,
+    elevation: 4,
+    borderWidth: 2,
+    borderColor: '#9575CD',
+  },
+  analyticsBtnText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '900',
+  }
 });
 
 const badgeStyles = StyleSheet.create({

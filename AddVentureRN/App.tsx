@@ -15,6 +15,7 @@ import CountOnScreen from './src/screens/game/CountOnScreen';
 import NumberBondsScreen from './src/screens/game/NumberBondsScreen';
 import SessionSummaryScreen from './src/screens/SessionSummaryScreen';
 import AdaptiveModeScreen from './src/screens/AdaptiveModeScreen';
+import AdvancedAnalyticsScreen from './src/screens/AdvancedAnalyticsScreen';
 
 export type AdaptiveProblem = {
   num1: number;
@@ -46,6 +47,7 @@ export type RootStackParamList = {
     targetRoute: 'CountAll' | 'CountOn' | 'NumberBonds';
     incorrectProblems: AdaptiveProblem[];
   };
+  AdvancedAnalytics: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -89,6 +91,7 @@ export default function App() {
             component={AdaptiveModeScreen}
             options={{ headerBackButtonMenuEnabled: false }}
           />
+          <Stack.Screen name="AdvancedAnalytics" component={AdvancedAnalyticsScreen} />
         </Stack.Navigator>
       </NavigationContainer>
     </GestureHandlerRootView>
