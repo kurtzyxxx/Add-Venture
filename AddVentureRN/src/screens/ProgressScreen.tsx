@@ -66,8 +66,8 @@ export default function ProgressScreen({ navigation }: Props) {
     setStreakUnlocked(profile.consecutiveCorrect >= 5);
   };
 
-  // Progress bar max reference (30 activities per stage feels full)
-  const BAR_MAX = 30;
+  // Progress bar max reference (10 activities per stage feels full)
+  const BAR_MAX = 10;
   const caProgress = Math.min(1, countAllCompleted / BAR_MAX);
   const coProgress = Math.min(1, countOnCompleted / BAR_MAX);
   const nbProgress = Math.min(1, numberBondsCompleted / BAR_MAX);
@@ -173,6 +173,14 @@ export default function ProgressScreen({ navigation }: Props) {
           )}
         </View>
 
+        {/* Parent Dashboard Button */}
+        <TouchableOpacity 
+          style={[styles.backBtn, { backgroundColor: '#4A148C', borderColor: '#7B1FA2', marginBottom: 12 }]} 
+          onPress={() => navigation.navigate('PerformanceDashboard')}
+        >
+          <Text style={[styles.backBtnText, { color: '#E1BEE7' }]}>📊 Parent Dashboard</Text>
+        </TouchableOpacity>
+
         {/* Back Button */}
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
           <Text style={styles.backBtnText}>← Back to Map</Text>
@@ -224,7 +232,7 @@ function ProgressBar({ label, emoji, progress, accuracy, completed, barColor, un
       <View style={pbStyles.info}>
         <View style={pbStyles.labelRow}>
           <Text style={pbStyles.label}>{label}</Text>
-          <Text style={pbStyles.accuracy}>{unlocked ? `${accuracy}%` : '—'}</Text>
+          <Text style={pbStyles.accuracy}>{unlocked ? `${Math.round(progress * 100)}%` : '—'}</Text>
         </View>
         <View style={pbStyles.track}>
           <View

@@ -32,4 +32,28 @@ export class HintManager {
     const randomIndex = Math.floor(Math.random() * pool.length);
     return pool[randomIndex];
   }
+  public triggerHint(): void {
+    console.log("[HintManager] Hint triggered.");
+    this.provideInstructionalGuidance();
+    this.provideVisualPrompt();
+  }
+
+  // --- UML Sequence Diagram Methods ---
+  public detectIncorrectResponse(): void {
+    console.log("[HintManager] Incorrect response detected. Querying attempt record.");
+    this.provideVisualPrompt();
+    this.provideInstructionalGuidance();
+  }
+
+  public provideHintBeforeRetry(): void {
+    console.log("[HintManager] Providing hint before retry attempt.");
+  }
+
+  public provideVisualPrompt(): void {
+    console.log("[HintManager] Providing visual prompt to learner.");
+  }
+
+  public provideInstructionalGuidance(): void {
+    console.log("[HintManager] Providing instructional guidance to learner.");
+  }
 }

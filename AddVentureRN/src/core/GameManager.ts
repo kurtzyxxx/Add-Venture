@@ -1,36 +1,42 @@
 import { SaveSystem, LearnerProfile, SessionRecord, ProgressRecord } from './SaveSystem';
-import { DifficultyEngine } from './DifficultyEngine';
 import { HintManager } from './HintManager';
 import { FeedbackManager } from './FeedbackManager';
-import { ProblemGenerator, CountAllGenerator, CountOnGenerator, NumberBondsGenerator, Problem } from './ProblemGenerator';
+import { Problem } from './ProblemGenerator';
 import * as Speech from 'expo-speech';
+import { SessionManager, MAX_ACTIVITIES_PER_SESSION } from './managers/SessionManager';
+import { ProgressTracker } from './managers/ProgressTracker';
+import { ActivityLevelManager } from './managers/ActivityLevelManager';
+import { ActivityManager } from './managers/ActivityManager';
 
-export const MAX_ACTIVITIES_PER_SESSION = 10;
+export { MAX_ACTIVITIES_PER_SESSION };
 
+/**
+ * GameManager now acts as a Facade to prevent breaking changes in the UI layer 
+ * while the new architecture is fully adopted.
+ * Ideally, UI components should migrate to using SessionManager and ActivityViewModel directly.
+ */
 export class GameManager {
   private static instance: GameManager;
 
   public saveSystem: SaveSystem;
-  public difficultyEngine: DifficultyEngine;
   public hintManager: HintManager;
   public feedbackManager: FeedbackManager;
-
-  private generators: Record<string, ProblemGenerator>;
+  
+  public sessionManager: SessionManager;
+  public progressTracker: ProgressTracker;
+  public levelManager: ActivityLevelManager;
 
   public currentStrategy: string = 'COUNT_ALL';
   private sessionStartTime: number = 0;
 
   private constructor() {
     this.saveSystem = new SaveSystem();
-    this.difficultyEngine = new DifficultyEngine();
     this.hintManager = new HintManager();
     this.feedbackManager = new FeedbackManager();
-
-    this.generators = {
-      'COUNT_ALL': new CountAllGenerator(),
-      'COUNT_ON': new CountOnGenerator(),
-      'NUMBER_BONDS': new NumberBondsGenerator()
-    };
+    
+    this.progressTracker = new ProgressTracker(this.saveSystem);
+    this.levelManager = new ActivityLevelManager();
+    this.sessionManager = new SessionManager(this.saveSystem, this.progressTracker, this.levelManager);
   }
 
   public static getInstance(): GameManager {
@@ -47,28 +53,30 @@ export class GameManager {
   public startSession(strategy: string): void {
     this.currentStrategy = strategy;
     this.sessionStartTime = Date.now();
-    // Session state is now pulled from SaveSystem, so we just set the strategy
+    this.sessionManager.startSession(strategy);
   }
 
   public generateProblem(): Problem {
-    const profile = this.saveSystem.getProfile();
-    const generator = this.generators[this.currentStrategy];
-    if (!generator) throw new Error("Invalid strategy: " + this.currentStrategy);
-    return generator.generateProblem(profile.currentDifficulty);
+    // Generate a problem using the new ActivityManager if a session is active
+    try {
+      return this.sessionManager.getActivityManager().startNewActivity();
+    } catch(e) {
+      // Fallback for legacy access without starting a session
+      this.startSession(this.currentStrategy);
+      return this.sessionManager.getActivityManager().startNewActivity();
+    }
   }
 
   private getCurrentProgress(): ProgressRecord {
     return this.saveSystem.getProgress(this.currentStrategy);
   }
 
-  /** Returns how many activities have been completed in the current 10-activity batch */
   public getSessionActivityCount(): number {
-    return this.getCurrentProgress().sessionActivitiesCount;
+    return this.sessionManager.getSessionActivityCount();
   }
 
-  /** Returns true when the session has reached the 10-activity cap */
   public isSessionComplete(): boolean {
-    return this.getSessionActivityCount() >= MAX_ACTIVITIES_PER_SESSION;
+    return this.sessionManager.isSessionComplete();
   }
 
   public static starsForTry(tryNumber: number, isCorrect: boolean): number {
@@ -83,35 +91,25 @@ export class GameManager {
     tryNumber: number,
     responseTimeMs: number
   ): Promise<{ feedback: string; starsEarned: number }> {
-    const profile = this.saveSystem.getProfile();
-    const starsEarned = GameManager.starsForTry(tryNumber, isCorrect);
-
+    // Determine the actual answer value based on what would be correct if isCorrect is true,
+    // Since the original signature only passed 'isCorrect', we have to simulate passing an answer to the new system.
+    const activityManager = this.sessionManager.getActivityManager();
+    const problem = activityManager.getCurrentProblem();
+    
     if (isCorrect) {
       this.playSuccessSound();
-      profile.consecutiveCorrect++;
-      profile.consecutiveWrong = 0;
-      profile.totalStars += starsEarned;
-    } else {
-      profile.consecutiveCorrect = 0;
-      profile.consecutiveWrong++;
+    }
+    
+    let answer = 0;
+    if (problem) {
+        answer = isCorrect ? problem.correctAnswer : problem.correctAnswer + 1; // dummy wrong answer
     }
 
-    const activityResolved = isCorrect || tryNumber >= 3;
-    if (activityResolved) {
-      profile.currentDifficulty = this.difficultyEngine.evaluatePerformance(
-        profile.currentDifficulty,
-        isCorrect,
-        responseTimeMs
-      );
-      await this.saveSystem.saveProfile(profile);
-      await this.saveSystem.recordActivity(this.currentStrategy, isCorrect, starsEarned, tryNumber);
-    } else {
-      await this.saveSystem.saveProfile(profile);
-    }
-
+    const result = await activityManager.submitAnswer(answer);
+    
     return {
-      feedback: this.feedbackManager.getFeedback(isCorrect),
-      starsEarned
+      feedback: result.feedback,
+      starsEarned: result.starsEarned
     };
   }
 
@@ -128,22 +126,7 @@ export class GameManager {
     }
   }
 
-  /** 
-   * Call this ONLY when finishing a full 10-activity session.
-   * Returns stats for the summary screen, then resets the batch counters.
-   */
   public async completeAndResetSession(): Promise<SessionRecord> {
-    const p = this.getCurrentProgress();
-    const summary: SessionRecord = {
-      strategy: this.currentStrategy,
-      totalActivities: p.sessionActivitiesCount,
-      totalStars: p.sessionStarsCount,
-      totalCorrect: p.sessionCorrectCount,
-      totalAttempts: p.sessionActivitiesCount, // In a batch, attempts = activities
-      startedAt: this.sessionStartTime
-    };
-    
-    await this.saveSystem.completeAndResetSession(this.currentStrategy);
-    return summary;
+    return await this.sessionManager.completeAndResetSession();
   }
 }

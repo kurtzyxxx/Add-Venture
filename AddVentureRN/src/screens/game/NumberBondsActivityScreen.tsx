@@ -9,18 +9,19 @@ import { GameManager, MAX_ACTIVITIES_PER_SESSION } from '../../core/GameManager'
 import { Problem } from '../../core/ProblemGenerator';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Speech from 'expo-speech';
-import { IncorrectModal } from '../../components/IncorrectModal';
+import { RetryActivityScreen } from '../../components/RetryActivityScreen';
+import { HintPopupOverlay } from '../../components/HintPopupOverlay';
 
 const { width } = Dimensions.get('window');
 
 type Props = NativeStackScreenProps<RootStackParamList, 'NumberBonds'>;
 
-export default function NumberBondsScreen({ navigation }: Props) {
+export default function NumberBondsActivityScreen({ navigation }: Props) {
   const [problem, setProblem] = useState<Problem | null>(null);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [hintsDisabled, setHintsDisabled] = useState(false);
   const [hintsRemaining, setHintsRemaining] = useState(3);
-  const [showIncorrectModal, setShowIncorrectModal] = useState(false);
+  const [showRetryActivityScreen, setShowRetryActivityScreen] = useState(false);
   const [options, setOptions] = useState<number[]>([]);
   const [timer, setTimer] = useState(0);
 
@@ -78,9 +79,8 @@ export default function NumberBondsScreen({ navigation }: Props) {
 
     const opts = new Set([p.correctAnswer]);
     while (opts.size < 5) {
-      // Generate options from 1 to 9, ensuring enough possible unique choices
-      const rand = Math.floor(Math.random() * 9) + 1;
-      opts.add(rand);
+      const rand = Math.floor(Math.random() * 9) + 1; // Pick any digit 1-9
+      if (rand !== p.num2) opts.add(rand);
     }
     setOptions(Array.from(opts).sort((a, b) => a - b));
   };
@@ -103,14 +103,13 @@ export default function NumberBondsScreen({ navigation }: Props) {
       setShowGreatJob(true);
     } else {
       if (currentTry >= 3) {
-        repeatQueue.current.push({ ...problem });
         const newCount = GameManager.getInstance().getSessionActivityCount();
         setActivityCount(newCount);
-        setShowIncorrectModal(true);
+        setGreatJobStars(0);
+        animateGreatJob();
+        setShowGreatJob(true);
       } else {
-        setCurrentTry(prev => prev + 1);
-        setSelectedOption(null);
-        setShowIncorrectModal(true);
+        setShowRetryActivityScreen(true);
       }
     }
   };
@@ -125,30 +124,41 @@ export default function NumberBondsScreen({ navigation }: Props) {
   };
 
   const handleTryAgainAfterFail = async () => {
-    setShowIncorrectModal(false);
-    if (activityCount >= MAX_ACTIVITIES_PER_SESSION) {
-      await finishSession();
+    setShowRetryActivityScreen(false);
+    if (currentTry >= 3) {
+      setCurrentTry(1);
+      const newCount = GameManager.getInstance().getSessionActivityCount();
+      setActivityCount(newCount);
+      if (newCount >= MAX_ACTIVITIES_PER_SESSION) {
+        await finishSession();
+      } else {
+        loadNewProblem();
+      }
       return;
     }
-    if (currentTry >= 3) {
-      loadNewProblem();
-    } else {
-      setOptions(prev => {
-        const shuffled = [...prev];
-        for (let i = shuffled.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-        }
-        return shuffled;
-      });
-      setSelectedOption(null);
-    }
+    
+    setCurrentTry(prev => prev + 1);
+    setOptions(prev => {
+      const shuffled = [...prev];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      return shuffled;
+    });
+    setSelectedOption(null);
   };
+
+  const [showHintPopupOverlay, setShowHintPopupOverlay] = useState(false);
+  const [currentHintText, setCurrentHintText] = useState("");
 
   const useHint = () => {
     if (!problem || hintsRemaining <= 0) return;
     setHintsRemaining(prev => prev - 1);
-    Speech.speak(GameManager.getInstance().getHint(problem), { rate: 0.95, pitch: 1.2 });
+    const hintText = GameManager.getInstance().getHint(problem);
+    setCurrentHintText(hintText);
+    Speech.speak(hintText, { rate: 0.95, pitch: 1.2 });
+    setShowHintPopupOverlay(true);
   };
 
   const finishSession = async () => {
@@ -156,7 +166,8 @@ export default function NumberBondsScreen({ navigation }: Props) {
     navigation.replace('SessionSummary', {
       stars: session.totalStars,
       activities: session.totalActivities,
-      correct: session.totalCorrect
+      correct: session.totalCorrect,
+      recurringErrors: session.recurringErrors
     });
   };
 
@@ -302,11 +313,18 @@ export default function NumberBondsScreen({ navigation }: Props) {
         </TouchableOpacity>
       </View>
 
-      <IncorrectModal
-        visible={showIncorrectModal}
+      <RetryActivityScreen
+        visible={showRetryActivityScreen}
         onTryAgain={handleTryAgainAfterFail}
-        onHint={() => { setShowIncorrectModal(false); useHint(); }}
+        onHint={() => { setShowRetryActivityScreen(false); useHint(); }}
         hintsRemaining={hintsRemaining}
+        isTryLimitReached={currentTry >= 3}
+      />
+
+      <HintPopupOverlay
+        visible={showHintPopupOverlay}
+        hintText={currentHintText}
+        onClose={() => setShowHintPopupOverlay(false)}
       />
 
       <GreatJobOverlay
@@ -339,8 +357,10 @@ function GreatJobOverlay({ visible, stars, activityCount, onContinue, starScale,
               }]}>{c}</Animated.Text>
             ))}
           </View>
-          <Animated.Text style={[gjStyles.bigStar, { transform: [{ scale: starScale }] }]}>⭐</Animated.Text>
-          <Text style={gjStyles.greatJobText}>Great Job!</Text>
+          <Animated.Text style={[gjStyles.bigStar, { transform: [{ scale: starScale }] }]}>
+            {stars > 0 ? '⭐' : '💡'}
+          </Animated.Text>
+          <Text style={gjStyles.greatJobText}>{stars > 0 ? 'Great Job!' : "Keep Going!"}</Text>
           <View style={gjStyles.starsEarnedRow}>
             <Text style={gjStyles.plusStars}>+{stars} {stars === 1 ? 'Star' : 'Stars'}</Text>
             <View style={gjStyles.starIconsRow}>

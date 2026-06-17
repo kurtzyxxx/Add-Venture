@@ -30,6 +30,7 @@ export interface SessionRecord {
   totalCorrect: number;
   totalAttempts: number;
   startedAt: number;
+  recurringErrors?: string[];
 }
 
 interface SaveData {
@@ -121,7 +122,8 @@ export class SaveSystem {
   public getAccuracy(strategy: string): number {
     const r = this.getProgress(strategy);
     if (r.totalAttempts === 0) return 0;
-    return Math.round((r.totalCorrect / r.totalAttempts) * 100);
+    // Calculate accuracy based on stars (3 stars = 100%, 2 stars = 66%, 1 star = 33%)
+    return Math.round((r.starsEarned / (r.totalAttempts * 3)) * 100);
   }
 
   /** Count On unlocks when Count All: accuracy >= 60% AND totalAttempts >= 10 */
@@ -150,11 +152,12 @@ export class SaveSystem {
 
     // Cumulative totals
     record.totalAttempts++;
+    record.completedActivities++;
+    record.starsEarned += stars;
+
     if (isCorrect) {
       record.totalCorrect++;
-      record.starsEarned += stars;
-      record.completedActivities++;
-      if (record.completedActivities % 3 === 0) record.unlockedLevel++;
+      if (record.totalCorrect % 3 === 0) record.unlockedLevel++;
     }
 
     // Persistent session counters
