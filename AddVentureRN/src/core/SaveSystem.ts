@@ -337,8 +337,10 @@ export class SaveSystem {
 
     // Cumulative totals
     record.totalAttempts++;
-    if (isCorrect) {
+    if (isCorrect && tryNumber === 1) {
       record.totalCorrect++;
+    }
+    if (isCorrect) {
       record.starsEarned += stars;
       record.completedActivities++;
       if (record.completedActivities % 3 === 0) record.unlockedLevel++;
@@ -347,7 +349,7 @@ export class SaveSystem {
     // Persistent session counters
     record.sessionActivitiesCount++;
     record.sessionStarsCount += stars;
-    if (isCorrect) record.sessionCorrectCount++;
+    if (isCorrect && tryNumber === 1) record.sessionCorrectCount++;
 
     this.upsertRecord(record);
 
