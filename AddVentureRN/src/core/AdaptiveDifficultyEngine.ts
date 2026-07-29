@@ -1,6 +1,6 @@
 export const TARGET_RESPONSE_MS = 20000; // 20 seconds — the pedagogical target
 
-export class DifficultyEngine {
+export class AdaptiveDifficultyEngine {
 
   /**
    * Adjusts difficulty based on the entire session's performance.

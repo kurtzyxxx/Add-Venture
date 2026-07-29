@@ -17,7 +17,8 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.AddVentureRN"
+      "package": "com.capsbato.addventure",
+      "versionCode": 1
     },
     "web": {
       "favicon": "./assets/favicon.png"

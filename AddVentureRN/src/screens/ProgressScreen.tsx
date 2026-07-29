@@ -8,7 +8,7 @@ import { RootStackParamList } from '../../App';
 import { GameManager } from '../core/GameManager';
 import { SessionRecord } from '../core/SaveSystem';
 import { LinearGradient } from 'expo-linear-gradient';
-import { TARGET_RESPONSE_MS } from '../core/DifficultyEngine';
+import { TARGET_RESPONSE_MS } from '../core/AdaptiveDifficultyEngine';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Progress'>;
 

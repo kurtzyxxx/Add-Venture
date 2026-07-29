@@ -1,5 +1,5 @@
 import { SaveSystem, LearnerProfile, SessionRecord } from './SaveSystem';
-import { DifficultyEngine, TARGET_RESPONSE_MS } from './DifficultyEngine';
+import { AdaptiveDifficultyEngine, TARGET_RESPONSE_MS } from './AdaptiveDifficultyEngine';
 import { HintManager } from './HintManager';
 import { FeedbackManager } from './FeedbackManager';
 import {
@@ -32,7 +32,7 @@ export class GameManager {
   private static instance: GameManager;
 
   public saveSystem: SaveSystem;
-  public difficultyEngine: DifficultyEngine;
+  public adaptiveDifficultyEngine: AdaptiveDifficultyEngine;
   public hintManager: HintManager;
   public feedbackManager: FeedbackManager;
 
@@ -54,7 +54,7 @@ export class GameManager {
 
   private constructor() {
     this.saveSystem = new SaveSystem();
-    this.difficultyEngine = new DifficultyEngine();
+    this.adaptiveDifficultyEngine = new AdaptiveDifficultyEngine();
     this.hintManager = new HintManager();
     this.feedbackManager = new FeedbackManager();
 
@@ -305,7 +305,7 @@ export class GameManager {
     
     // Evaluate session performance and potentially level up
     const record = this.saveSystem.getProgress(this.currentStrategy);
-    const newDifficulty = this.difficultyEngine.evaluateSession(
+    const newDifficulty = this.adaptiveDifficultyEngine.evaluateSession(
       record.currentDifficulty,
       sessionRecord.accuracyPct,
       sessionRecord.avgResponseTimeMs
