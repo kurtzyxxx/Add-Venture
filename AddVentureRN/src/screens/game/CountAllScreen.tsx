@@ -241,7 +241,8 @@ export default function CountAllScreen({ navigation }: Props) {
   };
 
   const submitAnswer = async () => {
-    if (selectedAnswer === null || !problem) return;
+    const allDropped = fruits.length > 0 && fruits.every(f => f.dropped);
+    if (selectedAnswer === null || !problem || !allDropped) return;
 
     const isCorrect = selectedAnswer === problem.correctAnswer;
     const shouldMoveOnAfterWrong = !isCorrect && currentTry >= MAX_WRONG_TRIES;
@@ -364,6 +365,7 @@ export default function CountAllScreen({ navigation }: Props) {
   if (!problem) return <View style={styles.container}><Text>Loading...</Text></View>;
 
   const droppedFruits = fruits.filter(f => f.dropped);
+  const allDropped = fruits.length > 0 && fruits.every(f => f.dropped);
   const isGroup1Finished = fruits.filter(f => f.group === 1 && !f.dropped).length === 0;
   const profile = GameManager.getInstance().saveSystem.getProfile();
   const showRunningCounter = profile.consecutiveCorrect < HINT_DISABLE_THRESHOLD;
@@ -530,9 +532,17 @@ export default function CountAllScreen({ navigation }: Props) {
                 styles.optionButton,
                 { backgroundColor: optionColors[index % optionColors.length] },
                 selectedAnswer === opt && styles.optionSelected,
+                !allDropped && { opacity: 0.55 },
               ]}
-              onPress={() => setSelectedAnswer(opt)}
-              activeOpacity={0.8}
+              onPress={() => {
+                if (!allDropped) {
+                  AudioManager.stopSpeech();
+                  AudioManager.speak('Drag all fruits to the basket first!', { rate: 0.95, pitch: 1.3 });
+                  return;
+                }
+                setSelectedAnswer(opt);
+              }}
+              activeOpacity={allDropped ? 0.8 : 1}
             >
               <View style={styles.optionInner}>
                 <Text style={styles.optionText}>{opt}</Text>
@@ -544,10 +554,10 @@ export default function CountAllScreen({ navigation }: Props) {
           <TouchableOpacity
             style={[
               styles.actionBtn,
-              { backgroundColor: selectedAnswer !== null ? '#66BB6A' : '#9E9E9E', width: '80%' },
+              { backgroundColor: (selectedAnswer !== null && allDropped) ? '#66BB6A' : '#9E9E9E', width: '80%' },
             ]}
             onPress={submitAnswer}
-            disabled={selectedAnswer === null}
+            disabled={selectedAnswer === null || !allDropped}
           >
             <Text style={styles.actionBtnText}>Submit ✓</Text>
           </TouchableOpacity>

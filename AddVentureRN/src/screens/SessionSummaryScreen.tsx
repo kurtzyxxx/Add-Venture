@@ -67,14 +67,10 @@ export default function SessionSummaryScreen({ route, navigation }: Props) {
 
   const handleContinue = () => {
     const routeName =
-      strategy === 'COUNT_ALL' ? 'CountOn' :
-      strategy === 'COUNT_ON' ? 'NumberBonds' :
-      'NumberBonds';
-    const nextStrategy =
-      routeName === 'CountOn' ? 'COUNT_ON' :
-      routeName === 'NumberBonds' ? 'NUMBER_BONDS' :
-      'COUNT_ALL';
-    
+      strategy === 'COUNT_ON' ? 'CountOn' :
+      strategy === 'NUMBER_BONDS' ? 'NumberBonds' :
+      'CountAll';
+
     if (hasAdaptiveReview) {
       navigation.replace('AdaptiveMode', {
         strategy,
@@ -84,7 +80,7 @@ export default function SessionSummaryScreen({ route, navigation }: Props) {
       return;
     }
 
-    GameManager.getInstance().startSession(nextStrategy);
+    GameManager.getInstance().startSession(strategy);
     navigation.replace(routeName);
   };
 

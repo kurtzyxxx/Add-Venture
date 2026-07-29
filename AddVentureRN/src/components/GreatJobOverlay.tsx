@@ -211,7 +211,7 @@ export const GreatJobOverlay: React.FC<GreatJobOverlayProps> = ({
             activeOpacity={0.85}
           >
             <Text style={styles.continueBtnText}>
-              {isSessionDone ? '🏆 Finish!' : 'Continue →'}
+              {isSessionDone ? '🏆 Finish!' : 'Continue'}
             </Text>
           </TouchableOpacity>
         </View>

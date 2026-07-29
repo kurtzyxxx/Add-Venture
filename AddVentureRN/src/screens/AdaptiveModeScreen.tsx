@@ -29,6 +29,12 @@ const STRATEGY_ROUTES: Record<string, 'CountAll' | 'CountOn' | 'NumberBonds'> = 
   NUMBER_BONDS: 'NumberBonds',
 };
 
+const ROUTE_STRATEGIES: Record<string, string> = {
+  CountAll: 'COUNT_ALL',
+  CountOn: 'COUNT_ON',
+  NumberBonds: 'NUMBER_BONDS',
+};
+
 const ADAPTIVE_INTRO_NARRATION =
   'You are entering Adaptive Mode. Let us review the questions you missed before the next level.';
 
@@ -178,7 +184,9 @@ export default function AdaptiveModeScreen({ route, navigation }: Props) {
   }, [currentIndex, currentProblem, isIntroVisible]);
 
   const handleSubmit = () => {
-    if (!currentProblem || selectedAnswer === null) return;
+    const allDropped = reviewFruits.length > 0 && reviewFruits.every(f => f.dropped);
+    const isDragIncomplete = requiresDragForStrategy(strategy) && !allDropped;
+    if (!currentProblem || selectedAnswer === null || isDragIncomplete) return;
 
     if (selectedAnswer !== currentProblem.correctAnswer) {
       setFeedback('incorrect');
@@ -293,11 +301,26 @@ export default function AdaptiveModeScreen({ route, navigation }: Props) {
           <View style={styles.completionActions}>
             <TouchableOpacity
               style={styles.primaryBtn}
-              onPress={() => {
+              onPress={async () => {
                 const gm = GameManager.getInstance();
-                const nextRoute = STRATEGY_ROUTES[strategy] || targetRoute;
+                
+                // If they completed Adaptive mode, they reviewed their mistakes.
+                // If their last session accuracy was < 70%, they didn't level up automatically.
+                // We level them up now as a reward for completing the review.
+                const lastSession = gm.saveSystem.getLastSession(strategy);
+                if (lastSession && lastSession.accuracyPct < 70) {
+                  const progress = gm.saveSystem.getProgress(strategy);
+                  if (progress.currentDifficulty < 9.9) {
+                    await gm.saveSystem.updateStrategyDifficulty(
+                      strategy,
+                      Math.min(9.9, Math.floor(progress.currentDifficulty) + 1)
+                    );
+                  }
+                }
+
+                const nextRoute = STRATEGY_ROUTES[strategy] || 'CountAll';
                 gm.startSession(strategy);
-                navigation.replace(nextRoute);
+                navigation.replace(nextRoute as any);
               }}
               activeOpacity={0.85}
             >
@@ -313,8 +336,10 @@ export default function AdaptiveModeScreen({ route, navigation }: Props) {
   const isNumberBond = strategy === 'NUMBER_BONDS' || currentProblem.isMissingPart;
   const prompt = getVisualPrompt(currentProblem, strategy);
   const requiresDrag = requiresDragForStrategy(strategy);
-  const canSelectAnswer = feedback !== 'correct';
-  const canSubmit = selectedAnswer !== null && feedback !== 'correct';
+  const allDropped = reviewFruits.length > 0 && reviewFruits.every(f => f.dropped);
+  const isDragIncomplete = requiresDrag && !allDropped;
+  const canSelectAnswer = feedback !== 'correct' && !isDragIncomplete;
+  const canSubmit = selectedAnswer !== null && feedback !== 'correct' && !isDragIncomplete;
 
   if (isIntroVisible) {
     return (
@@ -435,14 +460,20 @@ export default function AdaptiveModeScreen({ route, navigation }: Props) {
                 styles.optionButton,
                 { backgroundColor: optionColors[index % optionColors.length] },
                 selectedAnswer === opt && styles.optionSelected,
+                isDragIncomplete && { opacity: 0.55 },
               ]}
               onPress={() => {
+                if (isDragIncomplete) {
+                  AudioManager.stopSpeech();
+                  AudioManager.speak('Drag all fruits to the basket first!', { rate: 0.95, pitch: 1.3 });
+                  return;
+                }
                 if (!canSelectAnswer) return;
                 setSelectedAnswer(opt);
                 setFeedback(null);
               }}
-              disabled={!canSelectAnswer}
-              activeOpacity={0.8}
+              disabled={!canSelectAnswer && !isDragIncomplete}
+              activeOpacity={canSelectAnswer ? 0.8 : 1}
             >
               <View style={styles.optionInner}>
                 <Text style={styles.optionText}>{opt}</Text>
