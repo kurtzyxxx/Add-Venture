@@ -8,6 +8,8 @@ import { GreatJobOverlay } from '../../components/GreatJobOverlay';
 import { HintConfirmModal } from '../../components/HintConfirmModal';
 import { HintBox } from '../../components/HintBox';
 import { PulseView } from '../../components/animations/PulseView';
+import { GameTutorialModal } from '../../components/tutorial/GameTutorialModal';
+import { COUNT_ALL_TUTORIAL_STEPS } from '../../components/tutorial/CountAllTutorialContent';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AdaptiveProblem, RootStackParamList } from '../../../App';
 import { GameManager, MAX_ACTIVITIES_PER_SESSION } from '../../core/GameManager';
@@ -38,6 +40,11 @@ export default function CountAllScreen({ navigation }: Props) {
   const [isMasteryProblem, setIsMasteryProblem] = useState(false);
   const [incorrectModalTry, setIncorrectModalTry] = useState(1);
   const [advanceAfterIncorrectModal, setAdvanceAfterIncorrectModal] = useState(false);
+
+  // Tutorial overlay
+  const [showTutorial, setShowTutorial] = useState(() => {
+    return !GameManager.getInstance().saveSystem.hasSeenTutorial('COUNT_ALL');
+  });
 
   // 3-try system
   const [currentTry, setCurrentTry] = useState(1);
@@ -75,26 +82,62 @@ export default function CountAllScreen({ navigation }: Props) {
       return;
     }
 
+    loadNewProblem();
+
+    if (!showTutorial) {
+      AudioManager.speak('Count All! Help Oliver gather food! Count and drag the fruits to the basket!', {
+        rate: 0.9,
+        pitch: 1.3,
+      });
+    }
+  }, [navigation]);
+
+  const handleCloseTutorial = async (dontShowAgain: boolean) => {
+    setShowTutorial(false);
+    const gm = GameManager.getInstance();
+    if (dontShowAgain) {
+      await gm.saveSystem.markTutorialSeen('COUNT_ALL', true);
+    }
+    resetTimer(gm.sessionTimerLimit);
     AudioManager.speak('Count All! Help Oliver gather food! Count and drag the fruits to the basket!', {
       rate: 0.9,
       pitch: 1.3,
     });
-    loadNewProblem();
-    timerRef.current = setInterval(() => setTimeLeft(t => t > 0 ? t - 1 : 0), 1000);
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, [navigation]);
+  };
+
+  const handleOpenTutorial = () => {
+    AudioManager.stopSpeech();
+    setShowTutorial(true);
+  };
 
   const resetTimer = (limit: number) => {
     setTimeLeft(limit);
   };
 
+  // Timer only runs when gameplay is actively running (not in tutorial or modals)
   useEffect(() => {
-    if (timeLeft === 0 && !showIncorrectModal && !showGreatJob && problem && selectedAnswer === null) {
+    if (showTutorial || showIncorrectModal || showGreatJob || !problem) {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+      return;
+    }
+
+    timerRef.current = setInterval(() => setTimeLeft(t => t > 0 ? t - 1 : 0), 1000);
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [showTutorial, showIncorrectModal, showGreatJob, problem]);
+
+  useEffect(() => {
+    if (timeLeft === 0 && !showTutorial && !showIncorrectModal && !showGreatJob && problem && selectedAnswer === null) {
       handleTimeUp();
     }
-  }, [timeLeft, showIncorrectModal, showGreatJob, problem, selectedAnswer]);
+  }, [timeLeft, showTutorial, showIncorrectModal, showGreatJob, problem, selectedAnswer]);
 
   const handleTimeUp = async () => {
     if (!problem) return;
@@ -400,6 +443,9 @@ export default function CountAllScreen({ navigation }: Props) {
         </View>
 
         <View style={styles.badgesContainer}>
+          <TouchableOpacity onPress={handleOpenTutorial} style={styles.helpCircleButton} activeOpacity={0.8}>
+            <Text style={styles.helpIcon}>❓</Text>
+          </TouchableOpacity>
           <View style={styles.badge}>
             <Text style={styles.badgeText}>⭐ {profile.totalStars}</Text>
           </View>
@@ -590,6 +636,14 @@ export default function CountAllScreen({ navigation }: Props) {
         isMastery={justMastered}
         masteryProgress={isMasteryProblem && !justMastered ? masteryProgress : null}
       />
+
+      {/* Tutorial Modal */}
+      <GameTutorialModal
+        visible={showTutorial}
+        gameTitle="Count All"
+        steps={COUNT_ALL_TUTORIAL_STEPS}
+        onClose={handleCloseTutorial}
+      />
     </SafeAreaView>
   );
 }
@@ -665,7 +719,20 @@ const styles = StyleSheet.create({
   topCenter: { alignItems: 'center' },
   timeText: { fontSize: 16, fontWeight: 'bold', color: '#4E342E' },
   activityProgress: { fontSize: 13, fontWeight: 'bold', color: '#4E342E', opacity: 0.75 },
-  badgesContainer: { flexDirection: 'row' },
+  badgesContainer: { flexDirection: 'row', alignItems: 'center' },
+  helpCircleButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#FFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+    elevation: 2,
+    borderWidth: 2,
+    borderColor: '#FFE082',
+  },
+  helpIcon: { fontSize: 18 },
   badge: { backgroundColor: '#FFF', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 15, elevation: 2 },
   badgeText: { fontWeight: 'bold', color: '#FF9800' },
   content: { flex: 1, paddingHorizontal: 20 },

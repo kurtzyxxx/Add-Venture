@@ -69,6 +69,7 @@ interface SaveData {
   settings: AudioSettings;
   adaptiveReviewPending: Record<string, boolean>;
   adaptiveReviewProblems: Record<string, AdaptiveReviewProblem[]>;
+  tutorialsSeen: Record<string, boolean>;
 }
 
 const MAX_SESSION_HISTORY = 20;
@@ -117,6 +118,11 @@ export class SaveSystem {
         COUNT_ALL: [],
         COUNT_ON: [],
         NUMBER_BONDS: [],
+      },
+      tutorialsSeen: {
+        COUNT_ALL: false,
+        COUNT_ON: false,
+        NUMBER_BONDS: false,
       },
     };
   }
@@ -174,6 +180,10 @@ export class SaveSystem {
         loaded.adaptiveReviewProblems = {
           ...this.createFreshSave().adaptiveReviewProblems,
           ...(loaded as any).adaptiveReviewProblems,
+        };
+        loaded.tutorialsSeen = {
+          ...this.createFreshSave().tutorialsSeen,
+          ...((loaded as any).tutorialsSeen ?? {}),
         };
         this.data = loaded;
       } else {
@@ -520,6 +530,20 @@ export class SaveSystem {
   public getLastSession(strategy: string): SessionRecord | null {
     const hist = this.getSessionHistoryForStrategy(strategy);
     return hist.length > 0 ? hist[0] : null;
+  }
+
+  /** Whether the learner has completed/dismissed the tutorial for a game strategy. */
+  public hasSeenTutorial(strategy: string): boolean {
+    return !!this.data.tutorialsSeen?.[strategy];
+  }
+
+  /** Persists whether the tutorial for a strategy has been seen. */
+  public async markTutorialSeen(strategy: string, seen = true): Promise<void> {
+    if (!this.data.tutorialsSeen) {
+      this.data.tutorialsSeen = {};
+    }
+    this.data.tutorialsSeen[strategy] = seen;
+    await this.save();
   }
 
   // ── Internals ─────────────────────────────────────────────────────────────
