@@ -18,6 +18,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
 export default function SettingsScreen({ navigation }: Props) {
   const gm = GameManager.getInstance();
   const [settings, setSettings] = useState<AudioSettings>(gm.saveSystem.getSettings());
+  const [tutorialsEnabled, setTutorialsEnabled] = useState<boolean>(!gm.saveSystem.areAllTutorialsSeen());
   const [isResetting, setIsResetting] = useState(false);
 
   const updateSetting = useCallback(
@@ -27,6 +28,18 @@ export default function SettingsScreen({ navigation }: Props) {
       await gm.saveSystem.updateSettings(next);
     },
     [gm, settings]
+  );
+
+  const handleTutorialsToggle = useCallback(
+    async (enabled: boolean) => {
+      setTutorialsEnabled(enabled);
+      if (enabled) {
+        await gm.saveSystem.resetAllTutorials();
+      } else {
+        await gm.saveSystem.setAllTutorialsSeen(true);
+      }
+    },
+    [gm]
   );
 
   const confirmReset = () => {
@@ -83,6 +96,16 @@ export default function SettingsScreen({ navigation }: Props) {
           description="Voice prompts and feedback sounds"
           enabled={settings.soundsEnabled}
           onChange={value => updateSetting('soundsEnabled', value)}
+        />
+
+        <View style={styles.divider} />
+
+        <SettingToggle
+          icon="🎓"
+          title="Game Tutorials"
+          description="Show step-by-step tutorial when opening a mode"
+          enabled={tutorialsEnabled}
+          onChange={value => handleTutorialsToggle(value)}
         />
       </View>
 

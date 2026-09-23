@@ -546,6 +546,30 @@ export class SaveSystem {
     await this.save();
   }
 
+  /** Whether all game mode tutorials have been marked seen. */
+  public areAllTutorialsSeen(): boolean {
+    const strategies = ['COUNT_ALL', 'COUNT_ON', 'NUMBER_BONDS'];
+    return strategies.every(s => !!this.data.tutorialsSeen?.[s]);
+  }
+
+  /** Sets whether all game mode tutorials should be considered seen or not. */
+  public async setAllTutorialsSeen(seen: boolean): Promise<void> {
+    if (!this.data.tutorialsSeen) {
+      this.data.tutorialsSeen = {};
+    }
+    const strategies = ['COUNT_ALL', 'COUNT_ON', 'NUMBER_BONDS'];
+    strategies.forEach(s => {
+      this.data.tutorialsSeen[s] = seen;
+    });
+    await this.save();
+  }
+
+  /** Resets all tutorial states so they will show on next entry. */
+  public async resetAllTutorials(): Promise<void> {
+    this.data.tutorialsSeen = {};
+    await this.save();
+  }
+
   // ── Internals ─────────────────────────────────────────────────────────────
 
   private upsertRecord(record: ProgressRecord): void {

@@ -11,6 +11,8 @@ import { HintBox } from '../../components/HintBox';
 import { PulseView } from '../../components/animations/PulseView';
 import { GameTutorialModal } from '../../components/tutorial/GameTutorialModal';
 import { COUNT_ON_TUTORIAL_STEPS } from '../../components/tutorial/CountOnTutorialContent';
+import { FiveStreakModal } from '../../components/FiveStreakModal';
+import { OliverSpeechBalloon } from '../../components/OliverSpeechBalloon';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../../App';
 import { GameManager, MAX_ACTIVITIES_PER_SESSION } from '../../core/GameManager';
@@ -57,13 +59,14 @@ export default function CountOnScreen({ navigation }: Props) {
   const [showGreatJob, setShowGreatJob] = useState(false);
   const [greatJobStars, setGreatJobStars] = useState(3);
   const [justMastered, setJustMastered] = useState(false);
+  const [showFiveStreak, setShowFiveStreak] = useState(false);
 
   const currentProblemRef = useRef<Problem | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const pendingHintAction = useRef<(() => void) | null>(null);
 
   useEffect(() => {
-    loadNewProblem();
+    loadNewProblem(showTutorial);
     if (!showTutorial) {
       AudioManager.speak('Count On! Oliver already has some fruits. Drag fruits to his basket, then tap View Basket!', {
         rate: 0.9, pitch: 1.3,
@@ -90,7 +93,7 @@ export default function CountOnScreen({ navigation }: Props) {
 
   // Timer only runs during active gameplay
   useEffect(() => {
-    if (showTutorial || showIncorrectModal || showGreatJob || !problem) {
+    if (showTutorial || showIncorrectModal || showGreatJob || showFiveStreak || !problem) {
       if (timerRef.current) {
         clearInterval(timerRef.current);
         timerRef.current = null;
@@ -105,13 +108,13 @@ export default function CountOnScreen({ navigation }: Props) {
         timerRef.current = null;
       }
     };
-  }, [showTutorial, showIncorrectModal, showGreatJob, problem]);
+  }, [showTutorial, showIncorrectModal, showGreatJob, showFiveStreak, problem]);
 
   useEffect(() => {
-    if (timeLeft === 0 && !showTutorial && !showIncorrectModal && !showGreatJob && problem && selectedAnswer === null) {
+    if (timeLeft === 0 && !showTutorial && !showIncorrectModal && !showGreatJob && !showFiveStreak && problem && selectedAnswer === null) {
       handleTimeUp();
     }
-  }, [timeLeft, showTutorial, showIncorrectModal, showGreatJob, problem, selectedAnswer]);
+  }, [timeLeft, showTutorial, showIncorrectModal, showGreatJob, showFiveStreak, problem, selectedAnswer]);
 
   const handleTimeUp = async () => {
     if (!problem) return;
@@ -132,7 +135,7 @@ export default function CountOnScreen({ navigation }: Props) {
     setShowIncorrectModal(true);
   };
 
-  const loadNewProblem = () => {
+  const loadNewProblem = (silent = false) => {
     const gm = GameManager.getInstance();
     let p: Problem;
     let isMastery = false;
@@ -181,13 +184,15 @@ export default function CountOnScreen({ navigation }: Props) {
     }
     setOptions(Array.from(opts).sort((a, b) => a - b));
 
-    AudioManager.stopSpeech();
-    setTimeout(() => {
-      const msg = isMastery
-        ? `Keep going! Oliver has ${base} fruits. Count on ${extra} more!`
-        : `Oliver has ${base} fruits! Drag fruits to his basket to add ${extra} more!`;
-      AudioManager.speak(msg, { rate: 0.95, pitch: 1.4 });
-    }, 300);
+    if (!silent) {
+      AudioManager.stopSpeech();
+      setTimeout(() => {
+        const msg = isMastery
+          ? `Keep going! Oliver has ${base} fruits. Count on ${extra} more!`
+          : `Oliver has ${base} fruits! Drag fruits to his basket to add ${extra} more!`;
+        AudioManager.speak(msg, { rate: 0.95, pitch: 1.4 });
+      }, 300);
+    }
   };
 
   // Drag fruit from tree into Oliver's basket
@@ -197,12 +202,14 @@ export default function CountOnScreen({ navigation }: Props) {
       const droppedCount = next.filter(f => f.dropped).length;
       const currentTotal = baseN + droppedCount;
 
-      AudioManager.stopSpeech();
-      AudioManager.speak(`${currentTotal}`, { rate: 0.95, pitch: 1.4 });
+      const profile = GameManager.getInstance().saveSystem.getProfile();
+      if (profile.consecutiveCorrect < HINT_DISABLE_THRESHOLD) {
+        AudioManager.stopSpeech();
+        AudioManager.speak(`${currentTotal}`, { rate: 0.95, pitch: 1.4 });
+      }
       return next;
     });
   };
-
 
   // Tap dropped fruit in basket to return to tree
   const handleRemoveFruit = (fruitId: string) => {
@@ -211,8 +218,11 @@ export default function CountOnScreen({ navigation }: Props) {
       const droppedCount = next.filter(f => f.dropped).length;
       const currentTotal = baseN + droppedCount;
 
-      AudioManager.stopSpeech();
-      AudioManager.speak(`${currentTotal}`, { rate: 0.95, pitch: 1.3 });
+      const profile = GameManager.getInstance().saveSystem.getProfile();
+      if (profile.consecutiveCorrect < HINT_DISABLE_THRESHOLD) {
+        AudioManager.stopSpeech();
+        AudioManager.speak(`${currentTotal}`, { rate: 0.95, pitch: 1.3 });
+      }
       return next;
     });
   };
@@ -274,6 +284,18 @@ export default function CountOnScreen({ navigation }: Props) {
 
   const handleContinueAfterGreatJob = async () => {
     setShowGreatJob(false);
+    const gm = GameManager.getInstance();
+    const profile = gm.saveSystem.getProfile();
+    if (profile.consecutiveCorrect === 5) {
+      setShowFiveStreak(true);
+      return;
+    }
+    if (activityCount >= MAX_ACTIVITIES_PER_SESSION) await finishSession();
+    else loadNewProblem();
+  };
+
+  const handleCloseFiveStreak = async () => {
+    setShowFiveStreak(false);
     if (activityCount >= MAX_ACTIVITIES_PER_SESSION) await finishSession();
     else loadNewProblem();
   };
@@ -356,6 +378,7 @@ export default function CountOnScreen({ navigation }: Props) {
   const fruitEmojiType = fruits[0]?.emoji ?? '🍎';
   const profile = GameManager.getInstance().saveSystem.getProfile();
   const masteryProgress = GameManager.getInstance().getMasteryProgress();
+  const showClues = profile.consecutiveCorrect < HINT_DISABLE_THRESHOLD;
 
   const optionColors = ['#FF5252', '#FF9800', '#FFCA28', '#66BB6A', '#29B6F6'];
   const displayedActivityCount = Math.min(activityCount + 1, MAX_ACTIVITIES_PER_SESSION);
@@ -419,6 +442,18 @@ export default function CountOnScreen({ navigation }: Props) {
         <View style={styles.instructionCard}>
           <View style={styles.owlPlaceholder}>
             <Text style={{ fontSize: 32 }}>🦉</Text>
+            <OliverSpeechBalloon
+              active={
+                !showTutorial &&
+                !showIncorrectModal &&
+                !showGreatJob &&
+                !showFiveStreak &&
+                !showHintConfirm &&
+                !showViewBasket &&
+                problem !== null &&
+                selectedAnswer === null
+              }
+            />
           </View>
           <Text style={styles.instructionText}>
             Oliver already has {baseN} fruits. Drag fruits from the tree to his basket!
@@ -465,7 +500,7 @@ export default function CountOnScreen({ navigation }: Props) {
             <WickerBasketCard
               width={Math.min(sectionWidth, 290)}
               height={165}
-              countBadge={totalBasketFruitsCount}
+              countBadge={showClues ? totalBasketFruitsCount : undefined}
               onReset={droppedFruits.length > 0 ? resetDroppedFruits : undefined}
             >
               {/* Inside basket: Fixed fruits + Dropped fruits */}
@@ -486,9 +521,11 @@ export default function CountOnScreen({ navigation }: Props) {
                   >
                     <View style={styles.basketAddedFruitItem}>
                       <Text style={styles.basketFruitEmoji}>{f.emoji}</Text>
-                      <View style={styles.addedBadgeDot}>
-                        <Text style={styles.addedBadgeText}>+{idx + 1}</Text>
-                      </View>
+                      {showClues && (
+                        <View style={styles.addedBadgeDot}>
+                          <Text style={styles.addedBadgeText}>+{idx + 1}</Text>
+                        </View>
+                      )}
                     </View>
                   </TouchableOpacity>
                 ))}
@@ -500,7 +537,7 @@ export default function CountOnScreen({ navigation }: Props) {
                 <Text style={{ fontSize: 18 }}>🦉</Text>
               </View>
               <Text style={styles.basketUnderLabel}>
-                Oliver's Basket ({totalBasketFruitsCount} fruits)
+                Oliver's Basket{showClues ? ` (${totalBasketFruitsCount} fruits)` : ''}
               </Text>
             </View>
           </View>
@@ -598,7 +635,7 @@ export default function CountOnScreen({ navigation }: Props) {
                 <TopViewBasketCard
                   width={Math.min(sectionWidth, 300)}
                   height={260}
-                  countBadge={totalBasketFruitsCount}
+                  countBadge={showClues ? totalBasketFruitsCount : undefined}
                 >
                   <View style={styles.zoomFruitsCluster}>
                     {/* All basket fruits (starting + added) */}
@@ -609,17 +646,21 @@ export default function CountOnScreen({ navigation }: Props) {
                           key={i}
                           activeOpacity={0.7}
                           onPress={() => {
-                            AudioManager.stopSpeech();
-                            AudioManager.speak(`${i + 1}`, { rate: 0.9, pitch: 1.3 });
+                            if (showClues) {
+                              AudioManager.stopSpeech();
+                              AudioManager.speak(`${i + 1}`, { rate: 0.9, pitch: 1.3 });
+                            }
                           }}
                         >
                           <View style={[styles.zoomFruitBadgeWrap, isCompact && styles.zoomFruitBadgeWrapCompact]}>
                             <Text style={[styles.zoomFruitEmoji, isCompact && styles.zoomFruitEmojiCompact]}>
                               {fruitEmojiType}
                             </Text>
-                            <View style={styles.zoomFruitIndexTag}>
-                              <Text style={styles.zoomFruitIndexText}>{i + 1}</Text>
-                            </View>
+                            {showClues && (
+                              <View style={styles.zoomFruitIndexTag}>
+                                <Text style={styles.zoomFruitIndexText}>{i + 1}</Text>
+                              </View>
+                            )}
                           </View>
                         </TouchableOpacity>
                       );
@@ -705,6 +746,12 @@ export default function CountOnScreen({ navigation }: Props) {
         gameTitle="Count On"
         steps={COUNT_ON_TUTORIAL_STEPS}
         onClose={handleCloseTutorial}
+      />
+
+      {/* 5-Streak Independence Reward Modal */}
+      <FiveStreakModal
+        visible={showFiveStreak}
+        onClose={handleCloseFiveStreak}
       />
     </SafeAreaView>
   );

@@ -10,6 +10,8 @@ import { HintBox } from '../../components/HintBox';
 import { PulseView } from '../../components/animations/PulseView';
 import { GameTutorialModal } from '../../components/tutorial/GameTutorialModal';
 import { COUNT_ALL_TUTORIAL_STEPS } from '../../components/tutorial/CountAllTutorialContent';
+import { FiveStreakModal } from '../../components/FiveStreakModal';
+import { OliverSpeechBalloon } from '../../components/OliverSpeechBalloon';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AdaptiveProblem, RootStackParamList } from '../../../App';
 import { GameManager, MAX_ACTIVITIES_PER_SESSION } from '../../core/GameManager';
@@ -54,6 +56,7 @@ export default function CountAllScreen({ navigation }: Props) {
   const [showGreatJob, setShowGreatJob] = useState(false);
   const [greatJobStars, setGreatJobStars] = useState(3);
   const [justMastered, setJustMastered] = useState(false);
+  const [showFiveStreak, setShowFiveStreak] = useState(false);
 
   // Current problem ref (for mastery API)
   const currentProblemRef = useRef<Problem | null>(null);
@@ -82,7 +85,7 @@ export default function CountAllScreen({ navigation }: Props) {
       return;
     }
 
-    loadNewProblem();
+    loadNewProblem(showTutorial);
 
     if (!showTutorial) {
       AudioManager.speak('Count All! Help Oliver gather food! Count and drag the fruits to the basket!', {
@@ -116,7 +119,7 @@ export default function CountAllScreen({ navigation }: Props) {
 
   // Timer only runs when gameplay is actively running (not in tutorial or modals)
   useEffect(() => {
-    if (showTutorial || showIncorrectModal || showGreatJob || !problem) {
+    if (showTutorial || showIncorrectModal || showGreatJob || showFiveStreak || !problem) {
       if (timerRef.current) {
         clearInterval(timerRef.current);
         timerRef.current = null;
@@ -131,13 +134,13 @@ export default function CountAllScreen({ navigation }: Props) {
         timerRef.current = null;
       }
     };
-  }, [showTutorial, showIncorrectModal, showGreatJob, problem]);
+  }, [showTutorial, showIncorrectModal, showGreatJob, showFiveStreak, problem]);
 
   useEffect(() => {
-    if (timeLeft === 0 && !showTutorial && !showIncorrectModal && !showGreatJob && problem && selectedAnswer === null) {
+    if (timeLeft === 0 && !showTutorial && !showIncorrectModal && !showGreatJob && !showFiveStreak && problem && selectedAnswer === null) {
       handleTimeUp();
     }
-  }, [timeLeft, showTutorial, showIncorrectModal, showGreatJob, problem, selectedAnswer]);
+  }, [timeLeft, showTutorial, showIncorrectModal, showGreatJob, showFiveStreak, problem, selectedAnswer]);
 
   const handleTimeUp = async () => {
     if (!problem) return;
@@ -158,7 +161,7 @@ export default function CountAllScreen({ navigation }: Props) {
     setShowIncorrectModal(true);
   };
 
-  const loadNewProblem = () => {
+  const loadNewProblem = (silent = false) => {
     const gm = GameManager.getInstance();
     let p: Problem;
     let isMastery = false;
@@ -214,7 +217,7 @@ export default function CountAllScreen({ navigation }: Props) {
     }
     setOptions(Array.from(opts).sort((a, b) => a - b));
 
-    if (isMastery) {
+    if (isMastery && !silent) {
       AudioManager.stopSpeech();
       setTimeout(() => {
         AudioManager.speak(`Keep going! Practice makes perfect. Count all the fruits!`, { rate: 0.9, pitch: 1.3 });
@@ -255,9 +258,12 @@ export default function CountAllScreen({ navigation }: Props) {
   };
 
   const handleBasketFruitTap = (fruit: { id: string; emoji: string }) => {
-    const position = fruits.filter(f => f.dropped).findIndex(f => f.id === fruit.id) + 1;
-    AudioManager.stopSpeech();
-    AudioManager.speak(`${position}`, { rate: 0.9, pitch: 1.3 });
+    const profile = GameManager.getInstance().saveSystem.getProfile();
+    if (profile.consecutiveCorrect < HINT_DISABLE_THRESHOLD) {
+      const position = fruits.filter(f => f.dropped).findIndex(f => f.id === fruit.id) + 1;
+      AudioManager.stopSpeech();
+      AudioManager.speak(`${position}`, { rate: 0.9, pitch: 1.3 });
+    }
 
     // Bounce animation
     const tapAnim = fruitTapAnims.current[fruit.id];
@@ -327,6 +333,20 @@ export default function CountAllScreen({ navigation }: Props) {
   const handleContinueAfterGreatJob = async () => {
     setShowGreatJob(false);
     const gm = GameManager.getInstance();
+    const profile = gm.saveSystem.getProfile();
+    if (profile.consecutiveCorrect === 5) {
+      setShowFiveStreak(true);
+      return;
+    }
+    if (activityCount >= MAX_ACTIVITIES_PER_SESSION) {
+      await finishSession();
+    } else {
+      loadNewProblem();
+    }
+  };
+
+  const handleCloseFiveStreak = async () => {
+    setShowFiveStreak(false);
     if (activityCount >= MAX_ACTIVITIES_PER_SESSION) {
       await finishSession();
     } else {
@@ -487,6 +507,17 @@ export default function CountAllScreen({ navigation }: Props) {
         <View style={styles.instructionCard}>
           <View style={styles.owlPlaceholder}>
             <Text style={{ fontSize: 36 }}>🦉</Text>
+            <OliverSpeechBalloon
+              active={
+                !showTutorial &&
+                !showIncorrectModal &&
+                !showGreatJob &&
+                !showFiveStreak &&
+                !showHintConfirm &&
+                problem !== null &&
+                selectedAnswer === null
+              }
+            />
           </View>
           <Text style={styles.instructionText}>
             Count and drag the fruits to the drop zone. You can submit any time!
@@ -643,6 +674,12 @@ export default function CountAllScreen({ navigation }: Props) {
         gameTitle="Count All"
         steps={COUNT_ALL_TUTORIAL_STEPS}
         onClose={handleCloseTutorial}
+      />
+
+      {/* 5-Streak Independence Reward Modal */}
+      <FiveStreakModal
+        visible={showFiveStreak}
+        onClose={handleCloseFiveStreak}
       />
     </SafeAreaView>
   );

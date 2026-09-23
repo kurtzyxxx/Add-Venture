@@ -18,6 +18,8 @@ import { TimerBar } from '../../components/TimerBar';
 import { AudioManager } from '../../core/AudioManager';
 import { GameTutorialModal } from '../../components/tutorial/GameTutorialModal';
 import { NUMBER_BONDS_TUTORIAL_STEPS } from '../../components/tutorial/NumberBondsTutorialContent';
+import { FiveStreakModal } from '../../components/FiveStreakModal';
+import { OliverSpeechBalloon } from '../../components/OliverSpeechBalloon';
 
 const { width } = Dimensions.get('window');
 type Props = NativeStackScreenProps<RootStackParamList, 'NumberBonds'>;
@@ -50,6 +52,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
   const [showGreatJob, setShowGreatJob] = useState(false);
   const [greatJobStars, setGreatJobStars] = useState(3);
   const [justMastered, setJustMastered] = useState(false);
+  const [showFiveStreak, setShowFiveStreak] = useState(false);
 
   // Tutorial overlay
   const [showTutorial, setShowTutorial] = useState(() => {
@@ -62,7 +65,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
   const pendingHintAction = useRef<(() => void) | null>(null);
 
   useEffect(() => {
-    loadNewProblem();
+    loadNewProblem(showTutorial);
     if (!showTutorial) {
       AudioManager.speak('Number Bonds! Look at the tree and fill the right basket to complete the bond!', {
         rate: 0.9, pitch: 1.3,
@@ -72,7 +75,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
 
   // Timer only runs during active gameplay
   useEffect(() => {
-    if (showTutorial || showIncorrectModal || showGreatJob || !problem) {
+    if (showTutorial || showIncorrectModal || showGreatJob || showFiveStreak || !problem) {
       if (timerRef.current) {
         clearInterval(timerRef.current);
         timerRef.current = null;
@@ -87,13 +90,13 @@ export default function NumberBondsScreen({ navigation }: Props) {
         timerRef.current = null;
       }
     };
-  }, [showTutorial, showIncorrectModal, showGreatJob, problem]);
+  }, [showTutorial, showIncorrectModal, showGreatJob, showFiveStreak, problem]);
 
   useEffect(() => {
-    if (timeLeft === 0 && !showTutorial && !showIncorrectModal && !showGreatJob && problem && selectedOption === null) {
+    if (timeLeft === 0 && !showTutorial && !showIncorrectModal && !showGreatJob && !showFiveStreak && problem && selectedOption === null) {
       handleTimeUp();
     }
-  }, [timeLeft, showTutorial, showIncorrectModal, showGreatJob, problem, selectedOption]);
+  }, [timeLeft, showTutorial, showIncorrectModal, showGreatJob, showFiveStreak, problem, selectedOption]);
 
   // Pulse right basket when awaiting answers
   useEffect(() => {
@@ -129,7 +132,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
     setShowIncorrectModal(true);
   };
 
-  const loadNewProblem = () => {
+  const loadNewProblem = (silent = false) => {
     const gm = GameManager.getInstance();
     let p: Problem;
     let isMastery = false;
@@ -165,13 +168,15 @@ export default function NumberBondsScreen({ navigation }: Props) {
     }));
     setTreeFruits(newTreeFruits);
 
-    AudioManager.stopSpeech();
-    setTimeout(() => {
-      const msg = isMastery
-        ? `Keep going! What goes with ${p.num2} to make ${p.num1}?`
-        : `What number goes with ${p.num2} to make ${p.num1}?`;
-      AudioManager.speak(msg, { rate: 0.95, pitch: 1.4 });
-    }, 300);
+    if (!silent) {
+      AudioManager.stopSpeech();
+      setTimeout(() => {
+        const msg = isMastery
+          ? `Keep going! What goes with ${p.num2} to make ${p.num1}?`
+          : `What number goes with ${p.num2} to make ${p.num1}?`;
+        AudioManager.speak(msg, { rate: 0.95, pitch: 1.4 });
+      }, 300);
+    }
   };
 
   // Drag fruit from canopy into right basket
@@ -180,8 +185,12 @@ export default function NumberBondsScreen({ navigation }: Props) {
       const next = prev.map(f => (f.id === fruitId ? { ...f, dropped: true } : f));
       const droppedCount = next.filter(f => f.dropped).length;
       setSelectedOption(droppedCount);
-      AudioManager.stopSpeech();
-      AudioManager.speak(`${droppedCount}`, { rate: 0.95, pitch: 1.3 });
+
+      const profile = GameManager.getInstance().saveSystem.getProfile();
+      if (profile.consecutiveCorrect < HINT_DISABLE_THRESHOLD) {
+        AudioManager.stopSpeech();
+        AudioManager.speak(`${droppedCount}`, { rate: 0.95, pitch: 1.3 });
+      }
       return next;
     });
   };
@@ -263,6 +272,18 @@ export default function NumberBondsScreen({ navigation }: Props) {
 
   const handleContinueAfterGreatJob = async () => {
     setShowGreatJob(false);
+    const gm = GameManager.getInstance();
+    const profile = gm.saveSystem.getProfile();
+    if (profile.consecutiveCorrect === 5) {
+      setShowFiveStreak(true);
+      return;
+    }
+    if (activityCount >= MAX_ACTIVITIES_PER_SESSION) await finishSession();
+    else loadNewProblem();
+  };
+
+  const handleCloseFiveStreak = async () => {
+    setShowFiveStreak(false);
     if (activityCount >= MAX_ACTIVITIES_PER_SESSION) await finishSession();
     else loadNewProblem();
   };
@@ -337,6 +358,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
 
   const droppedFruits = treeFruits.filter(f => f.dropped);
   const droppedCount = droppedFruits.length;
+  const showClues = profile.consecutiveCorrect < HINT_DISABLE_THRESHOLD;
 
   const sectionWidth = width - 24;
   const treeCenterX = sectionWidth / 2;
@@ -406,6 +428,17 @@ export default function NumberBondsScreen({ navigation }: Props) {
         <View style={styles.instructionCard}>
           <View style={styles.owlPlaceholder}>
             <Text style={{ fontSize: 32 }}>🦉</Text>
+            <OliverSpeechBalloon
+              active={
+                !showTutorial &&
+                !showIncorrectModal &&
+                !showGreatJob &&
+                !showFiveStreak &&
+                !showHintConfirm &&
+                problem !== null &&
+                selectedOption === null
+              }
+            />
           </View>
           <Text style={styles.instructionText}>
             What number goes with {problem.num2} to make {problem.num1}? Drag fruits to the right basket!
@@ -618,7 +651,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
                 <TopViewBasket
                   width={126}
                   height={156}
-                  badgeText={droppedCount > 0 ? droppedCount : '?'}
+                  badgeText={showClues ? (droppedCount > 0 ? droppedCount : '?') : '?'}
                   badgeColor="#E65100"
                   isDropZone={true}
                   title="Drop Zone"
@@ -641,7 +674,9 @@ export default function NumberBondsScreen({ navigation }: Props) {
                   )}
                 </TopViewBasket>
                 <Text style={styles.basketBottomLabel}>
-                  {droppedCount > 0 ? `Your Part: ${droppedCount}` : 'Drag to answer'}
+                  {droppedCount > 0
+                    ? (showClues ? `Your Part: ${droppedCount}` : 'Your Part')
+                    : 'Drag to answer'}
                 </Text>
               </Animated.View>
             </View>
@@ -709,6 +744,12 @@ export default function NumberBondsScreen({ navigation }: Props) {
         gameTitle="Number Bonds"
         steps={NUMBER_BONDS_TUTORIAL_STEPS}
         onClose={handleCloseTutorial}
+      />
+
+      {/* 5-Streak Independence Reward Modal */}
+      <FiveStreakModal
+        visible={showFiveStreak}
+        onClose={handleCloseFiveStreak}
       />
     </SafeAreaView>
   );
