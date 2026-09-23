@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, SafeAreaView,
-  Dimensions, Animated, PanResponder, ScrollView,
+  Dimensions, Animated, PanResponder,
 } from 'react-native';
 import Svg, { Circle, Ellipse, Line, Path, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -41,7 +41,6 @@ export default function NumberBondsScreen({ navigation }: Props) {
   const [showHintConfirm, setShowHintConfirm] = useState(false);
   const [activeHint, setActiveHint] = useState<string | null>(null);
   const [showIncorrectModal, setShowIncorrectModal] = useState(false);
-  const [options, setOptions] = useState<number[]>([]);
   const [timeLeft, setTimeLeft] = useState(120);
   const [isMasteryProblem, setIsMasteryProblem] = useState(false);
   const [incorrectModalTry, setIncorrectModalTry] = useState(1);
@@ -166,12 +165,6 @@ export default function NumberBondsScreen({ navigation }: Props) {
     }));
     setTreeFruits(newTreeFruits);
 
-    const opts = new Set([p.correctAnswer]);
-    while (opts.size < 5) {
-      opts.add(Math.floor(Math.random() * 9) + 1);
-    }
-    setOptions(Array.from(opts).sort((a, b) => a - b));
-
     AudioManager.stopSpeech();
     setTimeout(() => {
       const msg = isMastery
@@ -179,30 +172,6 @@ export default function NumberBondsScreen({ navigation }: Props) {
         : `What number goes with ${p.num2} to make ${p.num1}?`;
       AudioManager.speak(msg, { rate: 0.95, pitch: 1.4 });
     }, 300);
-  };
-
-  // Sync choice selection with basket fruits
-  const handleSelectOption = (opt: number) => {
-    if (selectedOption === opt) {
-      setSelectedOption(null);
-      setTreeFruits(prev => prev.map(f => ({ ...f, dropped: false })));
-      return;
-    }
-
-    setSelectedOption(opt);
-    setTreeFruits(prev => {
-      let droppedCount = 0;
-      return prev.map(f => {
-        if (droppedCount < opt) {
-          droppedCount++;
-          return { ...f, dropped: true };
-        }
-        return { ...f, dropped: false };
-      });
-    });
-
-    AudioManager.stopSpeech();
-    AudioManager.speak(`${opt}`, { rate: 0.9, pitch: 1.3 });
   };
 
   // Drag fruit from canopy into right basket
@@ -305,14 +274,6 @@ export default function NumberBondsScreen({ navigation }: Props) {
       loadNewProblem();
     } else {
       resetFruitsAndAnswer();
-      setOptions(prev => {
-        const s = [...prev];
-        for (let i = s.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [s[i], s[j]] = [s[j], s[i]];
-        }
-        return s;
-      });
       if (problem) {
         AudioManager.stopSpeech();
         setTimeout(() => {
@@ -371,7 +332,6 @@ export default function NumberBondsScreen({ navigation }: Props) {
   if (!problem) return <View style={styles.container}><Text>Loading...</Text></View>;
 
   const profile = GameManager.getInstance().saveSystem.getProfile();
-  const optionColors = ['#FF5252', '#FF9800', '#FFCA28', '#66BB6A', '#29B6F6'];
   const masteryProgress = GameManager.getInstance().getMasteryProgress();
   const displayedActivityCount = Math.min(activityCount + 1, MAX_ACTIVITIES_PER_SESSION);
 
@@ -410,7 +370,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <View style={styles.content}>
         {/* Title row */}
         <View style={styles.titleRow}>
           <View style={styles.tryStarsRow}>
@@ -506,7 +466,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
 
             {/* Canopy Title / Prompt */}
             <View style={styles.canopyTitleBadge}>
-              <Text style={styles.canopyTitleText}>Fruits here! (10 fruits)</Text>
+              <Text style={styles.canopyTitleText}>Fruits here!</Text>
             </View>
 
             {/* 10 Hanging Fruits arranged across branches in 2 rows */}
@@ -697,45 +657,22 @@ export default function NumberBondsScreen({ navigation }: Props) {
         </View>
 
         {/* ═══════════════════════════════════════════════════════════════════
-            CHOICES ROW (Choices here!)
+            SUBMIT / CHECK BUTTON
         ═══════════════════════════════════════════════════════════════════ */}
-        <View style={styles.choicesSection}>
-          <Text style={styles.choicesPromptText}>Choices (Tap or Drag):</Text>
-          <View style={styles.optionsContainer}>
-            {options.map((opt, index) => (
-              <TouchableOpacity
-                key={opt}
-                style={[
-                  styles.optionButton,
-                  { backgroundColor: optionColors[index % optionColors.length] },
-                  selectedOption === opt && styles.optionSelected,
-                ]}
-                onPress={() => handleSelectOption(opt)}
-                activeOpacity={0.75}
-              >
-                <View style={styles.optionInner}>
-                  <Text style={styles.optionText}>{opt}</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          {/* Submit Button on bottom */}
-          <View style={styles.actionsContainer}>
-            <TouchableOpacity
-              style={[
-                styles.actionBtn,
-                { backgroundColor: selectedOption !== null ? '#66BB6A' : '#9E9E9E' },
-              ]}
-              onPress={submitCheck}
-              disabled={selectedOption === null}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.actionBtnText}>Check ✓</Text>
-            </TouchableOpacity>
-          </View>
+        <View style={styles.actionsContainer}>
+          <TouchableOpacity
+            style={[
+              styles.actionBtn,
+              { backgroundColor: selectedOption !== null ? '#4CAF50' : '#BDBDBD' },
+            ]}
+            onPress={submitCheck}
+            disabled={selectedOption === null}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.actionBtnText}>Check ✓</Text>
+          </TouchableOpacity>
         </View>
-      </ScrollView>
+      </View>
 
       {/* Modals & Overlays */}
       <IncorrectModal
@@ -971,7 +908,12 @@ const DraggableFruit = ({ fruit, onDrop, disabled }: any) => {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#A5D6A7' },
-  scrollContent: { paddingBottom: 30 },
+  content: {
+    flex: 1,
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingBottom: 12,
+  },
   cloud: { position: 'absolute', color: '#FFF' },
   topBar: {
     flexDirection: 'row',
@@ -1265,68 +1207,17 @@ const styles = StyleSheet.create({
     marginTop: -3,
   },
 
-  // Choices & Actions Section
-  choicesSection: {
-    marginTop: 10,
-    paddingHorizontal: 12,
-    alignItems: 'center',
-  },
-  choicesPromptText: {
-    fontSize: 13,
-    fontWeight: 'bold',
-    color: '#4E342E',
-    marginBottom: 8,
-  },
-  optionsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 8,
-    marginBottom: 14,
-    width: '100%',
-  },
-  optionButton: {
-    width: 58,
-    height: 64,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-  },
-  optionSelected: {
-    borderWidth: 4,
-    borderColor: '#FFF',
-    transform: [{ scale: 1.12 }],
-  },
-  optionInner: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderTopWidth: 2,
-    borderTopColor: 'rgba(255,255,255,0.4)',
-    borderRadius: 16,
-  },
-  optionText: {
-    fontSize: 30,
-    fontWeight: '900',
-    color: '#FFF',
-    textShadowColor: 'rgba(0,0,0,0.3)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
-  },
+  // Actions Section
   actionsContainer: {
     width: '100%',
     alignItems: 'center',
-    marginBottom: 10,
+    marginTop: 6,
+    marginBottom: 8,
   },
   actionBtn: {
     paddingVertical: 14,
-    borderRadius: 30,
-    width: '80%',
+    borderRadius: 28,
+    width: '85%',
     justifyContent: 'center',
     alignItems: 'center',
     elevation: 4,

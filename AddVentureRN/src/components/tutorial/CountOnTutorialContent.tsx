@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Animated } from 'react-native';
+import { View, Text, StyleSheet, Animated, TouchableOpacity } from 'react-native';
+import { AudioManager } from '../../core/AudioManager';
 import { TutorialStepConfig } from './CountAllTutorialContent';
 
 // ─── Step 1: Start with What Oliver Has ───────────────────────────────────────
@@ -87,38 +88,51 @@ export const CountOnStepTwoVisual: React.FC = () => {
     return () => { active = false; };
   }, []);
 
+  const handleManualDrop = () => {
+    const nextCount = demoCount === 6 ? 7 : demoCount === 7 ? 8 : 6;
+    setDemoCount(nextCount);
+    AudioManager.stopSpeech();
+    AudioManager.speak(`${nextCount}`, { rate: 0.95, pitch: 1.4 });
+    countBadgeScale.setValue(0);
+    Animated.spring(countBadgeScale, { toValue: 1, friction: 4, useNativeDriver: true }).start();
+  };
+
   return (
     <View style={styles.cardVisualContainer}>
       {/* Tree with fruits */}
       <View style={styles.treeContainer}>
         <Text style={styles.treeHeader}>🌳 Tree (Count on 3 more)</Text>
-        <View style={styles.treeFruitRow}>
-          <Text style={styles.fruitEmoji}>🍎</Text>
-          <Animated.View style={{ transform: [{ translateY: dragY }] }}>
+        <TouchableOpacity activeOpacity={0.8} onPress={handleManualDrop}>
+          <View style={styles.treeFruitRow}>
             <Text style={styles.fruitEmoji}>🍎</Text>
-            <Animated.Text style={[styles.handPointer, { opacity: handOpacity }]}>
-              👆
-            </Animated.Text>
-          </Animated.View>
-          <Text style={styles.fruitEmoji}>🍎</Text>
-        </View>
+            <Animated.View style={{ transform: [{ translateY: dragY }] }}>
+              <Text style={styles.fruitEmoji}>🍎</Text>
+              <Animated.Text style={[styles.handPointer, { opacity: handOpacity }]}>
+                👆
+              </Animated.Text>
+            </Animated.View>
+            <Text style={styles.fruitEmoji}>🍎</Text>
+          </View>
+        </TouchableOpacity>
       </View>
 
       <Text style={styles.arrowIcon}>⬇️</Text>
 
       {/* Basket with count-on badge */}
-      <View style={styles.basketContainer}>
-        <View style={styles.basketBaseRow}>
-          <Text style={{ fontSize: 32 }}>🧺</Text>
-          <View style={styles.baseNumberPill}>
-            <Text style={styles.baseNumberPillText}>5</Text>
+      <TouchableOpacity activeOpacity={0.85} onPress={handleManualDrop}>
+        <View style={styles.basketContainer}>
+          <View style={styles.basketBaseRow}>
+            <Text style={{ fontSize: 32 }}>🧺</Text>
+            <View style={styles.baseNumberPill}>
+              <Text style={styles.baseNumberPillText}>5</Text>
+            </View>
+            <Text style={{ fontSize: 20, fontWeight: '900', color: '#4E342E', marginHorizontal: 4 }}>+</Text>
+            <Animated.View style={[styles.countOnPopBadge, { transform: [{ scale: countBadgeScale }] }]}>
+              <Text style={styles.countOnPopText}>{demoCount}!</Text>
+            </Animated.View>
           </View>
-          <Text style={{ fontSize: 20, fontWeight: '900', color: '#4E342E', marginHorizontal: 4 }}>+</Text>
-          <Animated.View style={[styles.countOnPopBadge, { transform: [{ scale: countBadgeScale }] }]}>
-            <Text style={styles.countOnPopText}>{demoCount}!</Text>
-          </Animated.View>
         </View>
-      </View>
+      </TouchableOpacity>
     </View>
   );
 };
@@ -160,7 +174,16 @@ export const CountOnStepThreeVisual: React.FC = () => {
           {extraFruits.map((item, idx) => {
             const isSelected = activeIdx === idx;
             return (
-              <View key={item.num} style={styles.extraFruitItem}>
+              <TouchableOpacity
+                key={item.num}
+                style={styles.extraFruitItem}
+                activeOpacity={0.7}
+                onPress={() => {
+                  setActiveIdx(idx);
+                  AudioManager.stopSpeech();
+                  AudioManager.speak(`${item.num}`, { rate: 0.95, pitch: 1.35 });
+                }}
+              >
                 <View
                   style={[
                     styles.extraFruitCircle,
@@ -173,7 +196,7 @@ export const CountOnStepThreeVisual: React.FC = () => {
                   </View>
                 </View>
                 {isSelected && <Text style={styles.handSmall}>👆</Text>}
-              </View>
+              </TouchableOpacity>
             );
           })}
         </View>
