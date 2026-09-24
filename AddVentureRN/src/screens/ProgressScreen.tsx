@@ -41,8 +41,6 @@ export default function ProgressScreen({ navigation }: Props) {
 
   const [countOnUnlocked, setCountOnUnlocked] = useState(false);
   const [numberBondsUnlocked, setNumberBondsUnlocked] = useState(false);
-  const [countAllAdaptivePending, setCountAllAdaptivePending] = useState(false);
-  const [countOnAdaptivePending, setCountOnAdaptivePending] = useState(false);
 
   const [beginnerUnlocked, setBeginnerUnlocked] = useState(false);
   const [fastThinkerUnlocked, setFastThinkerUnlocked] = useState(false);
@@ -88,8 +86,6 @@ export default function ProgressScreen({ navigation }: Props) {
 
     setCountOnUnlocked(gm.saveSystem.isCountOnUnlocked());
     setNumberBondsUnlocked(gm.saveSystem.isNumberBondsUnlocked());
-    setCountAllAdaptivePending(gm.saveSystem.hasAdaptiveReviewPending('COUNT_ALL'));
-    setCountOnAdaptivePending(gm.saveSystem.hasAdaptiveReviewPending('COUNT_ON'));
 
     setBeginnerUnlocked(ca.completedActivities >= 10);
     setFastThinkerUnlocked(co.completedActivities >= 10);
@@ -156,18 +152,14 @@ export default function ProgressScreen({ navigation }: Props) {
           {!countOnUnlocked && (
             <View style={styles.unlockHintRow}>
               <Text style={styles.unlockHintText}>
-                {countAllAdaptivePending
-                  ? '🔒 Finish Adaptive Mode to unlock Count On'
-                  : '🔒 Reach 60% & 10+ activities on Count All to unlock Count On'}
+                🔒 Reach 60% & 10+ activities on Count All to unlock Count On
               </Text>
             </View>
           )}
           {countOnUnlocked && !numberBondsUnlocked && (
             <View style={styles.unlockHintRow}>
               <Text style={styles.unlockHintText}>
-                {countOnAdaptivePending
-                  ? '🔒 Finish Adaptive Mode to unlock Number Bonds'
-                  : '🔒 Reach 60% & 10+ activities on Count On to unlock Number Bonds'}
+                🔒 Reach 60% & 10+ activities on Count On to unlock Number Bonds
               </Text>
             </View>
           )}

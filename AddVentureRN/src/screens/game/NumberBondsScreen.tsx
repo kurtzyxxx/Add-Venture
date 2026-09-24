@@ -9,7 +9,6 @@ import { RootStackParamList } from '../../../App';
 import { GameManager, MAX_ACTIVITIES_PER_SESSION } from '../../core/GameManager';
 import { Problem } from '../../core/ProblemGenerator';
 import { LinearGradient } from 'expo-linear-gradient';
-import { IncorrectModal } from '../../components/IncorrectModal';
 import { GreatJobOverlay } from '../../components/GreatJobOverlay';
 import { HintConfirmModal } from '../../components/HintConfirmModal';
 import { HintBox } from '../../components/HintBox';
@@ -20,8 +19,9 @@ import { GameTutorialModal } from '../../components/tutorial/GameTutorialModal';
 import { NUMBER_BONDS_TUTORIAL_STEPS } from '../../components/tutorial/NumberBondsTutorialContent';
 import { FiveStreakModal } from '../../components/FiveStreakModal';
 import { OliverSpeechBalloon } from '../../components/OliverSpeechBalloon';
+import { DemonstrationBanner } from '../../components/tutorial/DemonstrationBanner';
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 type Props = NativeStackScreenProps<RootStackParamList, 'NumberBonds'>;
 
 const FRUITS = ['🍎', '🍌', '🍇', '🍉', '🍓', '🍑', '🍍', '🍊'];
@@ -42,10 +42,28 @@ export default function NumberBondsScreen({ navigation }: Props) {
   const [hintsRemaining, setHintsRemaining] = useState(() => GameManager.getInstance().getSessionHintsRemaining());
   const [showHintConfirm, setShowHintConfirm] = useState(false);
   const [activeHint, setActiveHint] = useState<string | null>(null);
-  const [showIncorrectModal, setShowIncorrectModal] = useState(false);
   const [timeLeft, setTimeLeft] = useState(120);
   const [isMasteryProblem, setIsMasteryProblem] = useState(false);
-  const [incorrectModalTry, setIncorrectModalTry] = useState(1);
+
+  // In-UI automated demonstration states & refs
+  const [isDemonstrating, setIsDemonstrating] = useState(false);
+  const [demoMessage, setDemoMessage] = useState('');
+  const [highlightedFruitId, setHighlightedFruitId] = useState<string | null>(null);
+  const [animatingFruitId, setAnimatingFruitId] = useState<string | null>(null);
+  const [isTotalBadgeHighlighted, setIsTotalBadgeHighlighted] = useState(false);
+  const [isLeftBasketHighlighted, setIsLeftBasketHighlighted] = useState(false);
+  const [isCheckHighlighted, setIsCheckHighlighted] = useState(false);
+  const [demoCountingIndex, setDemoCountingIndex] = useState<number | null>(null);
+  const [demoMaxCountedIndex, setDemoMaxCountedIndex] = useState<number | null>(null);
+
+  const isDemoCancelled = useRef(false);
+
+  // Layout measurement refs for exact coordinate targeting
+  const contentYRef = useRef(0);
+  const treeSectionLayoutRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
+  const canopyLayoutRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
+  const trunkLayoutRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
+  const checkBtnLayoutRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
 
   const [currentTry, setCurrentTry] = useState(1);
   const [activityCount, setActivityCount] = useState(0);
@@ -75,7 +93,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
 
   // Timer only runs during active gameplay
   useEffect(() => {
-    if (showTutorial || showIncorrectModal || showGreatJob || showFiveStreak || !problem) {
+    if (showTutorial || isDemonstrating || showGreatJob || showFiveStreak || !problem) {
       if (timerRef.current) {
         clearInterval(timerRef.current);
         timerRef.current = null;
@@ -90,13 +108,13 @@ export default function NumberBondsScreen({ navigation }: Props) {
         timerRef.current = null;
       }
     };
-  }, [showTutorial, showIncorrectModal, showGreatJob, showFiveStreak, problem]);
+  }, [showTutorial, isDemonstrating, showGreatJob, showFiveStreak, problem]);
 
   useEffect(() => {
-    if (timeLeft === 0 && !showTutorial && !showIncorrectModal && !showGreatJob && !showFiveStreak && problem && selectedOption === null) {
+    if (timeLeft === 0 && !showTutorial && !isDemonstrating && !showGreatJob && !showFiveStreak && problem && selectedOption === null) {
       handleTimeUp();
     }
-  }, [timeLeft, showTutorial, showIncorrectModal, showGreatJob, showFiveStreak, problem, selectedOption]);
+  }, [timeLeft, showTutorial, isDemonstrating, showGreatJob, showFiveStreak, problem, selectedOption]);
 
   // Pulse right basket when awaiting answers
   useEffect(() => {
@@ -115,21 +133,17 @@ export default function NumberBondsScreen({ navigation }: Props) {
   }, [selectedOption]);
 
   const handleTimeUp = async () => {
-    if (!problem) return;
+    if (!problem || isDemonstrating) return;
     const gm = GameManager.getInstance();
-    setCurrentTry(3);
-    setIncorrectModalTry(MAX_WRONG_TRIES);
     const responseTimeMs = gm.sessionTimerLimit * 1000;
-    const { starsEarned } = await gm.submitAnswer(false, 3, responseTimeMs, problem, -1, true);
+    await gm.submitAnswer(false, currentTry, responseTimeMs, problem, -1, false);
 
     if (isMasteryProblem) {
       gm.recordMasteryIncorrect(problem);
     } else {
       gm.addToMasteryQueue(problem);
     }
-    const newCount = gm.getSessionActivityCount();
-    setActivityCount(newCount);
-    setShowIncorrectModal(true);
+    startAutomatedDemonstration(true);
   };
 
   const loadNewProblem = (silent = false) => {
@@ -152,6 +166,8 @@ export default function NumberBondsScreen({ navigation }: Props) {
     setCurrentTry(1);
     setTimeLeft(gm.sessionTimerLimit);
     setJustMastered(false);
+    setDemoCountingIndex(null);
+    setDemoMaxCountedIndex(null);
 
     const pCount = gm.getSessionActivityCount();
     setActivityCount(pCount);
@@ -234,16 +250,17 @@ export default function NumberBondsScreen({ navigation }: Props) {
   const resetFruitsAndAnswer = () => {
     setTreeFruits(prev => prev.map(f => ({ ...f, dropped: false })));
     setSelectedOption(null);
+    setDemoCountingIndex(null);
+    setDemoMaxCountedIndex(null);
   };
 
   const submitCheck = async () => {
     if (selectedOption === null || !problem) return;
     const gm = GameManager.getInstance();
     const isCorrect = selectedOption === problem.correctAnswer;
-    const shouldMoveOnAfterWrong = !isCorrect && currentTry >= MAX_WRONG_TRIES;
     const responseTimeMs = (gm.sessionTimerLimit - timeLeft) * 1000;
     const { starsEarned } = await gm.submitAnswer(
-      isCorrect, currentTry, responseTimeMs, problem, selectedOption, shouldMoveOnAfterWrong
+      isCorrect, currentTry, responseTimeMs, problem, selectedOption, isCorrect
     );
 
     if (isCorrect) {
@@ -256,17 +273,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
       setShowGreatJob(true);
     } else {
       if (isMasteryProblem) gm.recordMasteryIncorrect(problem);
-      resetFruitsAndAnswer();
-      if (shouldMoveOnAfterWrong) {
-        const newCount = gm.getSessionActivityCount();
-        setActivityCount(newCount);
-        setIncorrectModalTry(MAX_WRONG_TRIES);
-        setShowIncorrectModal(true);
-      } else {
-        setIncorrectModalTry(currentTry);
-        setCurrentTry(prev => prev + 1);
-        setShowIncorrectModal(true);
-      }
+      startAutomatedDemonstration(false);
     }
   };
 
@@ -288,22 +295,177 @@ export default function NumberBondsScreen({ navigation }: Props) {
     else loadNewProblem();
   };
 
-  const handleTryAgainAfterFail = async () => {
-    setShowIncorrectModal(false);
-    if (activityCount >= MAX_ACTIVITIES_PER_SESSION) { await finishSession(); return; }
-    if (incorrectModalTry >= MAX_WRONG_TRIES) {
-      loadNewProblem();
+  const waitMs = (ms: number) => new Promise(res => setTimeout(res, ms));
+
+  const startAutomatedDemonstration = async (isTimeout = false) => {
+    if (!problem) return;
+    setIsDemonstrating(true);
+    isDemoCancelled.current = false;
+
+    // Reset dropped fruits so demonstration starts clean
+    setTreeFruits(prev => prev.map(f => ({ ...f, dropped: false })));
+    setSelectedOption(null);
+    setHighlightedFruitId(null);
+    setAnimatingFruitId(null);
+    setIsTotalBadgeHighlighted(false);
+    setIsLeftBasketHighlighted(false);
+    setIsCheckHighlighted(false);
+    setDemoCountingIndex(null);
+    setDemoMaxCountedIndex(null);
+
+    const missingCount = problem.correctAnswer;
+
+    // Friendly notice if the student answered incorrectly or time expired
+    if (isTimeout) {
+      setDemoMessage(`Time's up! Let's watch Oliver find the number bond!`);
+      await AudioManager.speakAsync(`Time's up! That's okay, let's watch Oliver find the number bond together!`, {
+        rate: 0.95,
+        pitch: 1.3,
+      });
+      await waitMs(400);
+      if (isDemoCancelled.current) return;
     } else {
-      resetFruitsAndAnswer();
-      if (problem) {
-        AudioManager.stopSpeech();
-        setTimeout(() => {
-          AudioManager.speak(`What number goes with ${problem.num2} to make ${problem.num1}?`, {
-            rate: 0.95, pitch: 1.3,
-          });
-        }, 300);
-      }
+      setDemoMessage(`Not quite, but nice try! Let's watch Oliver find the missing number!`);
+      await AudioManager.speakAsync(`Not quite, but good try! Let's watch Oliver find the number bond together!`, {
+        rate: 0.95,
+        pitch: 1.3,
+      });
+      await waitMs(400);
+      if (isDemoCancelled.current) return;
     }
+
+    // Step 1: Highlight Trunk Total Badge
+    setDemoMessage(`Total on the tree is ${problem.num1}!`);
+    setIsTotalBadgeHighlighted(true);
+
+    await AudioManager.speakAsync(`Look at the tree! The total number is ${problem.num1}!`, {
+      rate: 0.92,
+      pitch: 1.25,
+    });
+    await waitMs(400);
+    if (isDemoCancelled.current) return;
+    setIsTotalBadgeHighlighted(false);
+
+    // Step 2: Highlight Left Basket (fixed part)
+    setDemoMessage(`Left basket has ${problem.num2}. How many more make ${problem.num1}?`);
+    setIsLeftBasketHighlighted(true);
+
+    await AudioManager.speakAsync(`The left basket already has ${problem.num2}. How many more do we need to make ${problem.num1}?`, {
+      rate: 0.92,
+      pitch: 1.3,
+    });
+    await waitMs(400);
+    if (isDemoCancelled.current) return;
+    setIsLeftBasketHighlighted(false);
+
+    // Step 3: Drag missing fruits from canopy to right basket with highlight & glide animation
+    for (let i = 0; i < missingCount; i++) {
+      if (isDemoCancelled.current) return;
+      const count = i + 1;
+      const currentSum = problem.num2 + count;
+      const fruitId = `nb_fruit_${i}`;
+
+      setDemoMessage(`Drag fruit to right basket: ${count} (${problem.num2} + ${count} = ${currentSum})`);
+      setHighlightedFruitId(fruitId);
+      setAnimatingFruitId(fruitId);
+
+      // Slide-down animation into right basket
+      await waitMs(480);
+      if (isDemoCancelled.current) return;
+
+      // Transfer into right basket
+      setTreeFruits(prev => prev.map(f => (f.id === fruitId ? { ...f, dropped: true } : f)));
+      setSelectedOption(count);
+      setHighlightedFruitId(null);
+      setAnimatingFruitId(null);
+
+      await AudioManager.speakAsync(`${count}`, { rate: 0.95, pitch: 1.35 });
+      await waitMs(250);
+    }
+
+    if (isDemoCancelled.current) return;
+
+    // Step 4: Double-check all fruits across both baskets (Left basket + Right basket)
+    setDemoMessage(`Let's count all the fruits to double-check!`);
+    await AudioManager.speakAsync(`Now let's count all the fruits across both baskets to double-check our total!`, {
+      rate: 0.92,
+      pitch: 1.3,
+    });
+    await waitMs(350);
+    if (isDemoCancelled.current) return;
+
+    // Count Left Basket fruits (1 up to problem.num2)
+    setIsLeftBasketHighlighted(true);
+    for (let i = 0; i < problem.num2; i++) {
+      if (isDemoCancelled.current) return;
+      const countNum = i + 1;
+      setDemoCountingIndex(i);
+      setDemoMaxCountedIndex(i);
+      setDemoMessage(`Left Basket: Fruit #${countNum}!`);
+
+      await AudioManager.speakAsync(`${countNum}`, { rate: 0.95, pitch: 1.35 });
+      await waitMs(250);
+    }
+    setIsLeftBasketHighlighted(false);
+
+    // Count Right Basket fruits (problem.num2 + 1 up to problem.num1)
+    for (let i = 0; i < missingCount; i++) {
+      if (isDemoCancelled.current) return;
+      const countNum = problem.num2 + i + 1;
+      const globalIdx = problem.num2 + i;
+      setDemoCountingIndex(globalIdx);
+      setDemoMaxCountedIndex(globalIdx);
+      setDemoMessage(`Right Basket: Fruit #${countNum}!`);
+
+      await AudioManager.speakAsync(`${countNum}`, { rate: 0.95, pitch: 1.35 });
+      await waitMs(250);
+    }
+
+    if (isDemoCancelled.current) return;
+    setDemoCountingIndex(null);
+
+    // Step 5: Recap the bond
+    setDemoMessage(`Double-checked! ${problem.num2} + ${problem.correctAnswer} = ${problem.num1}!`);
+    await AudioManager.speakAsync(`Double-checked! ${problem.num2} plus ${problem.correctAnswer} equals ${problem.num1}! Both baskets make ${problem.num1} fruits in all!`, {
+      rate: 0.92,
+      pitch: 1.3,
+    });
+    await waitMs(400);
+    if (isDemoCancelled.current) return;
+
+    // Step 6: Highlight Check button
+    setDemoMessage(`Tap Check to verify!`);
+    setIsCheckHighlighted(true);
+
+    await AudioManager.speakAsync(`Tap Check!`, { rate: 0.95, pitch: 1.3 });
+    await waitMs(400);
+    if (isDemoCancelled.current) return;
+
+    // Step 7: Turn over to learner
+    setDemoMessage(`🎯 Now it's your turn! Drag ${problem.correctAnswer} fruits to the right basket!`);
+    await AudioManager.speakAsync(`Now it's your turn! Drag the fruits to make ${problem.num1}!`, { rate: 0.95, pitch: 1.3 });
+    await waitMs(400);
+    endDemonstration();
+  };
+
+  const endDemonstration = () => {
+    isDemoCancelled.current = true;
+    setIsDemonstrating(false);
+    setHighlightedFruitId(null);
+    setAnimatingFruitId(null);
+    setIsTotalBadgeHighlighted(false);
+    setIsLeftBasketHighlighted(false);
+    setIsCheckHighlighted(false);
+    setDemoCountingIndex(null);
+    setDemoMaxCountedIndex(null);
+    setCurrentTry(prev => prev + 1);
+
+    // Clear right basket for the student
+    setTreeFruits(prev => prev.map(f => ({ ...f, dropped: false })));
+    setSelectedOption(null);
+
+    const gm = GameManager.getInstance();
+    setTimeLeft(gm.sessionTimerLimit);
   };
 
   const useHint = () => {
@@ -334,19 +496,13 @@ export default function NumberBondsScreen({ navigation }: Props) {
 
   const finishSession = async () => {
     const gm = GameManager.getInstance();
-    const incorrectProblems = gm.getSessionIncorrectProblems();
     const session = await gm.completeAndResetSession();
-    await gm.saveSystem.setAdaptiveReviewPending(
-      'NUMBER_BONDS',
-      incorrectProblems.length > 0,
-      incorrectProblems
-    );
     navigation.replace('SessionSummary', {
       stars: session.totalStars,
       activities: session.totalActivities,
       correct: session.totalCorrect,
       strategy: 'NUMBER_BONDS',
-      incorrectProblems,
+      incorrectProblems: [],
     });
   };
 
@@ -366,6 +522,13 @@ export default function NumberBondsScreen({ navigation }: Props) {
   return (
     <SafeAreaView style={styles.container}>
       <LinearGradient colors={['#A5D6A7', '#B2DFDB']} style={StyleSheet.absoluteFill} />
+
+      {isDemonstrating && (
+        <DemonstrationBanner
+          message={demoMessage}
+          onSkip={endDemonstration}
+        />
+      )}
 
       {/* Cloud Decors */}
       <Text style={[styles.cloud, { top: '8%', left: '-5%', fontSize: 80, opacity: 0.5 }]}>☁️</Text>
@@ -392,7 +555,12 @@ export default function NumberBondsScreen({ navigation }: Props) {
         </View>
       </View>
 
-      <View style={styles.content}>
+      <View
+        style={styles.content}
+        onLayout={e => {
+          contentYRef.current = e.nativeEvent.layout.y;
+        }}
+      >
         {/* Title row */}
         <View style={styles.titleRow}>
           <View style={styles.tryStarsRow}>
@@ -431,7 +599,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
             <OliverSpeechBalloon
               active={
                 !showTutorial &&
-                !showIncorrectModal &&
+                !isDemonstrating &&
                 !showGreatJob &&
                 !showFiveStreak &&
                 !showHintConfirm &&
@@ -477,9 +645,19 @@ export default function NumberBondsScreen({ navigation }: Props) {
         {/* ═══════════════════════════════════════════════════════════════════
             TREE, DUAL BASKETS & BOND DIAGRAM (Matching UI Draft)
         ═══════════════════════════════════════════════════════════════════ */}
-        <View style={styles.treeSection}>
+        <View
+          style={styles.treeSection}
+          onLayout={e => {
+            treeSectionLayoutRef.current = e.nativeEvent.layout;
+          }}
+        >
           {/* 1. Leafy Canopy with 10 Hanging Fruits */}
-          <View style={styles.canopyContainer}>
+          <View
+            style={styles.canopyContainer}
+            onLayout={e => {
+              canopyLayoutRef.current = e.nativeEvent.layout;
+            }}
+          >
             {/* SVG Canopy Backing */}
             <Svg width={sectionWidth} height={140} style={StyleSheet.absoluteFill}>
               <Defs>
@@ -505,30 +683,59 @@ export default function NumberBondsScreen({ navigation }: Props) {
             {/* 10 Hanging Fruits arranged across branches in 2 rows */}
             <View style={styles.canopyFruitsGrid}>
               <View style={styles.fruitRow}>
-                {treeFruits.slice(0, 5).map(f => (
-                  <DraggableFruit
-                    key={`${f.id}_try${currentTry}`}
-                    fruit={f}
-                    disabled={f.dropped}
-                    onDrop={() => handleDropFruit(f.id)}
-                  />
-                ))}
+                {treeFruits.slice(0, 5).map((f, idx) => {
+                  const col = idx;
+                  const gridWidth = (width - 24) * 0.9;
+                  const colSpacing = gridWidth / 5;
+                  const fruitCenterX = ((width - 24) - gridWidth) / 2 + (col + 0.5) * colSpacing;
+                  const demoTargetX = ((width - 24) / 2 + 75) - fruitCenterX;
+                  const demoTargetY = 175;
+                  return (
+                    <DraggableFruit
+                      key={`${f.id}_try${currentTry}`}
+                      fruit={f}
+                      disabled={f.dropped || isDemonstrating}
+                      onDrop={() => handleDropFruit(f.id)}
+                      isHighlighted={highlightedFruitId === f.id}
+                      isDemoAnimating={animatingFruitId === f.id}
+                      demoTargetX={demoTargetX}
+                      demoTargetY={demoTargetY}
+                    />
+                  );
+                })}
               </View>
               <View style={styles.fruitRow}>
-                {treeFruits.slice(5, 10).map(f => (
-                  <DraggableFruit
-                    key={`${f.id}_try${currentTry}`}
-                    fruit={f}
-                    disabled={f.dropped}
-                    onDrop={() => handleDropFruit(f.id)}
-                  />
-                ))}
+                {treeFruits.slice(5, 10).map((f, idx) => {
+                  const col = idx;
+                  const gridWidth = (width - 24) * 0.9;
+                  const colSpacing = gridWidth / 5;
+                  const fruitCenterX = ((width - 24) - gridWidth) / 2 + (col + 0.5) * colSpacing;
+                  const demoTargetX = ((width - 24) / 2 + 75) - fruitCenterX;
+                  const demoTargetY = 145;
+                  return (
+                    <DraggableFruit
+                      key={`${f.id}_try${currentTry}`}
+                      fruit={f}
+                      disabled={f.dropped || isDemonstrating}
+                      onDrop={() => handleDropFruit(f.id)}
+                      isHighlighted={highlightedFruitId === f.id}
+                      isDemoAnimating={animatingFruitId === f.id}
+                      demoTargetX={demoTargetX}
+                      demoTargetY={demoTargetY}
+                    />
+                  );
+                })}
               </View>
             </View>
           </View>
 
           {/* 2. Unified Tree Trunk (Extended to bottom) + Vertically Elongated Baskets */}
-          <View style={styles.trunkAreaWrapper}>
+          <View
+            style={styles.trunkAreaWrapper}
+            onLayout={e => {
+              trunkLayoutRef.current = e.nativeEvent.layout;
+            }}
+          >
             {/* Continuous SVG Trunk Illustration extending from under canopy all the way down to roots */}
             <Svg width={sectionWidth} height={310} style={StyleSheet.absoluteFill}>
               <Defs>
@@ -622,7 +829,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
             {/* Dual Vertically Elongated Baskets & Center + */}
             <View style={styles.basketsRow}>
               {/* LEFT BASKET — Fixed Number Pair */}
-              <View style={styles.basketColumn}>
+              <View style={[styles.basketColumn, isLeftBasketHighlighted && styles.basketHighlighted]}>
                 <TopViewBasket
                   width={126}
                   height={156}
@@ -631,11 +838,29 @@ export default function NumberBondsScreen({ navigation }: Props) {
                   title="Fixed Pair"
                 >
                   <View style={styles.fixedFruitsCluster}>
-                    {Array.from({ length: problem.num2 }).map((_, i) => (
-                      <Text key={i} style={styles.basketFruitEmoji}>
-                        {treeFruits[0]?.emoji ?? '🍎'}
-                      </Text>
-                    ))}
+                    {Array.from({ length: problem.num2 }).map((_, i) => {
+                      const isCountingActive = demoCountingIndex === i;
+                      const showBadge = demoMaxCountedIndex !== null && i <= demoMaxCountedIndex;
+                      const fruitNum = i + 1;
+                      return (
+                        <View
+                          key={i}
+                          style={[
+                            styles.doubleCheckFruitWrap,
+                            isCountingActive && styles.doubleCheckFruitActive,
+                          ]}
+                        >
+                          <Text style={styles.basketFruitEmoji}>
+                            {treeFruits[0]?.emoji ?? '🍎'}
+                          </Text>
+                          {showBadge && (
+                            <View style={styles.doubleCheckFruitBadge}>
+                              <Text style={styles.doubleCheckFruitBadgeText}>{fruitNum}</Text>
+                            </View>
+                          )}
+                        </View>
+                      );
+                    })}
                   </View>
                 </TopViewBasket>
                 <Text style={styles.basketBottomLabel}>Part: {problem.num2}</Text>
@@ -655,21 +880,40 @@ export default function NumberBondsScreen({ navigation }: Props) {
                   badgeColor="#E65100"
                   isDropZone={true}
                   title="Drop Zone"
-                  onReset={droppedCount > 0 ? handleResetRightBasket : undefined}
+                  onReset={droppedCount > 0 && !isDemonstrating ? handleResetRightBasket : undefined}
                 >
                   {droppedCount === 0 ? (
                     <Text style={styles.dropPromptText}>Drag fruits here!</Text>
                   ) : (
                     <View style={styles.fixedFruitsCluster}>
-                      {droppedFruits.map(f => (
-                        <TouchableOpacity
-                          key={f.id}
-                          onPress={() => handleRemoveFruit(f.id)}
-                          activeOpacity={0.7}
-                        >
-                          <Text style={styles.basketFruitEmoji}>{f.emoji}</Text>
-                        </TouchableOpacity>
-                      ))}
+                      {droppedFruits.map((f, i) => {
+                        const globalIdx = problem.num2 + i;
+                        const isCountingActive = demoCountingIndex === globalIdx;
+                        const showBadge = demoMaxCountedIndex !== null && globalIdx <= demoMaxCountedIndex;
+                        const fruitNum = globalIdx + 1;
+                        return (
+                          <TouchableOpacity
+                            key={f.id}
+                            onPress={() => handleRemoveFruit(f.id)}
+                            disabled={isDemonstrating}
+                            activeOpacity={0.7}
+                          >
+                            <View
+                              style={[
+                                styles.doubleCheckFruitWrap,
+                                isCountingActive && styles.doubleCheckFruitActive,
+                              ]}
+                            >
+                              <Text style={styles.basketFruitEmoji}>{f.emoji}</Text>
+                              {showBadge && (
+                                <View style={styles.doubleCheckFruitBadge}>
+                                  <Text style={styles.doubleCheckFruitBadgeText}>{fruitNum}</Text>
+                                </View>
+                              )}
+                            </View>
+                          </TouchableOpacity>
+                        );
+                      })}
                     </View>
                   )}
                 </TopViewBasket>
@@ -683,7 +927,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
 
             {/* Total Number Badge at the V-vertex on the trunk */}
             <View style={styles.totalNumberBadgeWrap}>
-              <View style={styles.totalNumberBadge}>
+              <View style={[styles.totalNumberBadge, isTotalBadgeHighlighted && styles.totalBadgeHighlighted]}>
                 <Text style={styles.totalBadgeLabel}>TOTAL</Text>
                 <Text style={styles.totalBadgeValue}>{problem.num1}</Text>
               </View>
@@ -694,33 +938,27 @@ export default function NumberBondsScreen({ navigation }: Props) {
         {/* ═══════════════════════════════════════════════════════════════════
             SUBMIT / CHECK BUTTON
         ═══════════════════════════════════════════════════════════════════ */}
-        <View style={styles.actionsContainer}>
+        <View
+          style={styles.actionsContainer}
+          onLayout={e => {
+            checkBtnLayoutRef.current = e.nativeEvent.layout;
+          }}
+        >
           <TouchableOpacity
             style={[
               styles.actionBtn,
-              { backgroundColor: selectedOption !== null ? '#4CAF50' : '#BDBDBD' },
+              { backgroundColor: selectedOption !== null || isCheckHighlighted ? '#4CAF50' : '#BDBDBD' },
+              isCheckHighlighted && styles.actionBtnHighlighted,
+              isDemonstrating && !isCheckHighlighted && { opacity: 0.6 },
             ]}
             onPress={submitCheck}
-            disabled={selectedOption === null}
+            disabled={selectedOption === null || isDemonstrating}
             activeOpacity={0.8}
           >
             <Text style={styles.actionBtnText}>Check ✓</Text>
           </TouchableOpacity>
         </View>
       </View>
-
-      {/* Modals & Overlays */}
-      <IncorrectModal
-        visible={showIncorrectModal}
-        onTryAgain={handleTryAgainAfterFail}
-        onHint={() => {
-          resetFruitsAndAnswer();
-          confirmUseHint(() => setShowIncorrectModal(false));
-        }}
-        hintsRemaining={hintsRemaining}
-        currentTry={incorrectModalTry}
-        isFinalWrong={incorrectModalTry >= MAX_WRONG_TRIES}
-      />
 
       <HintConfirmModal
         visible={showHintConfirm}
@@ -883,9 +1121,19 @@ const TopViewBasket: React.FC<TopViewBasketProps> = ({
 };
 
 // ─── Draggable Fruit on Tree Branch ──────────────────────────────────────────
-const DraggableFruit = ({ fruit, onDrop, disabled }: any) => {
+const DraggableFruit = ({
+  fruit,
+  onDrop,
+  disabled,
+  isHighlighted = false,
+  isDemoAnimating = false,
+  demoTargetX = 0,
+  demoTargetY = 160,
+}: any) => {
   const pan = useRef(new Animated.ValueXY()).current;
   const pressScale = useRef(new Animated.Value(1)).current;
+  const demoAnimX = useRef(new Animated.Value(0)).current;
+  const demoAnimY = useRef(new Animated.Value(0)).current;
   const disabledRef = useRef(disabled);
 
   useEffect(() => {
@@ -898,6 +1146,36 @@ const DraggableFruit = ({ fruit, onDrop, disabled }: any) => {
       pressScale.setValue(1);
     }
   }, [fruit.dropped]);
+
+  useEffect(() => {
+    if (isDemoAnimating) {
+      demoAnimX.setValue(0);
+      demoAnimY.setValue(0);
+      Animated.sequence([
+        Animated.timing(pressScale, { toValue: 1.25, duration: 150, useNativeDriver: true }),
+        Animated.parallel([
+          Animated.timing(demoAnimX, {
+            toValue: demoTargetX,
+            duration: 480,
+            useNativeDriver: true,
+          }),
+          Animated.timing(demoAnimY, {
+            toValue: demoTargetY,
+            duration: 480,
+            useNativeDriver: true,
+          }),
+        ]),
+      ]).start(() => {
+        demoAnimX.setValue(0);
+        demoAnimY.setValue(0);
+        pressScale.setValue(1);
+      });
+    } else {
+      demoAnimX.setValue(0);
+      demoAnimY.setValue(0);
+      pressScale.setValue(1);
+    }
+  }, [isDemoAnimating, demoTargetX, demoTargetY]);
 
   const panResponder = useRef(
     PanResponder.create({
@@ -934,11 +1212,19 @@ const DraggableFruit = ({ fruit, onDrop, disabled }: any) => {
       {...panResponder.panHandlers}
       style={{
         transform: [{ translateX: pan.x }, { translateY: pan.y }],
-        zIndex: 100,
+        zIndex: isHighlighted || isDemoAnimating ? 999 : 100,
       }}
     >
-      <Animated.View style={{ transform: [{ scale: pressScale }] }}>
-        <View style={styles.hangingFruitCircle}>
+      <Animated.View
+        style={{
+          transform: [
+            { scale: pressScale },
+            { translateX: demoAnimX },
+            { translateY: demoAnimY },
+          ],
+        }}
+      >
+        <View style={[styles.hangingFruitCircle, isHighlighted && styles.fruitCircleHighlighted]}>
           <Text style={styles.fruitEmoji}>{fruit.emoji}</Text>
         </View>
       </Animated.View>
@@ -1173,6 +1459,42 @@ const styles = StyleSheet.create({
     fontSize: 22,
     margin: 2,
   },
+  doubleCheckFruitWrap: {
+    position: 'relative',
+    margin: 1,
+    padding: 1,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  doubleCheckFruitActive: {
+    backgroundColor: '#FFF9C4',
+    borderWidth: 2,
+    borderColor: '#FFD700',
+    transform: [{ scale: 1.18 }],
+  },
+  doubleCheckFruitBadge: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
+    backgroundColor: '#E65100',
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: '#FFF',
+    minWidth: 14,
+    height: 14,
+    paddingHorizontal: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+    elevation: 3,
+  },
+  doubleCheckFruitBadgeText: {
+    color: '#FFF',
+    fontSize: 9,
+    fontWeight: '900',
+    lineHeight: 11,
+  },
   dropPromptText: {
     fontSize: 11,
     fontWeight: 'bold',
@@ -1308,5 +1630,46 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: '#3E2723',
     marginHorizontal: 8,
+  },
+  fruitCircleHighlighted: {
+    borderColor: '#FF6F00',
+    borderWidth: 3.5,
+    backgroundColor: '#FFF9C4',
+    shadowColor: '#FF6F00',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.6,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  totalBadgeHighlighted: {
+    borderColor: '#FFD700',
+    borderWidth: 4,
+    transform: [{ scale: 1.15 }],
+    shadowColor: '#FFD700',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.8,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  basketHighlighted: {
+    borderWidth: 3.5,
+    borderColor: '#FFD700',
+    borderRadius: 24,
+    padding: 3,
+    shadowColor: '#FFD700',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.8,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  actionBtnHighlighted: {
+    borderWidth: 4,
+    borderColor: '#FFD700',
+    transform: [{ scale: 1.05 }],
+    shadowColor: '#FFD700',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.8,
+    shadowRadius: 10,
+    elevation: 10,
   },
 });

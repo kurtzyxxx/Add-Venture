@@ -282,8 +282,7 @@ export class SaveSystem {
     const r = this.getProgress('COUNT_ALL');
     return (
       r.totalAttempts >= 10 &&
-      this.getAccuracy('COUNT_ALL') >= 60 &&
-      !this.hasAdaptiveReviewPending('COUNT_ALL')
+      this.getAccuracy('COUNT_ALL') >= 60
     );
   }
 
@@ -292,12 +291,14 @@ export class SaveSystem {
     const r = this.getProgress('COUNT_ON');
     return (
       r.totalAttempts >= 10 &&
-      this.getAccuracy('COUNT_ON') >= 60 &&
-      !this.hasAdaptiveReviewPending('COUNT_ON')
+      this.getAccuracy('COUNT_ON') >= 60
     );
   }
 
   public hasAdaptiveReviewPending(strategy: string): boolean {
+    if (strategy === 'COUNT_ALL' || strategy === 'COUNT_ON' || strategy === 'NUMBER_BONDS') {
+      return false;
+    }
     return (
       this.data.adaptiveReviewPending[strategy] === true ||
       (this.data.adaptiveReviewProblems[strategy]?.length ?? 0) > 0

@@ -71,15 +71,6 @@ export default function SessionSummaryScreen({ route, navigation }: Props) {
       strategy === 'NUMBER_BONDS' ? 'NumberBonds' :
       'CountAll';
 
-    if (hasAdaptiveReview) {
-      navigation.replace('AdaptiveMode', {
-        strategy,
-        targetRoute: routeName,
-        incorrectProblems,
-      });
-      return;
-    }
-
     GameManager.getInstance().startSession(strategy);
     navigation.replace(routeName);
   };
@@ -167,9 +158,7 @@ export default function SessionSummaryScreen({ route, navigation }: Props) {
             onPress={handleContinue}
             activeOpacity={0.85}
           >
-            <Text style={styles.primaryBtnText}>
-              {hasAdaptiveReview ? 'Review Mistakes First' : 'Continue to Next Level'}
-            </Text>
+            <Text style={styles.primaryBtnText}>Continue to Next Level</Text>
           </TouchableOpacity>
 
           <View style={styles.secondaryActionsRow}>

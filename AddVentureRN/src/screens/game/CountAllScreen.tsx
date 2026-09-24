@@ -1,19 +1,19 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Animated,
-  PanResponder, SafeAreaView,
+  PanResponder, SafeAreaView, Dimensions,
 } from 'react-native';
-import { IncorrectModal } from '../../components/IncorrectModal';
 import { GreatJobOverlay } from '../../components/GreatJobOverlay';
 import { HintConfirmModal } from '../../components/HintConfirmModal';
 import { HintBox } from '../../components/HintBox';
 import { PulseView } from '../../components/animations/PulseView';
 import { GameTutorialModal } from '../../components/tutorial/GameTutorialModal';
+import { DemonstrationBanner } from '../../components/tutorial/DemonstrationBanner';
 import { COUNT_ALL_TUTORIAL_STEPS } from '../../components/tutorial/CountAllTutorialContent';
 import { FiveStreakModal } from '../../components/FiveStreakModal';
 import { OliverSpeechBalloon } from '../../components/OliverSpeechBalloon';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { AdaptiveProblem, RootStackParamList } from '../../../App';
+import { RootStackParamList } from '../../../App';
 import { GameManager, MAX_ACTIVITIES_PER_SESSION } from '../../core/GameManager';
 import { Problem } from '../../core/ProblemGenerator';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -22,6 +22,7 @@ import { AudioManager } from '../../core/AudioManager';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CountAll'>;
 
+const { width, height } = Dimensions.get('window');
 const FRUITS = ['🍎', '🍌', '🍇', '🍉', '🍓', '🍑', '🍍', '🍊'];
 const HINT_DISABLE_THRESHOLD = 5; // consecutive correct before hints are hidden
 const MAX_WRONG_TRIES = 3;
@@ -38,10 +39,29 @@ export default function CountAllScreen({ navigation }: Props) {
   const [hintsRemaining, setHintsRemaining] = useState(() => GameManager.getInstance().getSessionHintsRemaining());
   const [showHintConfirm, setShowHintConfirm] = useState(false);
   const [activeHint, setActiveHint] = useState<string | null>(null);
-  const [showIncorrectModal, setShowIncorrectModal] = useState(false);
+  const [isDemonstrating, setIsDemonstrating] = useState(false);
+  const [demoMessage, setDemoMessage] = useState('');
+  const [highlightedFruitId, setHighlightedFruitId] = useState<string | null>(null);
+  const [animatingFruitId, setAnimatingFruitId] = useState<string | null>(null);
+  const [highlightedOption, setHighlightedOption] = useState<number | null>(null);
+  const [isSubmitHighlighted, setIsSubmitHighlighted] = useState(false);
   const [isMasteryProblem, setIsMasteryProblem] = useState(false);
-  const [incorrectModalTry, setIncorrectModalTry] = useState(1);
-  const [advanceAfterIncorrectModal, setAdvanceAfterIncorrectModal] = useState(false);
+
+  const isDemoCancelled = useRef(false);
+
+  // Layout measurement refs for exact coordinate targeting
+  const contentYRef = useRef(0);
+  const groupsWrapperLayoutRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
+  const tree1LayoutRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
+  const tree2LayoutRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
+  const dropZoneLayoutRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
+  const answerAreaLayoutRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
+  const optionsLayoutRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
+  const submitBtnLayoutRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
+
+  const tree1ViewRef = useRef<View>(null);
+  const tree2ViewRef = useRef<View>(null);
+  const dropZoneViewRef = useRef<View>(null);
 
   // Tutorial overlay
   const [showTutorial, setShowTutorial] = useState(() => {
@@ -69,22 +89,6 @@ export default function CountAllScreen({ navigation }: Props) {
   const pendingHintAction = useRef<(() => void) | null>(null);
 
   useEffect(() => {
-    const gm = GameManager.getInstance();
-    if (gm.saveSystem.hasAdaptiveReviewPending('COUNT_ALL')) {
-      const pendingProblems = gm.saveSystem.getPendingAdaptiveReviewProblems('COUNT_ALL');
-      const incorrectProblems = pendingProblems.length > 0
-        ? pendingProblems
-        : gm.saveSystem.getLatestIncorrectProblemsForStrategy('COUNT_ALL');
-      navigation.replace('AdaptiveMode', {
-        strategy: 'COUNT_ALL',
-        targetRoute: 'CountAll',
-        incorrectProblems: incorrectProblems.length > 0
-          ? incorrectProblems
-          : [createFallbackCountAllAdaptiveProblem()],
-      });
-      return;
-    }
-
     loadNewProblem(showTutorial);
 
     if (!showTutorial) {
@@ -119,7 +123,7 @@ export default function CountAllScreen({ navigation }: Props) {
 
   // Timer only runs when gameplay is actively running (not in tutorial or modals)
   useEffect(() => {
-    if (showTutorial || showIncorrectModal || showGreatJob || showFiveStreak || !problem) {
+    if (showTutorial || isDemonstrating || showGreatJob || showFiveStreak || !problem) {
       if (timerRef.current) {
         clearInterval(timerRef.current);
         timerRef.current = null;
@@ -134,31 +138,26 @@ export default function CountAllScreen({ navigation }: Props) {
         timerRef.current = null;
       }
     };
-  }, [showTutorial, showIncorrectModal, showGreatJob, showFiveStreak, problem]);
+  }, [showTutorial, isDemonstrating, showGreatJob, showFiveStreak, problem]);
 
   useEffect(() => {
-    if (timeLeft === 0 && !showTutorial && !showIncorrectModal && !showGreatJob && !showFiveStreak && problem && selectedAnswer === null) {
+    if (timeLeft === 0 && !showTutorial && !isDemonstrating && !showGreatJob && !showFiveStreak && problem && selectedAnswer === null) {
       handleTimeUp();
     }
-  }, [timeLeft, showTutorial, showIncorrectModal, showGreatJob, showFiveStreak, problem, selectedAnswer]);
+  }, [timeLeft, showTutorial, isDemonstrating, showGreatJob, showFiveStreak, problem, selectedAnswer]);
 
   const handleTimeUp = async () => {
-    if (!problem) return;
+    if (!problem || isDemonstrating) return;
     const gm = GameManager.getInstance();
-    setCurrentTry(3);
-    setIncorrectModalTry(MAX_WRONG_TRIES);
-    setAdvanceAfterIncorrectModal(true);
     const responseTimeMs = gm.sessionTimerLimit * 1000;
-    const { starsEarned } = await gm.submitAnswer(false, 3, responseTimeMs, problem, -1, true);
-    
+    await gm.submitAnswer(false, currentTry, responseTimeMs, problem, -1, false);
+
     if (isMasteryProblem) {
       gm.recordMasteryIncorrect(problem);
     } else {
       gm.addToMasteryQueue(problem);
     }
-    const newCount = gm.getSessionActivityCount();
-    setActivityCount(newCount);
-    setShowIncorrectModal(true);
+    startAutomatedDemonstration(true);
   };
 
   const loadNewProblem = (silent = false) => {
@@ -206,8 +205,6 @@ export default function CountAllScreen({ navigation }: Props) {
     setSelectedAnswer(null);
     setActiveHint(null);
     setCurrentTry(1);
-    setIncorrectModalTry(1);
-    setAdvanceAfterIncorrectModal(false);
     setJustMastered(false);
     resetTimer(gm.sessionTimerLimit);
 
@@ -294,11 +291,10 @@ export default function CountAllScreen({ navigation }: Props) {
     if (selectedAnswer === null || !problem || !allDropped) return;
 
     const isCorrect = selectedAnswer === problem.correctAnswer;
-    const shouldMoveOnAfterWrong = !isCorrect && currentTry >= MAX_WRONG_TRIES;
     const gm = GameManager.getInstance();
     const responseTimeMs = (gm.sessionTimerLimit - timeLeft) * 1000;
     const { starsEarned } = await gm.submitAnswer(
-      isCorrect, currentTry, responseTimeMs, problem, selectedAnswer, shouldMoveOnAfterWrong
+      isCorrect, currentTry, responseTimeMs, problem, selectedAnswer, isCorrect
     );
 
     if (isCorrect) {
@@ -315,18 +311,7 @@ export default function CountAllScreen({ navigation }: Props) {
       if (isMasteryProblem) {
         gm.recordMasteryIncorrect(problem);
       }
-      if (shouldMoveOnAfterWrong) {
-        const newCount = gm.getSessionActivityCount();
-        setActivityCount(newCount);
-        setIncorrectModalTry(MAX_WRONG_TRIES);
-        setAdvanceAfterIncorrectModal(true);
-        setShowIncorrectModal(true);
-      } else {
-        setIncorrectModalTry(currentTry);
-        setAdvanceAfterIncorrectModal(false);
-        setCurrentTry(prev => prev + 1);
-        setShowIncorrectModal(true);
-      }
+      startAutomatedDemonstration(false);
     }
   };
 
@@ -354,31 +339,155 @@ export default function CountAllScreen({ navigation }: Props) {
     }
   };
 
-  const handleTryAgainAfterFail = async () => {
-    const shouldAdvance = advanceAfterIncorrectModal;
-    setShowIncorrectModal(false);
-    setAdvanceAfterIncorrectModal(false);
-    if (activityCount >= MAX_ACTIVITIES_PER_SESSION) {
-      await finishSession();
-      return;
-    }
-    if (shouldAdvance) {
-      loadNewProblem(); // will pull from mastery queue
-    } else {
-      // Shuffle options so it feels fresh
-      setFruits(prev => prev.map(fruit => ({ ...fruit, dropped: false })));
-      setDropCounter(0);
-      setShowCounter(false);
-      setOptions(prev => {
-        const s = [...prev];
-        for (let i = s.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [s[i], s[j]] = [s[j], s[i]];
-        }
-        return s;
+  const waitMs = (ms: number) => new Promise(res => setTimeout(res, ms));
+
+  const startAutomatedDemonstration = async (isTimeout = false) => {
+    if (!problem) return;
+    setIsDemonstrating(true);
+    isDemoCancelled.current = false;
+
+    // Reset fruits back to tree so demo starts clean
+    setFruits(prev => prev.map(f => ({ ...f, dropped: false })));
+    setDropCounter(0);
+    setShowCounter(false);
+    setSelectedAnswer(null);
+    setHighlightedFruitId(null);
+    setAnimatingFruitId(null);
+    setHighlightedOption(null);
+    setIsSubmitHighlighted(false);
+
+    if (isTimeout) {
+      setDemoMessage(`Time's up! Let's watch Oliver show you how to solve it!`);
+      await AudioManager.speakAsync(`Time's up! That's okay, let's watch Oliver count them all together!`, {
+        rate: 0.95,
+        pitch: 1.3,
       });
-      setSelectedAnswer(null);
+      await waitMs(400);
+      if (isDemoCancelled.current) return;
+    } else {
+      setDemoMessage(`Not quite, but nice try! Let's watch Oliver solve it!`);
+      await AudioManager.speakAsync(`Not quite, but nice try! Let's watch Oliver count them all together!`, {
+        rate: 0.95,
+        pitch: 1.3,
+      });
+      await waitMs(400);
+      if (isDemoCancelled.current) return;
     }
+
+    setDemoMessage(`Watch Oliver! Let's count Tree 1 and Tree 2 together!`);
+
+    await AudioManager.speakAsync(`Watch Oliver count! Tree 1 has ${problem.num1}, and Tree 2 has ${problem.num2}. Let's count all of them!`, {
+      rate: 0.92,
+      pitch: 1.25,
+    });
+    await waitMs(400);
+    if (isDemoCancelled.current) return;
+
+    // Drag Tree 1 fruits one by one with highlight and travel animation
+    let currentCount = 0;
+    for (let i = 0; i < problem.num1; i++) {
+      if (isDemoCancelled.current) return;
+      currentCount++;
+      const fruitId = `g1_${i}`;
+
+      setDemoMessage(`Tree 1: Fruit #${currentCount} into the basket!`);
+      setHighlightedFruitId(fruitId);
+      setAnimatingFruitId(fruitId);
+
+      // Allow the slide-down animation to travel into the basket
+      await waitMs(480);
+      if (isDemoCancelled.current) return;
+
+      // Transfer into basket
+      setFruits(prev => prev.map(f => (f.id === fruitId ? { ...f, dropped: true } : f)));
+      setDropCounter(currentCount);
+      setShowCounter(true);
+      setHighlightedFruitId(null);
+      setAnimatingFruitId(null);
+
+      await AudioManager.speakAsync(`${currentCount}`, { rate: 0.95, pitch: 1.35 });
+      await waitMs(250);
+    }
+
+    // Drag Tree 2 fruits one by one with highlight and travel animation
+    for (let i = 0; i < problem.num2; i++) {
+      if (isDemoCancelled.current) return;
+      currentCount++;
+      const fruitId = `g2_${i}`;
+
+      setDemoMessage(`Tree 2: Fruit #${currentCount} into the basket!`);
+      setHighlightedFruitId(fruitId);
+      setAnimatingFruitId(fruitId);
+
+      await waitMs(480);
+      if (isDemoCancelled.current) return;
+
+      setFruits(prev => prev.map(f => (f.id === fruitId ? { ...f, dropped: true } : f)));
+      setDropCounter(currentCount);
+      setShowCounter(true);
+      setHighlightedFruitId(null);
+      setAnimatingFruitId(null);
+
+      await AudioManager.speakAsync(`${currentCount}`, { rate: 0.95, pitch: 1.35 });
+      await waitMs(250);
+    }
+
+    if (isDemoCancelled.current) return;
+    setDemoMessage(`All fruits in the basket! Total is ${problem.correctAnswer}!`);
+    await AudioManager.speakAsync(`We counted ${problem.correctAnswer} fruits in all! Now let's pick ${problem.correctAnswer}!`, {
+      rate: 0.92,
+      pitch: 1.3,
+    });
+    await waitMs(400);
+    if (isDemoCancelled.current) return;
+
+    // Highlight the correct answer option button
+    setDemoMessage(`Tap the number ${problem.correctAnswer}!`);
+    setHighlightedOption(problem.correctAnswer);
+    setSelectedAnswer(problem.correctAnswer);
+
+    await AudioManager.speakAsync(`${problem.correctAnswer}!`, { rate: 0.95, pitch: 1.3 });
+    await waitMs(400);
+    if (isDemoCancelled.current) return;
+
+    // Highlight the Submit button
+    setDemoMessage(`Tap Submit to finish!`);
+    setIsSubmitHighlighted(true);
+
+    await AudioManager.speakAsync(`Tap Submit!`, { rate: 0.95, pitch: 1.3 });
+    await waitMs(400);
+    if (isDemoCancelled.current) return;
+
+    setDemoMessage(`🎯 Now it's your turn! Drag the fruits to count!`);
+    await AudioManager.speakAsync(`Now it's your turn! You can do it!`, { rate: 0.95, pitch: 1.3 });
+    await waitMs(400);
+    endDemonstration();
+  };
+
+  const endDemonstration = () => {
+    isDemoCancelled.current = true;
+    setIsDemonstrating(false);
+    setHighlightedFruitId(null);
+    setAnimatingFruitId(null);
+    setHighlightedOption(null);
+    setIsSubmitHighlighted(false);
+    setCurrentTry(prev => prev + 1);
+
+    // Reset fruits back to tree for the learner
+    setFruits(prev => prev.map(f => ({ ...f, dropped: false })));
+    setDropCounter(0);
+    setShowCounter(false);
+    setSelectedAnswer(null);
+    setOptions(prev => {
+      const s = [...prev];
+      for (let i = s.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [s[i], s[j]] = [s[j], s[i]];
+      }
+      return s;
+    });
+    const gm = GameManager.getInstance();
+    setTimeLeft(gm.sessionTimerLimit);
   };
 
   const useHint = () => {
@@ -409,19 +518,13 @@ export default function CountAllScreen({ navigation }: Props) {
 
   const finishSession = async () => {
     const gm = GameManager.getInstance();
-    const incorrectProblems = gm.getSessionIncorrectProblems();
     const session = await gm.completeAndResetSession();
-    await gm.saveSystem.setAdaptiveReviewPending(
-      'COUNT_ALL',
-      incorrectProblems.length > 0,
-      incorrectProblems
-    );
     navigation.replace('SessionSummary', {
       stars: session.totalStars,
       activities: session.totalActivities,
       correct: session.totalCorrect,
       strategy: 'COUNT_ALL',
-      incorrectProblems,
+      incorrectProblems: [],
     });
   };
 
@@ -445,6 +548,13 @@ export default function CountAllScreen({ navigation }: Props) {
   return (
     <SafeAreaView style={styles.container}>
       <LinearGradient colors={['#A5D6A7', '#B2DFDB']} style={StyleSheet.absoluteFill} />
+
+      {isDemonstrating && (
+        <DemonstrationBanner
+          message={demoMessage}
+          onSkip={endDemonstration}
+        />
+      )}
 
       {/* Cloud Decorations */}
       <Text style={[styles.cloud, { top: '10%', left: '-5%', fontSize: 80, opacity: 0.6 }]}>☁️</Text>
@@ -472,7 +582,12 @@ export default function CountAllScreen({ navigation }: Props) {
         </View>
       </View>
 
-      <View style={styles.content}>
+      <View
+        style={styles.content}
+        onLayout={e => {
+          contentYRef.current = e.nativeEvent.layout.y;
+        }}
+      >
         {/* Header row: try stars | title | hint */}
         <View style={styles.titleContainer}>
           <View style={styles.tryStarsRow}>
@@ -510,7 +625,7 @@ export default function CountAllScreen({ navigation }: Props) {
             <OliverSpeechBalloon
               active={
                 !showTutorial &&
-                !showIncorrectModal &&
+                !isDemonstrating &&
                 !showGreatJob &&
                 !showFiveStreak &&
                 !showHintConfirm &&
@@ -535,20 +650,45 @@ export default function CountAllScreen({ navigation }: Props) {
         </View>
 
         {/* Fruit Groups */}
-        <View style={styles.groupsWrapper}>
-          <View style={[styles.groupCard, { zIndex: 2 }]}>
+        <View
+          style={styles.groupsWrapper}
+          onLayout={e => {
+            groupsWrapperLayoutRef.current = e.nativeEvent.layout;
+          }}
+        >
+          <View
+            ref={tree1ViewRef}
+            style={[styles.groupCard, { zIndex: 2 }]}
+            onLayout={e => {
+              tree1LayoutRef.current = e.nativeEvent.layout;
+            }}
+          >
             <View style={styles.groupHeader}>
               <Text style={styles.treeIcon}>🌳</Text>
               <Text style={styles.groupTitle}>Tree 1</Text>
             </View>
             <View style={styles.fruitRow}>
               {fruits.filter(f => f.group === 1 && !f.dropped).map(fruit => (
-                <DraggableFruit key={fruit.id} fruit={fruit} disabled={false} onDrop={() => handleDrop(fruit.id)} />
+                <DraggableFruit
+                  key={fruit.id}
+                  fruit={fruit}
+                  disabled={isDemonstrating}
+                  onDrop={() => handleDrop(fruit.id)}
+                  isHighlighted={highlightedFruitId === fruit.id}
+                  isDemoAnimating={animatingFruitId === fruit.id}
+                  demoDistance={180}
+                />
               ))}
             </View>
           </View>
 
-          <View style={[styles.groupCard, { zIndex: 1 }]}>
+          <View
+            ref={tree2ViewRef}
+            style={[styles.groupCard, { zIndex: 1 }]}
+            onLayout={e => {
+              tree2LayoutRef.current = e.nativeEvent.layout;
+            }}
+          >
             <View style={styles.groupHeader}>
               <Text style={styles.treeIcon}>🌳</Text>
               <Text style={styles.groupTitle}>Tree 2</Text>
@@ -558,8 +698,11 @@ export default function CountAllScreen({ navigation }: Props) {
                 <DraggableFruit
                   key={fruit.id}
                   fruit={fruit}
-                  disabled={!isGroup1Finished}
+                  disabled={isDemonstrating || !isGroup1Finished}
                   onDrop={() => handleDrop(fruit.id)}
+                  isHighlighted={highlightedFruitId === fruit.id}
+                  isDemoAnimating={animatingFruitId === fruit.id}
+                  demoDistance={95}
                 />
               ))}
             </View>
@@ -567,7 +710,13 @@ export default function CountAllScreen({ navigation }: Props) {
         </View>
 
         {/* Drop Zone */}
-        <View style={styles.dropZone}>
+        <View
+          ref={dropZoneViewRef}
+          style={styles.dropZone}
+          onLayout={e => {
+            dropZoneLayoutRef.current = e.nativeEvent.layout;
+          }}
+        >
           {droppedFruits.length > 0 && (
             <TouchableOpacity style={styles.dropResetButton} onPress={resetDroppedFruits} activeOpacity={0.85}>
               <Text style={styles.dropResetIcon}>↻</Text>
@@ -600,56 +749,76 @@ export default function CountAllScreen({ navigation }: Props) {
       </View>
 
       {/* Answer Area — always visible once an answer is selected or any fruit is dropped */}
-      <View style={styles.answerArea}>
-        <View style={styles.optionsContainer}>
-          {options.map((opt, index) => (
-            <TouchableOpacity
-              key={opt}
-              style={[
-                styles.optionButton,
-                { backgroundColor: optionColors[index % optionColors.length] },
-                selectedAnswer === opt && styles.optionSelected,
-                !allDropped && { opacity: 0.55 },
-              ]}
-              onPress={() => {
-                if (!allDropped) {
-                  AudioManager.stopSpeech();
-                  AudioManager.speak('Drag all fruits to the basket first!', { rate: 0.95, pitch: 1.3 });
-                  return;
-                }
-                setSelectedAnswer(opt);
-              }}
-              activeOpacity={allDropped ? 0.8 : 1}
-            >
-              <View style={styles.optionInner}>
-                <Text style={styles.optionText}>{opt}</Text>
-              </View>
-            </TouchableOpacity>
-          ))}
+      <View
+        style={styles.answerArea}
+        onLayout={e => {
+          answerAreaLayoutRef.current = e.nativeEvent.layout;
+        }}
+      >
+        <View
+          style={styles.optionsContainer}
+          onLayout={e => {
+            optionsLayoutRef.current = e.nativeEvent.layout;
+          }}
+        >
+          {options.map((opt, index) => {
+            const isHighlighted = highlightedOption === opt;
+            return (
+              <TouchableOpacity
+                key={opt}
+                style={[
+                  styles.optionButton,
+                  { backgroundColor: optionColors[index % optionColors.length] },
+                  selectedAnswer === opt && styles.optionSelected,
+                  isHighlighted && styles.optionButtonHighlighted,
+                  (!allDropped || isDemonstrating) && { opacity: 0.55 },
+                  isHighlighted && { opacity: 1 },
+                ]}
+                disabled={isDemonstrating || !allDropped}
+                onPress={() => {
+                  if (isDemonstrating || !allDropped) {
+                    if (!isDemonstrating) {
+                      AudioManager.stopSpeech();
+                      AudioManager.speak('Drag all fruits to the basket first!', { rate: 0.95, pitch: 1.3 });
+                    }
+                    return;
+                  }
+                  setSelectedAnswer(opt);
+                }}
+                activeOpacity={allDropped ? 0.8 : 1}
+              >
+                <View style={styles.optionInner}>
+                  <Text style={styles.optionText}>{opt}</Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
         </View>
-        <View style={styles.actionsContainer}>
+        <View
+          style={styles.actionsContainer}
+          onLayout={e => {
+            submitBtnLayoutRef.current = e.nativeEvent.layout;
+          }}
+        >
           <TouchableOpacity
             style={[
               styles.actionBtn,
-              { backgroundColor: (selectedAnswer !== null && allDropped) ? '#66BB6A' : '#9E9E9E', width: '80%' },
+              {
+                backgroundColor:
+                  (selectedAnswer !== null && allDropped && !isDemonstrating) || isSubmitHighlighted
+                    ? '#66BB6A'
+                    : '#9E9E9E',
+                width: '80%',
+              },
+              isSubmitHighlighted && styles.actionBtnHighlighted,
             ]}
             onPress={submitAnswer}
-            disabled={selectedAnswer === null || !allDropped}
+            disabled={isDemonstrating || selectedAnswer === null || !allDropped}
           >
             <Text style={styles.actionBtnText}>Submit ✓</Text>
           </TouchableOpacity>
         </View>
       </View>
-
-      {/* Incorrect Modal */}
-      <IncorrectModal
-        visible={showIncorrectModal}
-        onTryAgain={handleTryAgainAfterFail}
-        onHint={() => confirmUseHint(() => setShowIncorrectModal(false))}
-        hintsRemaining={hintsRemaining}
-        currentTry={incorrectModalTry}
-        isFinalWrong={advanceAfterIncorrectModal}
-      />
 
       <HintConfirmModal
         visible={showHintConfirm}
@@ -686,27 +855,54 @@ export default function CountAllScreen({ navigation }: Props) {
 }
 
 // ─── Draggable Fruit ──────────────────────────────────────────────────────────
-const DraggableFruit = ({ fruit, onDrop, disabled }: any) => {
+const DraggableFruit = ({
+  fruit,
+  onDrop,
+  disabled,
+  isHighlighted = false,
+  isDemoAnimating = false,
+  demoDistance = 160,
+}: any) => {
   // pan uses JS driver (required by Animated.event / PanResponder position tracking)
   const pan = useRef(new Animated.ValueXY()).current;
-  // pressScale uses native driver (transform-only, no layout)
-  // CRITICAL: these must live on SEPARATE Animated.Views to avoid the
+  // pressScale and demoAnimY use native driver (transform-only, no layout)
+  // CRITICAL: these must live on the INNER Animated.View to avoid the
   // "JS driven animation on native node" crash.
   const pressScale = useRef(new Animated.Value(1)).current;
+  const demoAnimY = useRef(new Animated.Value(0)).current;
   const disabledRef = useRef(disabled);
 
   useEffect(() => { disabledRef.current = disabled; }, [disabled]);
+
+  useEffect(() => {
+    if (isDemoAnimating) {
+      demoAnimY.setValue(0);
+      Animated.sequence([
+        Animated.timing(pressScale, { toValue: 1.25, duration: 150, useNativeDriver: true }),
+        Animated.timing(demoAnimY, {
+          toValue: demoDistance,
+          duration: 480,
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        demoAnimY.setValue(0);
+        pressScale.setValue(1);
+      });
+    } else {
+      demoAnimY.setValue(0);
+      pressScale.setValue(1);
+    }
+  }, [isDemoAnimating, demoDistance]);
 
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => !disabledRef.current,
       onPanResponderGrant: () => {
-        // native driver — runs on the INNER Animated.View only
         Animated.spring(pressScale, { toValue: 1.2, friction: 4, useNativeDriver: true }).start();
       },
       onPanResponderMove: Animated.event(
         [null, { dx: pan.x, dy: pan.y }],
-        { useNativeDriver: false }, // JS driver — runs on the OUTER Animated.View only
+        { useNativeDriver: false },
       ),
       onPanResponderRelease: (_, gesture) => {
         Animated.spring(pressScale, { toValue: 1, friction: 5, useNativeDriver: true }).start();
@@ -722,13 +918,13 @@ const DraggableFruit = ({ fruit, onDrop, disabled }: any) => {
       {...panResponder.panHandlers}
       style={{
         transform: [{ translateX: pan.x }, { translateY: pan.y }],
-        zIndex: 100,
-        opacity: disabled ? 0.45 : 1,
+        zIndex: isHighlighted || isDemoAnimating ? 999 : 100,
+        opacity: disabled && !isHighlighted && !isDemoAnimating ? 0.45 : 1,
       }}
     >
-      {/* INNER: native-driver scale bounce (UI thread only) */}
-      <Animated.View style={{ transform: [{ scale: pressScale }] }}>
-        <View style={styles.fruitCircle}>
+      {/* INNER: native-driver scale bounce & demo slide down (UI thread only) */}
+      <Animated.View style={{ transform: [{ scale: pressScale }, { translateY: demoAnimY }] }}>
+        <View style={[styles.fruitCircle, isHighlighted && styles.fruitCircleHighlighted]}>
           <Text style={styles.emoji}>{fruit.emoji}</Text>
         </View>
       </Animated.View>
@@ -736,15 +932,7 @@ const DraggableFruit = ({ fruit, onDrop, disabled }: any) => {
   );
 };
 
-function createFallbackCountAllAdaptiveProblem(): AdaptiveProblem {
-  return {
-    num1: 1,
-    num2: 1,
-    correctAnswer: 2,
-    givenAnswer: 0,
-    strategy: 'COUNT_ALL',
-  };
-}
+
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
@@ -831,4 +1019,34 @@ const styles = StyleSheet.create({
   actionsContainer: { flexDirection: 'row', justifyContent: 'center', paddingHorizontal: 20, marginBottom: 12 },
   actionBtn: { paddingVertical: 14, borderRadius: 30, justifyContent: 'center', alignItems: 'center', elevation: 4, borderWidth: 3, borderColor: '#FFF' },
   actionBtnText: { fontSize: 22, fontWeight: '900', color: '#FFF', textShadowColor: 'rgba(0,0,0,0.2)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 },
+  fruitCircleHighlighted: {
+    borderColor: '#FF6F00',
+    borderWidth: 3.5,
+    backgroundColor: '#FFF9C4',
+    shadowColor: '#FF6F00',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.6,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  optionButtonHighlighted: {
+    borderWidth: 4,
+    borderColor: '#FFD700',
+    transform: [{ scale: 1.15 }],
+    shadowColor: '#FFD700',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.8,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  actionBtnHighlighted: {
+    borderWidth: 4,
+    borderColor: '#FFD700',
+    transform: [{ scale: 1.05 }],
+    shadowColor: '#FFD700',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.8,
+    shadowRadius: 10,
+    elevation: 10,
+  },
 });

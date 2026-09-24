@@ -4,7 +4,7 @@ import {
   Dimensions, Animated, ScrollView,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { AdaptiveProblem, RootStackParamList } from '../../App';
+import { RootStackParamList } from '../../App';
 import { GameManager } from '../core/GameManager';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path, Circle, Defs, RadialGradient, Stop } from 'react-native-svg';
@@ -221,8 +221,6 @@ export default function HomeScreen({ navigation }: Props) {
   const [caAcc, setCaAcc] = useState(0);
   const [coAcc, setCoAcc] = useState(0);
   const [nbAcc, setNbAcc] = useState(0);
-  const [countAllAdaptivePending, setCountAllAdaptivePending] = useState(false);
-  const [countOnAdaptivePending, setCountOnAdaptivePending] = useState(false);
 
   // ── Avatar path (native driver: translateX / translateY from origin 0,0) ──
   // Avatar destinations: just above each node circle center
@@ -258,24 +256,7 @@ export default function HomeScreen({ navigation }: Props) {
     return unsub;
   }, [navigation]);
 
-  const getAdaptiveReviewParams = (
-    strategy: string,
-    targetRoute: 'CountAll' | 'CountOn' | 'NumberBonds'
-  ) => {
-    const gm = GameManager.getInstance();
-    const pendingProblems = gm.saveSystem.getPendingAdaptiveReviewProblems(strategy);
-    const incorrectProblems = pendingProblems.length > 0
-      ? pendingProblems
-      : gm.saveSystem.getLatestIncorrectProblemsForStrategy(strategy);
 
-    return {
-      strategy,
-      targetRoute,
-      incorrectProblems: incorrectProblems.length > 0
-        ? incorrectProblems
-        : [createFallbackAdaptiveProblem(strategy)],
-    };
-  };
 
   const refreshData = useCallback(() => {
     const gm = GameManager.getInstance();
@@ -313,8 +294,6 @@ export default function HomeScreen({ navigation }: Props) {
     setCaAcc(ss.getAccuracy('COUNT_ALL'));
     setCoAcc(ss.getAccuracy('COUNT_ON'));
     setNbAcc(ss.getAccuracy('NUMBER_BONDS'));
-    setCountAllAdaptivePending(ss.hasAdaptiveReviewPending('COUNT_ALL'));
-    setCountOnAdaptivePending(ss.hasAdaptiveReviewPending('COUNT_ON'));
 
     // Move avatar along path based on unlock state
     const target = nbOk
@@ -337,11 +316,6 @@ export default function HomeScreen({ navigation }: Props) {
 
   const startGame = (strategy: string, routeName: 'CountAll' | 'CountOn' | 'NumberBonds') => {
     const gm = GameManager.getInstance();
-    if (gm.saveSystem.hasAdaptiveReviewPending(strategy)) {
-      navigation.replace('AdaptiveMode', getAdaptiveReviewParams(strategy, routeName));
-      return;
-    }
-
     gm.startSession(strategy);
     navigation.navigate(routeName as any);
   };
@@ -519,9 +493,7 @@ export default function HomeScreen({ navigation }: Props) {
         )}
         {!countOnUnlocked && (
           <View style={styles.lockHint}>
-            <Text style={styles.lockHintText}>
-              {countAllAdaptivePending ? 'Finish Adaptive Mode' : '60% on Count All'}
-            </Text>
+            <Text style={styles.lockHintText}>60% on Count All</Text>
           </View>
         )}
       </View>
@@ -554,9 +526,7 @@ export default function HomeScreen({ navigation }: Props) {
         )}
         {!numberBondsUnlocked && (
           <View style={styles.lockHint}>
-            <Text style={styles.lockHintText}>
-              {countOnAdaptivePending ? 'Finish Adaptive Mode' : '60% on Count On'}
-            </Text>
+            <Text style={styles.lockHintText}>60% on Count On</Text>
           </View>
         )}
       </View>
@@ -582,26 +552,7 @@ export default function HomeScreen({ navigation }: Props) {
   );
 }
 
-function createFallbackAdaptiveProblem(strategy: string): AdaptiveProblem {
-  if (strategy === 'NUMBER_BONDS') {
-    return {
-      num1: 2,
-      num2: 1,
-      correctAnswer: 1,
-      givenAnswer: 0,
-      strategy,
-      isMissingPart: true,
-    };
-  }
 
-  return {
-    num1: 1,
-    num2: 1,
-    correctAnswer: 2,
-    givenAnswer: 0,
-    strategy,
-  };
-}
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({

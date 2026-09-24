@@ -4,12 +4,12 @@ import {
   PanResponder, SafeAreaView, Dimensions, ScrollView, Modal,
 } from 'react-native';
 import Svg, { Circle, Ellipse, Line, Path, Rect, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg';
-import { IncorrectModal } from '../../components/IncorrectModal';
 import { GreatJobOverlay } from '../../components/GreatJobOverlay';
 import { HintConfirmModal } from '../../components/HintConfirmModal';
 import { HintBox } from '../../components/HintBox';
 import { PulseView } from '../../components/animations/PulseView';
 import { GameTutorialModal } from '../../components/tutorial/GameTutorialModal';
+import { DemonstrationBanner } from '../../components/tutorial/DemonstrationBanner';
 import { COUNT_ON_TUTORIAL_STEPS } from '../../components/tutorial/CountOnTutorialContent';
 import { FiveStreakModal } from '../../components/FiveStreakModal';
 import { OliverSpeechBalloon } from '../../components/OliverSpeechBalloon';
@@ -21,7 +21,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { TimerBar } from '../../components/TimerBar';
 import { AudioManager } from '../../core/AudioManager';
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 const sectionWidth = width - 24;
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CountOn'>;
@@ -42,9 +42,29 @@ export default function CountOnScreen({ navigation }: Props) {
   const [hintsRemaining, setHintsRemaining] = useState(() => GameManager.getInstance().getSessionHintsRemaining());
   const [showHintConfirm, setShowHintConfirm] = useState(false);
   const [activeHint, setActiveHint] = useState<string | null>(null);
-  const [showIncorrectModal, setShowIncorrectModal] = useState(false);
+  const [isDemonstrating, setIsDemonstrating] = useState(false);
+  const [demoMessage, setDemoMessage] = useState('');
+  const [highlightedFruitId, setHighlightedFruitId] = useState<string | null>(null);
+  const [animatingFruitId, setAnimatingFruitId] = useState<string | null>(null);
+  const [highlightedViewBasket, setHighlightedViewBasket] = useState(false);
+  const [highlightedOption, setHighlightedOption] = useState<number | null>(null);
+  const [isSubmitHighlighted, setIsSubmitHighlighted] = useState(false);
+  const [isBasketHighlighted, setIsBasketHighlighted] = useState(false);
+  const [basketFeedback, setBasketFeedback] = useState<string | null>(null);
+  const [demoCountingIndex, setDemoCountingIndex] = useState<number | null>(null);
+  const [demoMaxCountedIndex, setDemoMaxCountedIndex] = useState<number | null>(null);
   const [isMasteryProblem, setIsMasteryProblem] = useState(false);
-  const [incorrectModalTry, setIncorrectModalTry] = useState(1);
+
+  const isDemoCancelled = useRef(false);
+
+  // Layout measurement refs for exact coordinate targeting
+  const contentYRef = useRef(0);
+  const basketLayoutRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
+  const canopyLayoutRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
+  const viewBasketBtnLayoutRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
+  const zoomModalCardLayoutRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
+  const zoomOptionsLayoutRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
+  const zoomSubmitBtnLayoutRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
 
   // Zoomed-in basket overlay (Sketch 1)
   const [showViewBasket, setShowViewBasket] = useState(false);
@@ -93,7 +113,7 @@ export default function CountOnScreen({ navigation }: Props) {
 
   // Timer only runs during active gameplay
   useEffect(() => {
-    if (showTutorial || showIncorrectModal || showGreatJob || showFiveStreak || !problem) {
+    if (showTutorial || isDemonstrating || showGreatJob || showFiveStreak || !problem) {
       if (timerRef.current) {
         clearInterval(timerRef.current);
         timerRef.current = null;
@@ -108,31 +128,27 @@ export default function CountOnScreen({ navigation }: Props) {
         timerRef.current = null;
       }
     };
-  }, [showTutorial, showIncorrectModal, showGreatJob, showFiveStreak, problem]);
+  }, [showTutorial, isDemonstrating, showGreatJob, showFiveStreak, problem]);
 
   useEffect(() => {
-    if (timeLeft === 0 && !showTutorial && !showIncorrectModal && !showGreatJob && !showFiveStreak && problem && selectedAnswer === null) {
+    if (timeLeft === 0 && !showTutorial && !isDemonstrating && !showGreatJob && !showFiveStreak && problem && selectedAnswer === null) {
       handleTimeUp();
     }
-  }, [timeLeft, showTutorial, showIncorrectModal, showGreatJob, showFiveStreak, problem, selectedAnswer]);
+  }, [timeLeft, showTutorial, isDemonstrating, showGreatJob, showFiveStreak, problem, selectedAnswer]);
 
   const handleTimeUp = async () => {
-    if (!problem) return;
+    if (!problem || isDemonstrating) return;
     const gm = GameManager.getInstance();
-    setCurrentTry(3);
-    setIncorrectModalTry(MAX_WRONG_TRIES);
     const responseTimeMs = gm.sessionTimerLimit * 1000;
-    const { starsEarned } = await gm.submitAnswer(false, 3, responseTimeMs, problem, -1, true);
+    await gm.submitAnswer(false, currentTry, responseTimeMs, problem, -1, false);
 
     if (isMasteryProblem) {
       gm.recordMasteryIncorrect(problem);
     } else {
       gm.addToMasteryQueue(problem);
     }
-    const newCount = gm.getSessionActivityCount();
-    setActivityCount(newCount);
     setShowViewBasket(false);
-    setShowIncorrectModal(true);
+    startAutomatedDemonstration(true);
   };
 
   const loadNewProblem = (silent = false) => {
@@ -177,6 +193,7 @@ export default function CountOnScreen({ navigation }: Props) {
     setTimeLeft(gm.sessionTimerLimit);
     setJustMastered(false);
     setShowViewBasket(false);
+    setBasketFeedback(null);
 
     const opts = new Set([p.correctAnswer]);
     while (opts.size < 5) {
@@ -197,6 +214,7 @@ export default function CountOnScreen({ navigation }: Props) {
 
   // Drag fruit from tree into Oliver's basket
   const handleDrop = (fruitId: string) => {
+    setBasketFeedback(null);
     setFruits(prev => {
       const next = prev.map(f => f.id === fruitId ? { ...f, dropped: true } : f);
       const droppedCount = next.filter(f => f.dropped).length;
@@ -213,6 +231,7 @@ export default function CountOnScreen({ navigation }: Props) {
 
   // Tap dropped fruit in basket to return to tree
   const handleRemoveFruit = (fruitId: string) => {
+    setBasketFeedback(null);
     setFruits(prev => {
       const next = prev.map(f => f.id === fruitId ? { ...f, dropped: false } : f);
       const droppedCount = next.filter(f => f.dropped).length;
@@ -229,14 +248,38 @@ export default function CountOnScreen({ navigation }: Props) {
 
   // Reset all dragged fruits back to tree
   const resetDroppedFruits = () => {
+    setBasketFeedback(null);
     setFruits(prev => prev.map(fruit => ({ ...fruit, dropped: false })));
     setSelectedAnswer(null);
     AudioManager.stopSpeech();
     AudioManager.speak('Fruits reset to tree.', { rate: 0.95, pitch: 1.25 });
   };
 
-  // Open "View Basket" modal
+  // Open "View Basket" modal — checks that learner added the right number of fruits first!
   const handleOpenViewBasket = () => {
+    const droppedCount = fruits.filter(f => f.dropped).length;
+    if (droppedCount !== extraM) {
+      let friendlyVoice = '';
+      let friendlyText = '';
+      if (droppedCount === 0) {
+        friendlyVoice = `Oliver needs ${extraM} more ${extraM === 1 ? 'fruit' : 'fruits'}! Drag ${extraM} from the tree into his basket first!`;
+        friendlyText = `Oliver needs ${extraM} more ${extraM === 1 ? 'fruit' : 'fruits'}! Drag them from the tree first.`;
+      } else if (droppedCount < extraM) {
+        const needed = extraM - droppedCount;
+        friendlyVoice = `Almost there! You added ${droppedCount}, but Oliver needs ${extraM} fruits. Add ${needed} more from the tree!`;
+        friendlyText = `Almost! You added ${droppedCount}, but Oliver needs ${extraM}. Add ${needed} more!`;
+      } else {
+        friendlyVoice = `Oops! That's too many! Oliver only needs ${extraM} fruits, but you added ${droppedCount}. Tap a fruit in his basket to put it back!`;
+        friendlyText = `Too many! Oliver only needs ${extraM} fruits. Tap a fruit in his basket to return it.`;
+      }
+
+      setBasketFeedback(friendlyText);
+      AudioManager.stopSpeech();
+      AudioManager.speak(friendlyVoice, { rate: 0.92, pitch: 1.35 });
+      return;
+    }
+
+    setBasketFeedback(null);
     setShowViewBasket(true);
     AudioManager.stopSpeech();
     AudioManager.speak('How many fruits in all? Count and choose your answer!', {
@@ -249,10 +292,9 @@ export default function CountOnScreen({ navigation }: Props) {
     if (selectedAnswer === null || !problem) return;
     const gm = GameManager.getInstance();
     const isCorrect = selectedAnswer === problem.correctAnswer;
-    const shouldMoveOnAfterWrong = !isCorrect && currentTry >= MAX_WRONG_TRIES;
     const responseTimeMs = (gm.sessionTimerLimit - timeLeft) * 1000;
     const { starsEarned } = await gm.submitAnswer(
-      isCorrect, currentTry, responseTimeMs, problem, selectedAnswer, shouldMoveOnAfterWrong
+      isCorrect, currentTry, responseTimeMs, problem, selectedAnswer, isCorrect
     );
 
     if (isCorrect) {
@@ -267,18 +309,7 @@ export default function CountOnScreen({ navigation }: Props) {
     } else {
       if (isMasteryProblem) gm.recordMasteryIncorrect(problem);
       setShowViewBasket(false);
-      setFruits(prev => prev.map(f => ({ ...f, dropped: false })));
-      setSelectedAnswer(null);
-      if (shouldMoveOnAfterWrong) {
-        const newCount = gm.getSessionActivityCount();
-        setActivityCount(newCount);
-        setIncorrectModalTry(MAX_WRONG_TRIES);
-        setShowIncorrectModal(true);
-      } else {
-        setIncorrectModalTry(currentTry);
-        setCurrentTry(prev => prev + 1);
-        setShowIncorrectModal(true);
-      }
+      startAutomatedDemonstration(false);
     }
   };
 
@@ -300,31 +331,182 @@ export default function CountOnScreen({ navigation }: Props) {
     else loadNewProblem();
   };
 
-  const handleTryAgainAfterFail = async () => {
-    setShowIncorrectModal(false);
-    if (activityCount >= MAX_ACTIVITIES_PER_SESSION) { await finishSession(); return; }
-    if (incorrectModalTry >= MAX_WRONG_TRIES) {
-      loadNewProblem();
-    } else {
-      setFruits(prev => prev.map(fruit => ({ ...fruit, dropped: false })));
-      setSelectedAnswer(null);
-      setOptions(prev => {
-        const s = [...prev];
-        for (let i = s.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [s[i], s[j]] = [s[j], s[i]];
-        }
-        return s;
+  const waitMs = (ms: number) => new Promise(res => setTimeout(res, ms));
+
+  const startAutomatedDemonstration = async (isTimeout = false) => {
+    if (!problem) return;
+    setIsDemonstrating(true);
+    isDemoCancelled.current = false;
+
+    // Reset fruits back to tree so demo starts clean
+    setShowViewBasket(false);
+    setFruits(prev => prev.map(f => ({ ...f, dropped: false })));
+    setSelectedAnswer(null);
+    setHighlightedFruitId(null);
+    setAnimatingFruitId(null);
+    setHighlightedViewBasket(false);
+    setHighlightedOption(null);
+    setIsSubmitHighlighted(false);
+    setIsBasketHighlighted(false);
+    setDemoCountingIndex(null);
+    setDemoMaxCountedIndex(null);
+
+    if (isTimeout) {
+      setDemoMessage(`Time's up! Let's watch Oliver show you how to count on!`);
+      await AudioManager.speakAsync(`Time's up! That's okay, let's watch Oliver show us how to count on!`, {
+        rate: 0.95,
+        pitch: 1.3,
       });
-      if (problem) {
-        AudioManager.stopSpeech();
-        setTimeout(() => {
-          AudioManager.speak(`Oliver has ${baseN} fruits! Help him count on ${extraM} more!`, {
-            rate: 0.95, pitch: 1.4,
-          });
-        }, 300);
-      }
+      await waitMs(400);
+      if (isDemoCancelled.current) return;
+    } else {
+      setDemoMessage(`Not quite, but nice try! Let's watch Oliver show you how to count on!`);
+      await AudioManager.speakAsync(`Not quite, but good try! Let's watch Oliver show us how to count on!`, {
+        rate: 0.95,
+        pitch: 1.3,
+      });
+      await waitMs(400);
+      if (isDemoCancelled.current) return;
     }
+
+    setDemoMessage(`Oliver already has ${baseN} fruits. Keep ${baseN} in your head!`);
+    setIsBasketHighlighted(true);
+
+    await AudioManager.speakAsync(`Watch Oliver count on! Oliver already has ${baseN} in his basket. Keep ${baseN} in your head!`, {
+      rate: 0.92,
+      pitch: 1.25,
+    });
+    await waitMs(400);
+    if (isDemoCancelled.current) return;
+    setIsBasketHighlighted(false);
+
+    // Drag extra fruits from canopy to basket with highlight and gliding animation
+    for (let i = 0; i < extraM; i++) {
+      if (isDemoCancelled.current) return;
+      const runningCount = baseN + i + 1;
+      const fruitId = `co_fruit_${i}`;
+
+      setDemoMessage(`Tree fruit #${i + 1}: Count on to ${runningCount}!`);
+      setHighlightedFruitId(fruitId);
+      setAnimatingFruitId(fruitId);
+
+      // Slide-up animation into Oliver's basket
+      await waitMs(480);
+      if (isDemoCancelled.current) return;
+
+      // Transfer into basket
+      setFruits(prev => prev.map(f => (f.id === fruitId ? { ...f, dropped: true } : f)));
+      setHighlightedFruitId(null);
+      setAnimatingFruitId(null);
+
+      await AudioManager.speakAsync(`${runningCount}`, { rate: 0.95, pitch: 1.35 });
+      await waitMs(250);
+    }
+
+    if (isDemoCancelled.current) return;
+    setDemoMessage(`We landed on ${problem.correctAnswer}! Now tap View Basket!`);
+    await AudioManager.speakAsync(`${baseN} plus ${extraM} equals ${problem.correctAnswer}! Let's open the basket and double-check all fruits!`, {
+      rate: 0.92,
+      pitch: 1.3,
+    });
+    await waitMs(400);
+    if (isDemoCancelled.current) return;
+
+    // Highlight View Basket button
+    setDemoMessage(`Tap View Basket!`);
+    setHighlightedViewBasket(true);
+    await waitMs(1000);
+    if (isDemoCancelled.current) return;
+
+    setHighlightedViewBasket(false);
+    setShowViewBasket(true);
+
+    await waitMs(800);
+    if (isDemoCancelled.current) return;
+
+    // Inside Modal: Count all fruits first to double check how much is the total!
+    setDemoMessage(`Inside Oliver's basket! Let's count all the fruits to double-check!`);
+    await AudioManager.speakAsync(`We are inside the basket! Let's count all the fruits to double-check our total!`, {
+      rate: 0.92,
+      pitch: 1.3,
+    });
+    await waitMs(350);
+    if (isDemoCancelled.current) return;
+
+    // Count each fruit in the basket one by one
+    const totalToCount = problem.correctAnswer;
+    for (let c = 0; c < totalToCount; c++) {
+      if (isDemoCancelled.current) return;
+      const countNum = c + 1;
+      setDemoCountingIndex(c);
+      setDemoMaxCountedIndex(c);
+      setDemoMessage(`Double-checking: Fruit #${countNum}!`);
+
+      await AudioManager.speakAsync(`${countNum}`, { rate: 0.95, pitch: 1.35 });
+      await waitMs(250);
+    }
+
+    if (isDemoCancelled.current) return;
+    setDemoCountingIndex(null);
+
+    setDemoMessage(`Double-checked! We have ${problem.correctAnswer} fruits in all!`);
+    await AudioManager.speakAsync(`Double-checked! There are ${problem.correctAnswer} fruits in all! Now let's pick ${problem.correctAnswer}!`, {
+      rate: 0.92,
+      pitch: 1.3,
+    });
+    await waitMs(400);
+    if (isDemoCancelled.current) return;
+
+    // Inside Modal: Highlight the correct answer option
+    setDemoMessage(`Tap the number ${problem.correctAnswer}!`);
+    setHighlightedOption(problem.correctAnswer);
+    setSelectedAnswer(problem.correctAnswer);
+
+    await AudioManager.speakAsync(`${problem.correctAnswer}!`, { rate: 0.95, pitch: 1.3 });
+    await waitMs(400);
+    if (isDemoCancelled.current) return;
+
+    // Inside Modal: Highlight Submit button
+    setDemoMessage(`Tap Submit to finish!`);
+    setIsSubmitHighlighted(true);
+
+    await AudioManager.speakAsync(`Tap Submit!`, { rate: 0.95, pitch: 1.3 });
+    await waitMs(400);
+    if (isDemoCancelled.current) return;
+
+    setDemoMessage(`🎯 Now it's your turn! Drag ${extraM} fruits to Oliver!`);
+    await AudioManager.speakAsync(`Now it's your turn! You can do it!`, { rate: 0.95, pitch: 1.3 });
+    await waitMs(400);
+    endDemonstration();
+  };
+
+  const endDemonstration = () => {
+    isDemoCancelled.current = true;
+    setShowViewBasket(false);
+    setIsDemonstrating(false);
+    setHighlightedFruitId(null);
+    setAnimatingFruitId(null);
+    setHighlightedViewBasket(false);
+    setHighlightedOption(null);
+    setIsSubmitHighlighted(false);
+    setIsBasketHighlighted(false);
+    setDemoCountingIndex(null);
+    setDemoMaxCountedIndex(null);
+    setCurrentTry(prev => prev + 1);
+
+    // Reset fruits back to tree for the learner
+    setFruits(prev => prev.map(f => ({ ...f, dropped: false })));
+    setSelectedAnswer(null);
+    setOptions(prev => {
+      const s = [...prev];
+      for (let i = s.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [s[i], s[j]] = [s[j], s[i]];
+      }
+      return s;
+    });
+    const gm = GameManager.getInstance();
+    setTimeLeft(gm.sessionTimerLimit);
   };
 
   const useHint = () => {
@@ -355,19 +537,13 @@ export default function CountOnScreen({ navigation }: Props) {
 
   const finishSession = async () => {
     const gm = GameManager.getInstance();
-    const incorrectProblems = gm.getSessionIncorrectProblems();
     const session = await gm.completeAndResetSession();
-    await gm.saveSystem.setAdaptiveReviewPending(
-      'COUNT_ON',
-      incorrectProblems.length > 0,
-      incorrectProblems
-    );
     navigation.replace('SessionSummary', {
       stars: session.totalStars,
       activities: session.totalActivities,
       correct: session.totalCorrect,
       strategy: 'COUNT_ON',
-      incorrectProblems,
+      incorrectProblems: [],
     });
   };
 
@@ -386,6 +562,13 @@ export default function CountOnScreen({ navigation }: Props) {
   return (
     <SafeAreaView style={styles.container}>
       <LinearGradient colors={['#A5D6A7', '#B2DFDB']} style={StyleSheet.absoluteFill} />
+
+      {isDemonstrating && (
+        <DemonstrationBanner
+          message={demoMessage}
+          onSkip={endDemonstration}
+        />
+      )}
 
       <Text style={[styles.cloud, { top: '8%', left: '-5%', fontSize: 80, opacity: 0.5 }]}>☁️</Text>
       <Text style={[styles.cloud, { top: '22%', right: '-8%', fontSize: 90, opacity: 0.5 }]}>☁️</Text>
@@ -409,7 +592,12 @@ export default function CountOnScreen({ navigation }: Props) {
         </View>
       </View>
 
-      <View style={styles.content}>
+      <View
+        style={styles.content}
+        onLayout={e => {
+          contentYRef.current = e.nativeEvent.layout.y;
+        }}
+      >
         {/* Header Title Row */}
         <View style={styles.titleContainer}>
           <View style={styles.tryStarsRow}>
@@ -439,13 +627,13 @@ export default function CountOnScreen({ navigation }: Props) {
           </View>
         )}
 
-        <View style={styles.instructionCard}>
+        <View style={[styles.instructionCard, basketFeedback && styles.instructionCardFeedback]}>
           <View style={styles.owlPlaceholder}>
             <Text style={{ fontSize: 32 }}>🦉</Text>
             <OliverSpeechBalloon
               active={
                 !showTutorial &&
-                !showIncorrectModal &&
+                !isDemonstrating &&
                 !showGreatJob &&
                 !showFiveStreak &&
                 !showHintConfirm &&
@@ -455,8 +643,8 @@ export default function CountOnScreen({ navigation }: Props) {
               }
             />
           </View>
-          <Text style={styles.instructionText}>
-            Oliver already has {baseN} fruits. Drag fruits from the tree to his basket!
+          <Text style={[styles.instructionText, basketFeedback && styles.instructionTextFeedback]}>
+            {basketFeedback || `Oliver already has ${baseN} fruits. Drag fruits from the tree to his basket!`}
           </Text>
         </View>
         <HintBox text={activeHint} onDismiss={() => setActiveHint(null)} />
@@ -495,8 +683,13 @@ export default function CountOnScreen({ navigation }: Props) {
         {/* ═══════════════════════════════════════════════════════════════════
             2. CENTERED BASKET SECTION (Large centered basket to fit all fruits)
         ═══════════════════════════════════════════════════════════════════ */}
-        <View style={styles.basketCenterContainer}>
-          <View style={styles.oliverBasketWrapper}>
+        <View
+          style={styles.basketCenterContainer}
+          onLayout={e => {
+            basketLayoutRef.current = e.nativeEvent.layout;
+          }}
+        >
+          <View style={[styles.oliverBasketWrapper, isBasketHighlighted && styles.oliverBasketHighlighted]}>
             <WickerBasketCard
               width={Math.min(sectionWidth, 290)}
               height={165}
@@ -517,6 +710,7 @@ export default function CountOnScreen({ navigation }: Props) {
                   <TouchableOpacity
                     key={f.id}
                     onPress={() => handleRemoveFruit(f.id)}
+                    disabled={isDemonstrating}
                     activeOpacity={0.7}
                   >
                     <View style={styles.basketAddedFruitItem}>
@@ -546,7 +740,12 @@ export default function CountOnScreen({ navigation }: Props) {
         {/* ═══════════════════════════════════════════════════════════════════
             3. "FRUITS HERE!" CANOPY AREA
         ═══════════════════════════════════════════════════════════════════ */}
-        <View style={styles.canopySection}>
+        <View
+          style={styles.canopySection}
+          onLayout={e => {
+            canopyLayoutRef.current = e.nativeEvent.layout;
+          }}
+        >
           <View style={styles.canopyTitleBadge}>
             <Text style={styles.canopyTitleText}>* Fruits Here! *</Text>
           </View>
@@ -571,22 +770,48 @@ export default function CountOnScreen({ navigation }: Props) {
             {/* 10 Hanging Fruits in 2 Rows of 5 */}
             <View style={styles.canopyFruitsGrid}>
               <View style={styles.fruitRow}>
-                {fruits.slice(0, 5).map(fruit => (
-                  <DraggableFruit
-                    key={`${fruit.id}_try${currentTry}`}
-                    fruit={fruit}
-                    onDrop={() => handleDrop(fruit.id)}
-                  />
-                ))}
+                {fruits.slice(0, 5).map((fruit, idx) => {
+                  const col = idx;
+                  const gridWidth = sectionWidth * 0.9;
+                  const colSpacing = gridWidth / 5;
+                  const fruitX = (sectionWidth - gridWidth) / 2 + (col + 0.5) * colSpacing;
+                  const demoTargetX = (sectionWidth / 2) - fruitX;
+                  const demoTargetY = -180;
+                  return (
+                    <DraggableFruit
+                      key={`${fruit.id}_try${currentTry}`}
+                      fruit={fruit}
+                      disabled={isDemonstrating}
+                      onDrop={() => handleDrop(fruit.id)}
+                      isHighlighted={highlightedFruitId === fruit.id}
+                      isDemoAnimating={animatingFruitId === fruit.id}
+                      demoTargetX={demoTargetX}
+                      demoTargetY={demoTargetY}
+                    />
+                  );
+                })}
               </View>
               <View style={styles.fruitRow}>
-                {fruits.slice(5, 10).map(fruit => (
-                  <DraggableFruit
-                    key={`${fruit.id}_try${currentTry}`}
-                    fruit={fruit}
-                    onDrop={() => handleDrop(fruit.id)}
-                  />
-                ))}
+                {fruits.slice(5, 10).map((fruit, idx) => {
+                  const col = idx;
+                  const gridWidth = sectionWidth * 0.9;
+                  const colSpacing = gridWidth / 5;
+                  const fruitX = (sectionWidth - gridWidth) / 2 + (col + 0.5) * colSpacing;
+                  const demoTargetX = (sectionWidth / 2) - fruitX;
+                  const demoTargetY = -215;
+                  return (
+                    <DraggableFruit
+                      key={`${fruit.id}_try${currentTry}`}
+                      fruit={fruit}
+                      disabled={isDemonstrating}
+                      onDrop={() => handleDrop(fruit.id)}
+                      isHighlighted={highlightedFruitId === fruit.id}
+                      isDemoAnimating={animatingFruitId === fruit.id}
+                      demoTargetX={demoTargetX}
+                      demoTargetY={demoTargetY}
+                    />
+                  );
+                })}
               </View>
             </View>
           </View>
@@ -595,9 +820,22 @@ export default function CountOnScreen({ navigation }: Props) {
         {/* ═══════════════════════════════════════════════════════════════════
             4. "VIEW BASKET" BUTTON (Sketch 2)
         ═══════════════════════════════════════════════════════════════════ */}
+        {basketFeedback && (
+          <View style={styles.viewBasketFeedbackBubble}>
+            <Text style={styles.viewBasketFeedbackText}>⚠️ {basketFeedback}</Text>
+          </View>
+        )}
         <TouchableOpacity
-          style={styles.viewBasketActionBtn}
+          style={[
+            styles.viewBasketActionBtn,
+            highlightedViewBasket && styles.viewBasketBtnHighlighted,
+            isDemonstrating && !highlightedViewBasket && { opacity: 0.6 },
+          ]}
+          onLayout={e => {
+            viewBasketBtnLayoutRef.current = e.nativeEvent.layout;
+          }}
           onPress={handleOpenViewBasket}
+          disabled={isDemonstrating}
           activeOpacity={0.8}
         >
           <Text style={styles.viewBasketActionText}>🧺 View Basket</Text>
@@ -609,11 +847,17 @@ export default function CountOnScreen({ navigation }: Props) {
       ═══════════════════════════════════════════════════════════════════ */}
       <Modal visible={showViewBasket} animationType="fade" transparent={true}>
         <View style={styles.zoomModalBackdrop}>
-          <View style={styles.zoomModalCard}>
+          <View
+            style={styles.zoomModalCard}
+            onLayout={e => {
+              zoomModalCardLayoutRef.current = e.nativeEvent.layout;
+            }}
+          >
             {/* 'X' Close Button in Top-Right Corner */}
             <TouchableOpacity
               style={styles.zoomCloseBtn}
               onPress={() => setShowViewBasket(false)}
+              disabled={isDemonstrating}
               activeOpacity={0.75}
             >
               <Text style={styles.zoomCloseBtnText}>✕</Text>
@@ -641,10 +885,13 @@ export default function CountOnScreen({ navigation }: Props) {
                     {/* All basket fruits (starting + added) */}
                     {Array.from({ length: totalBasketFruitsCount }).map((_, i) => {
                       const isCompact = totalBasketFruitsCount > 10;
+                      const isDemoHighlighted = demoCountingIndex === i;
+                      const showIndexTag = showClues || (isDemonstrating && demoMaxCountedIndex !== null && i <= demoMaxCountedIndex);
                       return (
                         <TouchableOpacity
                           key={i}
                           activeOpacity={0.7}
+                          disabled={isDemonstrating}
                           onPress={() => {
                             if (showClues) {
                               AudioManager.stopSpeech();
@@ -652,11 +899,17 @@ export default function CountOnScreen({ navigation }: Props) {
                             }
                           }}
                         >
-                          <View style={[styles.zoomFruitBadgeWrap, isCompact && styles.zoomFruitBadgeWrapCompact]}>
+                          <View
+                            style={[
+                              styles.zoomFruitBadgeWrap,
+                              isCompact && styles.zoomFruitBadgeWrapCompact,
+                              isDemoHighlighted && styles.zoomFruitHighlighted,
+                            ]}
+                          >
                             <Text style={[styles.zoomFruitEmoji, isCompact && styles.zoomFruitEmojiCompact]}>
                               {fruitEmojiType}
                             </Text>
-                            {showClues && (
+                            {showIndexTag && (
                               <View style={styles.zoomFruitIndexTag}>
                                 <Text style={styles.zoomFruitIndexText}>{i + 1}</Text>
                               </View>
@@ -673,35 +926,49 @@ export default function CountOnScreen({ navigation }: Props) {
               <Text style={styles.zoomQuestionText}>How many fruits in all?</Text>
 
               {/* 5 Choice Boxes: [ ] [ ] [ ] [ ] [ ] */}
-              <View style={styles.zoomOptionsRow}>
-                {options.map((opt, index) => (
-                  <TouchableOpacity
-                    key={opt}
-                    style={[
-                      styles.zoomOptionBox,
-                      { backgroundColor: optionColors[index % optionColors.length] },
-                      selectedAnswer === opt && styles.zoomOptionBoxSelected,
-                    ]}
-                    onPress={() => {
-                      setSelectedAnswer(opt);
-                      AudioManager.stopSpeech();
-                      AudioManager.speak(`${opt}`, { rate: 0.9, pitch: 1.3 });
-                    }}
-                    activeOpacity={0.75}
-                  >
-                    <Text style={styles.zoomOptionText}>{opt}</Text>
-                  </TouchableOpacity>
-                ))}
+              <View
+                style={styles.zoomOptionsRow}
+                onLayout={e => {
+                  zoomOptionsLayoutRef.current = e.nativeEvent.layout;
+                }}
+              >
+                {options.map((opt, index) => {
+                  const isHighlighted = highlightedOption === opt;
+                  return (
+                    <TouchableOpacity
+                      key={opt}
+                      style={[
+                        styles.zoomOptionBox,
+                        { backgroundColor: optionColors[index % optionColors.length] },
+                        selectedAnswer === opt && styles.zoomOptionBoxSelected,
+                        isHighlighted && styles.zoomOptionBoxHighlighted,
+                      ]}
+                      onPress={() => {
+                        setSelectedAnswer(opt);
+                        AudioManager.stopSpeech();
+                        AudioManager.speak(`${opt}`, { rate: 0.9, pitch: 1.3 });
+                      }}
+                      disabled={isDemonstrating}
+                      activeOpacity={0.75}
+                    >
+                      <Text style={styles.zoomOptionText}>{opt}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
 
               {/* [ SUBMIT ] Button */}
               <TouchableOpacity
                 style={[
                   styles.zoomSubmitBtn,
-                  selectedAnswer === null && styles.zoomSubmitBtnDisabled,
+                  (selectedAnswer === null || (isDemonstrating && !isSubmitHighlighted)) && styles.zoomSubmitBtnDisabled,
+                  isSubmitHighlighted && styles.zoomSubmitBtnHighlighted,
                 ]}
+                onLayout={e => {
+                  zoomSubmitBtnLayoutRef.current = e.nativeEvent.layout;
+                }}
                 onPress={submitAnswer}
-                disabled={selectedAnswer === null}
+                disabled={selectedAnswer === null || isDemonstrating}
                 activeOpacity={0.8}
               >
                 <Text style={styles.zoomSubmitBtnText}>SUBMIT ✓</Text>
@@ -710,20 +977,6 @@ export default function CountOnScreen({ navigation }: Props) {
           </View>
         </View>
       </Modal>
-
-      {/* Modals & Overlays */}
-      <IncorrectModal
-        visible={showIncorrectModal}
-        onTryAgain={handleTryAgainAfterFail}
-        onHint={() => {
-          setFruits(prev => prev.map(f => ({ ...f, dropped: false })));
-          setSelectedAnswer(null);
-          confirmUseHint(() => setShowIncorrectModal(false));
-        }}
-        hintsRemaining={hintsRemaining}
-        currentTry={incorrectModalTry}
-        isFinalWrong={incorrectModalTry >= MAX_WRONG_TRIES}
-      />
 
       <HintConfirmModal
         visible={showHintConfirm}
@@ -991,14 +1244,29 @@ const TopViewBasketCard: React.FC<TopViewBasketCardProps> = ({
 };
 
 // ─── Draggable Fruit on Tree Branch ──────────────────────────────────────────
-const DraggableFruit = ({ fruit, onDrop }: any) => {
+const DraggableFruit = ({
+  fruit,
+  onDrop,
+  disabled,
+  isHighlighted = false,
+  isDemoAnimating = false,
+  demoTargetX = 0,
+  demoTargetY = -180,
+}: any) => {
   const pan = useRef(new Animated.ValueXY()).current;
   const pressScale = useRef(new Animated.Value(1)).current;
+  const demoAnimX = useRef(new Animated.Value(0)).current;
+  const demoAnimY = useRef(new Animated.Value(0)).current;
   const onDropRef = useRef(onDrop);
+  const disabledRef = useRef(disabled);
 
   useEffect(() => {
     onDropRef.current = onDrop;
   }, [onDrop]);
+
+  useEffect(() => {
+    disabledRef.current = disabled;
+  }, [disabled]);
 
   useEffect(() => {
     if (!fruit.dropped) {
@@ -1007,10 +1275,40 @@ const DraggableFruit = ({ fruit, onDrop }: any) => {
     }
   }, [fruit.dropped]);
 
+  useEffect(() => {
+    if (isDemoAnimating) {
+      demoAnimX.setValue(0);
+      demoAnimY.setValue(0);
+      Animated.sequence([
+        Animated.timing(pressScale, { toValue: 1.25, duration: 150, useNativeDriver: true }),
+        Animated.parallel([
+          Animated.timing(demoAnimX, {
+            toValue: demoTargetX,
+            duration: 480,
+            useNativeDriver: true,
+          }),
+          Animated.timing(demoAnimY, {
+            toValue: demoTargetY,
+            duration: 480,
+            useNativeDriver: true,
+          }),
+        ]),
+      ]).start(() => {
+        demoAnimX.setValue(0);
+        demoAnimY.setValue(0);
+        pressScale.setValue(1);
+      });
+    } else {
+      demoAnimX.setValue(0);
+      demoAnimY.setValue(0);
+      pressScale.setValue(1);
+    }
+  }, [isDemoAnimating, demoTargetX, demoTargetY]);
+
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => !fruit.dropped,
-      onMoveShouldSetPanResponder: () => !fruit.dropped,
+      onStartShouldSetPanResponder: () => !fruit.dropped && !disabledRef.current,
+      onMoveShouldSetPanResponder: () => !fruit.dropped && !disabledRef.current,
       onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: () => {
         Animated.spring(pressScale, { toValue: 1.25, friction: 4, useNativeDriver: true }).start();
@@ -1050,12 +1348,20 @@ const DraggableFruit = ({ fruit, onDrop }: any) => {
       {...panResponder.panHandlers}
       style={{
         transform: [{ translateX: pan.x }, { translateY: pan.y }],
-        zIndex: 999,
+        zIndex: isHighlighted || isDemoAnimating ? 9999 : 999,
         elevation: 10,
       }}
     >
-      <Animated.View style={{ transform: [{ scale: pressScale }] }}>
-        <View style={styles.hangingFruitCircle}>
+      <Animated.View
+        style={{
+          transform: [
+            { scale: pressScale },
+            { translateX: demoAnimX },
+            { translateY: demoAnimY },
+          ],
+        }}
+      >
+        <View style={[styles.hangingFruitCircle, isHighlighted && styles.fruitCircleHighlighted]}>
           <Text style={styles.fruitEmoji}>{fruit.emoji}</Text>
         </View>
       </Animated.View>
@@ -1587,5 +1893,100 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: '#FFF',
     letterSpacing: 1,
+  },
+  fruitCircleHighlighted: {
+    borderColor: '#FF6F00',
+    borderWidth: 3.5,
+    backgroundColor: '#FFF9C4',
+    shadowColor: '#FF6F00',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.6,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  oliverBasketHighlighted: {
+    borderWidth: 3.5,
+    borderColor: '#FFD700',
+    borderRadius: 24,
+    padding: 4,
+    shadowColor: '#FFD700',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.8,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  viewBasketBtnHighlighted: {
+    borderWidth: 4,
+    borderColor: '#FFD700',
+    transform: [{ scale: 1.08 }],
+    shadowColor: '#FFD700',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.8,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  zoomOptionBoxHighlighted: {
+    borderWidth: 4,
+    borderColor: '#FFD700',
+    transform: [{ scale: 1.15 }],
+    shadowColor: '#FFD700',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.8,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  zoomSubmitBtnHighlighted: {
+    backgroundColor: '#4CAF50',
+    borderWidth: 4,
+    borderColor: '#FFD700',
+    transform: [{ scale: 1.05 }],
+    shadowColor: '#FFD700',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.8,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  instructionCardFeedback: {
+    backgroundColor: '#FFF8E1',
+    borderColor: '#FFA000',
+    borderWidth: 2,
+  },
+  instructionTextFeedback: {
+    color: '#E65100',
+    fontWeight: '900',
+  },
+  viewBasketFeedbackBubble: {
+    backgroundColor: '#FFF3E0',
+    borderWidth: 2,
+    borderColor: '#FF9800',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    marginBottom: 8,
+    maxWidth: '90%',
+    alignSelf: 'center',
+    elevation: 3,
+    shadowColor: '#FF9800',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  viewBasketFeedbackText: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: '#D84315',
+    textAlign: 'center',
+  },
+  zoomFruitHighlighted: {
+    borderRadius: 22,
+    borderWidth: 3,
+    borderColor: '#FFD700',
+    backgroundColor: '#FFF9C4',
+    transform: [{ scale: 1.25 }],
+    shadowColor: '#FFD700',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.8,
+    shadowRadius: 6,
+    elevation: 8,
   },
 });
