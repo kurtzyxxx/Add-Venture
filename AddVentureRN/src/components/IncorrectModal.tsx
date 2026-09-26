@@ -1,251 +1,317 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal, Animated } from 'react-native';
+import {
+  Modal,
+  View,
+  Text,
+  TouchableOpacity,
+  Animated,
+  StyleSheet,
+  Dimensions,
+} from 'react-native';
 import { AudioManager } from '../core/AudioManager';
 
 interface IncorrectModalProps {
   visible: boolean;
-  onTryAgain: () => void;
-  onHint: () => void;
-  hintsRemaining: number;
-  currentTry: number;
-  isFinalWrong?: boolean;
+  onContinue: () => void;
+  isTimeout?: boolean;
+  userAnswer?: number | string | null;
+  currentTry?: number;
 }
 
-const MESSAGES_BY_TRY: Record<number, { title: string[]; subtitle: string; tts: string }> = {
-  1: {
-    title: ['Oops!', "Not", 'quite.'],
-    subtitle: "Let's try again!",
-    tts: "Oops! Not quite. Let's try again. You can do it!",
-  },
-  2: {
-    title: ['Try', 'again', '!'],
-    subtitle: 'You can do it! 💪',
-    tts: "Try again. You can do it!",
-  },
-  3: {
-    title: ['Good try!', "Let's go", 'next!'],
-    subtitle: 'Keep going to the next question 🎯',
-    tts: "Good try! Let's go to the next question.",
-  },
-};
+const { width } = Dimensions.get('window');
 
 export const IncorrectModal: React.FC<IncorrectModalProps> = ({
   visible,
-  onTryAgain,
-  onHint,
-  hintsRemaining,
-  currentTry,
-  isFinalWrong = false,
+  onContinue,
+  isTimeout = false,
+  userAnswer,
+  currentTry = 1,
 }) => {
-  // Shake animation for the star graphic
+  const scaleAnim = useRef(new Animated.Value(0.7)).current;
+  const bounceAnim = useRef(new Animated.Value(1)).current;
   const shakeAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(0.5)).current;
-
-  const visibleTry = Math.min(currentTry, 3);
-  const messageTry = isFinalWrong ? 3 : Math.min(currentTry, 2);
-  const msg = MESSAGES_BY_TRY[messageTry] ?? MESSAGES_BY_TRY[1];
 
   useEffect(() => {
     if (!visible) return;
 
-    // Reset
-    shakeAnim.setValue(0);
-    scaleAnim.setValue(0.5);
+    // Reset and spring pop-in
+    scaleAnim.setValue(0.7);
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      friction: 6,
+      tension: 60,
+      useNativeDriver: true,
+    }).start();
 
-    // Pop in + shake sequence
-    Animated.parallel([
-      Animated.spring(scaleAnim, { toValue: 1, friction: 5, useNativeDriver: true }),
+    // Gentle owl bounce
+    const bounceLoop = Animated.loop(
       Animated.sequence([
-        Animated.timing(shakeAnim, { toValue: 12, duration: 60, useNativeDriver: true }),
-        Animated.timing(shakeAnim, { toValue: -12, duration: 60, useNativeDriver: true }),
-        Animated.timing(shakeAnim, { toValue: 8, duration: 60, useNativeDriver: true }),
-        Animated.timing(shakeAnim, { toValue: -8, duration: 60, useNativeDriver: true }),
-        Animated.timing(shakeAnim, { toValue: 4, duration: 60, useNativeDriver: true }),
-        Animated.timing(shakeAnim, { toValue: 0, duration: 60, useNativeDriver: true }),
-      ]),
+        Animated.timing(bounceAnim, { toValue: 1.12, duration: 400, useNativeDriver: true }),
+        Animated.timing(bounceAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
+      ])
+    );
+    bounceLoop.start();
+
+    // Gentle badge wiggle
+    Animated.sequence([
+      Animated.delay(150),
+      Animated.timing(shakeAnim, { toValue: 8, duration: 70, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -8, duration: 70, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 5, duration: 70, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -5, duration: 70, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 0, duration: 70, useNativeDriver: true }),
     ]).start();
 
-    // TTS
+    // Audio narration
     AudioManager.stopSpeech();
-    setTimeout(() => {
-      AudioManager.speak(msg.tts, { rate: 0.9, pitch: 1.2 });
-    }, 150);
-  }, [visible, currentTry]);
+    const narration = isTimeout
+      ? "Time's up! That's okay, let's watch Oliver show us how to solve it together!"
+      : "Oops! Not quite, but nice try! Let's watch Oliver show us how to solve it!";
 
-  const tryColors = ['#FF5252', '#FF9800', '#9C27B0'];
-  const accentColor = tryColors[Math.min(visibleTry - 1, 2)];
+    const timeout = setTimeout(() => {
+      AudioManager.speak(narration, {
+        rate: 0.95,
+        pitch: 1.3,
+      });
+    }, 200);
+
+    return () => {
+      bounceLoop.stop();
+      clearTimeout(timeout);
+    };
+  }, [visible, isTimeout]);
+
+  const handlePressContinue = () => {
+    AudioManager.stopSpeech();
+    onContinue();
+  };
+
+  if (!visible) return null;
 
   return (
-    <Modal visible={visible} animationType="fade" transparent={true}>
-      <View style={styles.container}>
-        {/* Title */}
-        <View style={styles.titleContainer}>
-          <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
-            <View style={styles.row}>
-              <Text style={[styles.titleText, { color: accentColor }]}>{msg.title[0]} </Text>
-              <Text style={[styles.titleText, { color: '#66BB6A' }]}>{msg.title[1]} </Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={[styles.titleText, { color: '#29B6F6' }]}>{msg.title[2]}</Text>
-            </View>
-          </Animated.View>
-          <Text style={styles.subtitleText}>{msg.subtitle}</Text>
-        </View>
-
-        {/* Animated Graphic */}
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={handlePressContinue}>
+      <View style={styles.backdrop}>
         <Animated.View
           style={[
-            styles.graphicContainer,
-            { transform: [{ translateX: shakeAnim }, { scale: scaleAnim }] },
+            styles.card,
+            {
+              transform: [{ scale: scaleAnim }],
+            },
           ]}
         >
-          <Text style={[styles.sparkle, { top: 20, left: 10, fontSize: 24 }]}>✨</Text>
-          <Text style={[styles.sparkle, { bottom: 30, right: 10, fontSize: 32 }]}>✨</Text>
-          <Text style={[styles.heart, { top: 10, right: 20, fontSize: 28, transform: [{ rotate: '15deg' }] }]}>💖</Text>
-          <Text style={[styles.heart, { top: 60, left: 20, fontSize: 18, transform: [{ rotate: '-15deg' }] }]}>💖</Text>
-          <Text style={styles.starEmoji}>⭐</Text>
-          <Text style={styles.faceEmoji}>
-            {isFinalWrong ? '😮' : '🥺'}
-          </Text>
-        </Animated.View>
-
-        {/* Try indicator */}
-        <View style={styles.tryRow}>
-          {[1, 2, 3].map(t => (
-            <View
-              key={t}
-              style={[
-                styles.tryDot,
-                {
-                  backgroundColor: t < currentTry ? '#E0E0E0' : accentColor,
-                  opacity: t <= visibleTry ? 1 : 0.3,
-                  width: t === visibleTry ? 18 : 12,
-                  height: t === visibleTry ? 18 : 12,
-                  borderRadius: t === visibleTry ? 9 : 6,
-                },
-              ]}
-            />
-          ))}
-        </View>
-
-        {/* Action Buttons */}
-        <View style={styles.actionsContainer}>
-          <TouchableOpacity
-            style={[styles.primaryBtn, { backgroundColor: accentColor }]}
-            activeOpacity={0.8}
-            onPress={onTryAgain}
+          {/* Top Pill Badge */}
+          <Animated.View
+            style={[
+              styles.pillBadge,
+              isTimeout ? styles.pillTimeout : styles.pillIncorrect,
+              { transform: [{ translateX: shakeAnim }] },
+            ]}
           >
-            <Text style={styles.primaryBtnText}>
-              {isFinalWrong ? '➡ Next Question' : '↻ Try Again'}
+            <Text style={styles.pillText}>
+              {isTimeout ? "⏰ TIME'S UP! ⏰" : "🌱 NICE TRY! 🌱"}
+            </Text>
+          </Animated.View>
+
+          {/* Animated Mascot Area */}
+          <View style={styles.characterContainer}>
+            <Animated.View style={{ transform: [{ scale: bounceAnim }] }}>
+              <Text style={styles.owlEmoji}>🦉</Text>
+            </Animated.View>
+            <View style={styles.lightbulbBadge}>
+              <Text style={styles.lightbulbEmoji}>{isTimeout ? '⌛' : '💡'}</Text>
+            </View>
+          </View>
+
+          {/* Title */}
+          <Text style={[styles.title, isTimeout ? styles.titleTimeout : styles.titleIncorrect]}>
+            {isTimeout ? "Time's Up!" : 'Oops! Not Quite'}
+          </Text>
+
+          {/* User Answer Pill (if provided) */}
+          {userAnswer !== undefined && userAnswer !== null && userAnswer !== -1 && (
+            <View style={styles.userAnswerChip}>
+              <Text style={styles.userAnswerLabel}>Your answer: </Text>
+              <Text style={styles.userAnswerValue}>{userAnswer}</Text>
+            </View>
+          )}
+
+          {/* Encouraging Explanatory Callout */}
+          <View style={styles.explanationBox}>
+            <Text style={styles.explanationTitle}>
+              {isTimeout ? '✨ No worries at all! ✨' : '✨ Mistakes help us learn! ✨'}
+            </Text>
+            <Text style={styles.explanationBody}>
+              {isTimeout
+                ? "Let's watch Oliver show us how to solve this step-by-step!"
+                : "That's okay! Let's watch Oliver show us how to solve this one together!"}
+            </Text>
+          </View>
+
+          {/* Friendly Tutorial Call-to-Action Button */}
+          <TouchableOpacity
+            style={styles.continueButton}
+            onPress={handlePressContinue}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.continueButtonText}>
+              {isTimeout ? 'Watch Oliver 🦉' : 'Show Me How! 🚀'}
             </Text>
           </TouchableOpacity>
-
-          {hintsRemaining > 0 && !isFinalWrong && (
-            <TouchableOpacity
-              style={styles.secondaryBtn}
-              activeOpacity={0.8}
-              onPress={onHint}
-            >
-              <Text style={styles.secondaryBtnText}>💡 Need a hint? ({hintsRemaining} left)</Text>
-            </TouchableOpacity>
-          )}
-        </View>
+        </Animated.View>
       </View>
     </Modal>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  backdrop: {
     flex: 1,
-    backgroundColor: '#FFEAB5',
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 20,
+    zIndex: 9999,
   },
-  titleContainer: {
-    marginTop: 60,
+  card: {
+    width: Math.min(width * 0.88, 380),
+    backgroundColor: '#FFFDF9',
+    borderRadius: 32,
+    borderWidth: 3,
+    borderColor: '#FFE082',
+    paddingVertical: 26,
+    paddingHorizontal: 22,
     alignItems: 'center',
-    marginBottom: 20,
+    elevation: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 14,
   },
-  row: { flexDirection: 'row' },
-  titleText: {
-    fontSize: 36,
+  pillBadge: {
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginBottom: 12,
+  },
+  pillIncorrect: {
+    backgroundColor: '#FFF3E0',
+    borderWidth: 2,
+    borderColor: '#FFB74D',
+  },
+  pillTimeout: {
+    backgroundColor: '#EDE7F6',
+    borderWidth: 2,
+    borderColor: '#B39DDB',
+  },
+  pillText: {
+    fontSize: 13,
     fontWeight: '900',
-    textShadowColor: '#FFF',
-    textShadowOffset: { width: 2, height: 2 },
-    textShadowRadius: 1,
+    color: '#E65100',
+    letterSpacing: 0.8,
   },
-  subtitleText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#5D4037',
-    marginTop: 8,
+  characterContainer: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 4,
   },
-  graphicContainer: {
+  owlEmoji: {
+    fontSize: 78,
+  },
+  lightbulbBadge: {
+    position: 'absolute',
+    bottom: -4,
+    right: -10,
+    backgroundColor: '#FFF8E1',
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: '#FFD54F',
+    width: 32,
+    height: 32,
     justifyContent: 'center',
     alignItems: 'center',
-    position: 'relative',
-    height: 220,
-    width: 220,
-    marginBottom: 20,
   },
-  starEmoji: {
-    fontSize: 160,
-    textShadowColor: 'rgba(0,0,0,0.1)',
-    textShadowOffset: { width: 0, height: 10 },
-    textShadowRadius: 10,
+  lightbulbEmoji: {
+    fontSize: 18,
   },
-  faceEmoji: {
-    position: 'absolute',
-    fontSize: 72,
-    top: 58,
+  title: {
+    fontSize: 30,
+    fontWeight: '900',
+    textAlign: 'center',
+    marginTop: 8,
+    marginBottom: 6,
   },
-  sparkle: { position: 'absolute', color: '#FFCA28' },
-  heart: { position: 'absolute' },
-  tryRow: {
+  titleIncorrect: {
+    color: '#E65100',
+  },
+  titleTimeout: {
+    color: '#5E35B1',
+  },
+  userAnswerChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 24,
+    backgroundColor: '#FFEBEE',
+    paddingHorizontal: 14,
+    paddingVertical: 4,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#FFCDD2',
+    marginVertical: 4,
   },
-  tryDot: { margin: 4 },
-  actionsContainer: {
-    width: '100%',
-    paddingHorizontal: 40,
+  userAnswerLabel: {
+    fontSize: 13,
+    color: '#C62828',
+    fontWeight: '700',
+  },
+  userAnswerValue: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: '#B71C1C',
+  },
+  explanationBox: {
+    backgroundColor: '#FFF8E1',
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: '#FFE082',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     alignItems: 'center',
-  },
-  primaryBtn: {
+    marginVertical: 14,
     width: '100%',
-    paddingVertical: 18,
-    borderRadius: 30,
+  },
+  explanationTitle: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: '#F57C00',
+    marginBottom: 4,
+  },
+  explanationBody: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#5D4037',
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  continueButton: {
+    backgroundColor: '#FF6F00',
+    width: '100%',
+    paddingVertical: 15,
+    borderRadius: 28,
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-    borderBottomWidth: 5,
-    borderColor: 'rgba(0,0,0,0.15)',
+    borderBottomWidth: 4,
+    borderBottomColor: '#E65100',
     elevation: 4,
+    shadowColor: '#FF6F00',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    marginTop: 4,
   },
-  primaryBtnText: {
-    fontSize: 24,
+  continueButtonText: {
+    fontSize: 20,
     fontWeight: '900',
     color: '#FFF',
-    textShadowColor: 'rgba(0,0,0,0.2)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
-  },
-  secondaryBtn: {
-    backgroundColor: '#FFECB3',
-    width: '100%',
-    paddingVertical: 16,
-    borderRadius: 30,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 3,
-    borderColor: '#4E342E',
-  },
-  secondaryBtnText: {
-    fontSize: 18,
-    fontWeight: '900',
-    color: '#4E342E',
+    letterSpacing: 0.5,
   },
 });

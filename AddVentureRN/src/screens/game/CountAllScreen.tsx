@@ -11,6 +11,7 @@ import { GameTutorialModal } from '../../components/tutorial/GameTutorialModal';
 import { DemonstrationBanner } from '../../components/tutorial/DemonstrationBanner';
 import { COUNT_ALL_TUTORIAL_STEPS } from '../../components/tutorial/CountAllTutorialContent';
 import { FiveStreakModal } from '../../components/FiveStreakModal';
+import { IncorrectModal } from '../../components/IncorrectModal';
 import { OliverSpeechBalloon } from '../../components/OliverSpeechBalloon';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../../App';
@@ -77,6 +78,10 @@ export default function CountAllScreen({ navigation }: Props) {
   const [greatJobStars, setGreatJobStars] = useState(3);
   const [justMastered, setJustMastered] = useState(false);
   const [showFiveStreak, setShowFiveStreak] = useState(false);
+  // Incorrect / Error feedback modal
+  const [showIncorrectModal, setShowIncorrectModal] = useState(false);
+  const [isTimeoutError, setIsTimeoutError] = useState(false);
+  const [lastWrongAnswer, setLastWrongAnswer] = useState<number | null>(null);
 
   // Current problem ref (for mastery API)
   const currentProblemRef = useRef<Problem | null>(null);
@@ -123,7 +128,7 @@ export default function CountAllScreen({ navigation }: Props) {
 
   // Timer only runs when gameplay is actively running (not in tutorial or modals)
   useEffect(() => {
-    if (showTutorial || isDemonstrating || showGreatJob || showFiveStreak || !problem) {
+    if (showTutorial || isDemonstrating || showGreatJob || showFiveStreak || showIncorrectModal || !problem) {
       if (timerRef.current) {
         clearInterval(timerRef.current);
         timerRef.current = null;
@@ -138,16 +143,16 @@ export default function CountAllScreen({ navigation }: Props) {
         timerRef.current = null;
       }
     };
-  }, [showTutorial, isDemonstrating, showGreatJob, showFiveStreak, problem]);
+  }, [showTutorial, isDemonstrating, showGreatJob, showFiveStreak, showIncorrectModal, problem]);
 
   useEffect(() => {
-    if (timeLeft === 0 && !showTutorial && !isDemonstrating && !showGreatJob && !showFiveStreak && problem && selectedAnswer === null) {
+    if (timeLeft === 0 && !showTutorial && !isDemonstrating && !showGreatJob && !showFiveStreak && !showIncorrectModal && problem && selectedAnswer === null) {
       handleTimeUp();
     }
-  }, [timeLeft, showTutorial, isDemonstrating, showGreatJob, showFiveStreak, problem, selectedAnswer]);
+  }, [timeLeft, showTutorial, isDemonstrating, showGreatJob, showFiveStreak, showIncorrectModal, problem, selectedAnswer]);
 
   const handleTimeUp = async () => {
-    if (!problem || isDemonstrating) return;
+    if (!problem || isDemonstrating || showIncorrectModal) return;
     const gm = GameManager.getInstance();
     const responseTimeMs = gm.sessionTimerLimit * 1000;
     await gm.submitAnswer(false, currentTry, responseTimeMs, problem, -1, false);
@@ -157,7 +162,9 @@ export default function CountAllScreen({ navigation }: Props) {
     } else {
       gm.addToMasteryQueue(problem);
     }
-    startAutomatedDemonstration(true);
+    setLastWrongAnswer(null);
+    setIsTimeoutError(true);
+    setShowIncorrectModal(true);
   };
 
   const loadNewProblem = (silent = false) => {
@@ -311,8 +318,15 @@ export default function CountAllScreen({ navigation }: Props) {
       if (isMasteryProblem) {
         gm.recordMasteryIncorrect(problem);
       }
-      startAutomatedDemonstration(false);
+      setLastWrongAnswer(selectedAnswer);
+      setIsTimeoutError(false);
+      setShowIncorrectModal(true);
     }
+  };
+
+  const handleContinueAfterIncorrect = () => {
+    setShowIncorrectModal(false);
+    startAutomatedDemonstration(isTimeoutError);
   };
 
   const handleContinueAfterGreatJob = async () => {
@@ -355,24 +369,6 @@ export default function CountAllScreen({ navigation }: Props) {
     setAnimatingFruitId(null);
     setHighlightedOption(null);
     setIsSubmitHighlighted(false);
-
-    if (isTimeout) {
-      setDemoMessage(`Time's up! Let's watch Oliver show you how to solve it!`);
-      await AudioManager.speakAsync(`Time's up! That's okay, let's watch Oliver count them all together!`, {
-        rate: 0.95,
-        pitch: 1.3,
-      });
-      await waitMs(400);
-      if (isDemoCancelled.current) return;
-    } else {
-      setDemoMessage(`Not quite, but nice try! Let's watch Oliver solve it!`);
-      await AudioManager.speakAsync(`Not quite, but nice try! Let's watch Oliver count them all together!`, {
-        rate: 0.95,
-        pitch: 1.3,
-      });
-      await waitMs(400);
-      if (isDemoCancelled.current) return;
-    }
 
     setDemoMessage(`Watch Oliver! Let's count Tree 1 and Tree 2 together!`);
 
@@ -849,6 +845,15 @@ export default function CountAllScreen({ navigation }: Props) {
       <FiveStreakModal
         visible={showFiveStreak}
         onClose={handleCloseFiveStreak}
+      />
+
+      {/* Incorrect Feedback Modal -> Leads to Error Tutorial */}
+      <IncorrectModal
+        visible={showIncorrectModal}
+        isTimeout={isTimeoutError}
+        userAnswer={lastWrongAnswer}
+        currentTry={currentTry}
+        onContinue={handleContinueAfterIncorrect}
       />
     </SafeAreaView>
   );

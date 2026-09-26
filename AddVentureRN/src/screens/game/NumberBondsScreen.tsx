@@ -18,6 +18,7 @@ import { AudioManager } from '../../core/AudioManager';
 import { GameTutorialModal } from '../../components/tutorial/GameTutorialModal';
 import { NUMBER_BONDS_TUTORIAL_STEPS } from '../../components/tutorial/NumberBondsTutorialContent';
 import { FiveStreakModal } from '../../components/FiveStreakModal';
+import { IncorrectModal } from '../../components/IncorrectModal';
 import { OliverSpeechBalloon } from '../../components/OliverSpeechBalloon';
 import { DemonstrationBanner } from '../../components/tutorial/DemonstrationBanner';
 
@@ -71,6 +72,10 @@ export default function NumberBondsScreen({ navigation }: Props) {
   const [greatJobStars, setGreatJobStars] = useState(3);
   const [justMastered, setJustMastered] = useState(false);
   const [showFiveStreak, setShowFiveStreak] = useState(false);
+  // Incorrect / Error feedback modal
+  const [showIncorrectModal, setShowIncorrectModal] = useState(false);
+  const [isTimeoutError, setIsTimeoutError] = useState(false);
+  const [lastWrongAnswer, setLastWrongAnswer] = useState<number | null>(null);
 
   // Tutorial overlay
   const [showTutorial, setShowTutorial] = useState(() => {
@@ -93,7 +98,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
 
   // Timer only runs during active gameplay
   useEffect(() => {
-    if (showTutorial || isDemonstrating || showGreatJob || showFiveStreak || !problem) {
+    if (showTutorial || isDemonstrating || showGreatJob || showFiveStreak || showIncorrectModal || !problem) {
       if (timerRef.current) {
         clearInterval(timerRef.current);
         timerRef.current = null;
@@ -108,13 +113,13 @@ export default function NumberBondsScreen({ navigation }: Props) {
         timerRef.current = null;
       }
     };
-  }, [showTutorial, isDemonstrating, showGreatJob, showFiveStreak, problem]);
+  }, [showTutorial, isDemonstrating, showGreatJob, showFiveStreak, showIncorrectModal, problem]);
 
   useEffect(() => {
-    if (timeLeft === 0 && !showTutorial && !isDemonstrating && !showGreatJob && !showFiveStreak && problem && selectedOption === null) {
+    if (timeLeft === 0 && !showTutorial && !isDemonstrating && !showGreatJob && !showFiveStreak && !showIncorrectModal && problem && selectedOption === null) {
       handleTimeUp();
     }
-  }, [timeLeft, showTutorial, isDemonstrating, showGreatJob, showFiveStreak, problem, selectedOption]);
+  }, [timeLeft, showTutorial, isDemonstrating, showGreatJob, showFiveStreak, showIncorrectModal, problem, selectedOption]);
 
   // Pulse right basket when awaiting answers
   useEffect(() => {
@@ -133,7 +138,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
   }, [selectedOption]);
 
   const handleTimeUp = async () => {
-    if (!problem || isDemonstrating) return;
+    if (!problem || isDemonstrating || showIncorrectModal) return;
     const gm = GameManager.getInstance();
     const responseTimeMs = gm.sessionTimerLimit * 1000;
     await gm.submitAnswer(false, currentTry, responseTimeMs, problem, -1, false);
@@ -143,7 +148,9 @@ export default function NumberBondsScreen({ navigation }: Props) {
     } else {
       gm.addToMasteryQueue(problem);
     }
-    startAutomatedDemonstration(true);
+    setLastWrongAnswer(null);
+    setIsTimeoutError(true);
+    setShowIncorrectModal(true);
   };
 
   const loadNewProblem = (silent = false) => {
@@ -273,8 +280,15 @@ export default function NumberBondsScreen({ navigation }: Props) {
       setShowGreatJob(true);
     } else {
       if (isMasteryProblem) gm.recordMasteryIncorrect(problem);
-      startAutomatedDemonstration(false);
+      setLastWrongAnswer(selectedOption);
+      setIsTimeoutError(false);
+      setShowIncorrectModal(true);
     }
+  };
+
+  const handleContinueAfterIncorrect = () => {
+    setShowIncorrectModal(false);
+    startAutomatedDemonstration(isTimeoutError);
   };
 
   const handleContinueAfterGreatJob = async () => {
@@ -314,25 +328,6 @@ export default function NumberBondsScreen({ navigation }: Props) {
     setDemoMaxCountedIndex(null);
 
     const missingCount = problem.correctAnswer;
-
-    // Friendly notice if the student answered incorrectly or time expired
-    if (isTimeout) {
-      setDemoMessage(`Time's up! Let's watch Oliver find the number bond!`);
-      await AudioManager.speakAsync(`Time's up! That's okay, let's watch Oliver find the number bond together!`, {
-        rate: 0.95,
-        pitch: 1.3,
-      });
-      await waitMs(400);
-      if (isDemoCancelled.current) return;
-    } else {
-      setDemoMessage(`Not quite, but nice try! Let's watch Oliver find the missing number!`);
-      await AudioManager.speakAsync(`Not quite, but good try! Let's watch Oliver find the number bond together!`, {
-        rate: 0.95,
-        pitch: 1.3,
-      });
-      await waitMs(400);
-      if (isDemoCancelled.current) return;
-    }
 
     // Step 1: Highlight Trunk Total Badge
     setDemoMessage(`Total on the tree is ${problem.num1}!`);
@@ -988,6 +983,15 @@ export default function NumberBondsScreen({ navigation }: Props) {
       <FiveStreakModal
         visible={showFiveStreak}
         onClose={handleCloseFiveStreak}
+      />
+
+      {/* Incorrect Feedback Modal -> Leads to Error Tutorial */}
+      <IncorrectModal
+        visible={showIncorrectModal}
+        isTimeout={isTimeoutError}
+        userAnswer={lastWrongAnswer}
+        currentTry={currentTry}
+        onContinue={handleContinueAfterIncorrect}
       />
     </SafeAreaView>
   );
