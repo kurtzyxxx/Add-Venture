@@ -4,25 +4,27 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 interface DemonstrationBannerProps {
   message: string;
   onSkip?: () => void;
+  allowSkip?: boolean; // When false, Skip button is hidden during 1st remediation cycle (FR-AP-04)
 }
 
 export const DemonstrationBanner: React.FC<DemonstrationBannerProps> = ({
   message,
   onSkip,
+  allowSkip = true,
 }) => {
   return (
     <View style={styles.bannerContainer}>
       <View style={styles.leftRow}>
         <Text style={styles.mascot}>🦉</Text>
         <View style={styles.textContainer}>
-          <Text style={styles.kicker}>WATCH & LEARN</Text>
+          <Text style={styles.kicker}>GUIDED PRACTICE</Text>
           <Text style={styles.messageText} numberOfLines={2}>
             {message}
           </Text>
         </View>
       </View>
 
-      {onSkip ? (
+      {onSkip && allowSkip ? (
         <TouchableOpacity style={styles.skipBtn} onPress={onSkip} activeOpacity={0.8}>
           <Text style={styles.skipBtnText}>Skip ⏩</Text>
         </TouchableOpacity>

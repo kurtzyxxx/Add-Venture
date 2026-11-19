@@ -15,6 +15,10 @@ interface IncorrectModalProps {
   onContinue: () => void;
   isTimeout?: boolean;
   userAnswer?: number | string | null;
+  correctAnswer?: number | string | null;
+  problemNum1?: number;
+  problemNum2?: number;
+  strategy?: string;
   currentTry?: number;
 }
 
@@ -25,6 +29,10 @@ export const IncorrectModal: React.FC<IncorrectModalProps> = ({
   onContinue,
   isTimeout = false,
   userAnswer,
+  correctAnswer,
+  problemNum1,
+  problemNum2,
+  strategy,
   currentTry = 1,
 }) => {
   const scaleAnim = useRef(new Animated.Value(0.7)).current;
@@ -62,16 +70,18 @@ export const IncorrectModal: React.FC<IncorrectModalProps> = ({
       Animated.timing(shakeAnim, { toValue: 0, duration: 70, useNativeDriver: true }),
     ]).start();
 
-    // Audio narration
+    // Audio narration with 0.78x pacing (FR-CO-01, NFR-AC-01)
     AudioManager.stopSpeech();
     const narration = isTimeout
-      ? "Time's up! That's okay, let's watch Oliver show us how to solve it together!"
-      : "Oops! Not quite, but nice try! Let's watch Oliver show us how to solve it!";
+      ? "Time's up! That's okay! Let's solve it step-by-step together!"
+      : (userAnswer !== undefined && userAnswer !== null && userAnswer !== -1 && correctAnswer !== undefined && correctAnswer !== null)
+        ? `Let's check this together! You had ${userAnswer}, but we need ${correctAnswer}. Let's count them step-by-step!`
+        : "Oops! Not quite, but nice try! Let's solve it step-by-step together!";
 
     const timeout = setTimeout(() => {
       AudioManager.speak(narration, {
-        rate: 0.95,
-        pitch: 1.3,
+        rate: 0.78,
+        pitch: 1.25,
       });
     }, 200);
 
@@ -79,7 +89,7 @@ export const IncorrectModal: React.FC<IncorrectModalProps> = ({
       bounceLoop.stop();
       clearTimeout(timeout);
     };
-  }, [visible, isTimeout]);
+  }, [visible, isTimeout, userAnswer, correctAnswer]);
 
   const handlePressContinue = () => {
     AudioManager.stopSpeech();
@@ -127,13 +137,21 @@ export const IncorrectModal: React.FC<IncorrectModalProps> = ({
             {isTimeout ? "Time's Up!" : 'Oops! Not Quite'}
           </Text>
 
-          {/* User Answer Pill (if provided) */}
-          {userAnswer !== undefined && userAnswer !== null && userAnswer !== -1 && (
-            <View style={styles.userAnswerChip}>
-              <Text style={styles.userAnswerLabel}>Your answer: </Text>
-              <Text style={styles.userAnswerValue}>{userAnswer}</Text>
-            </View>
-          )}
+          {/* Stage 1: Explicit Error Pinpointing (FR-AP-04) */}
+          <View style={styles.errorPinpointContainer}>
+            {userAnswer !== undefined && userAnswer !== null && userAnswer !== -1 && (
+              <View style={styles.userAnswerChip}>
+                <Text style={styles.userAnswerLabel}>Your answer: </Text>
+                <Text style={styles.userAnswerValue}>{userAnswer} ✕</Text>
+              </View>
+            )}
+            {correctAnswer !== undefined && correctAnswer !== null && (
+              <View style={styles.correctTargetChip}>
+                <Text style={styles.correctTargetLabel}>Target needed: </Text>
+                <Text style={styles.correctTargetValue}>{correctAnswer} ✓</Text>
+              </View>
+            )}
+          </View>
 
           {/* Encouraging Explanatory Callout */}
           <View style={styles.explanationBox}>
@@ -142,8 +160,10 @@ export const IncorrectModal: React.FC<IncorrectModalProps> = ({
             </Text>
             <Text style={styles.explanationBody}>
               {isTimeout
-                ? "Let's watch Oliver show us how to solve this step-by-step!"
-                : "That's okay! Let's watch Oliver show us how to solve this one together!"}
+                ? "Let's tap each fruit together with Oliver to reach the correct total!"
+                : (userAnswer !== undefined && correctAnswer !== undefined)
+                  ? `You had ${userAnswer}, but we need ${correctAnswer}. Tap along with Oliver to count!`
+                  : "Let's tap each fruit together with Oliver to solve it step-by-step!"}
             </Text>
           </View>
 
@@ -154,7 +174,7 @@ export const IncorrectModal: React.FC<IncorrectModalProps> = ({
             activeOpacity={0.85}
           >
             <Text style={styles.continueButtonText}>
-              {isTimeout ? 'Watch Oliver 🦉' : 'Show Me How! 🚀'}
+              {isTimeout ? 'Solve With Oliver 🦉' : "Let's Solve Together! 🚀"}
             </Text>
           </TouchableOpacity>
         </Animated.View>
@@ -247,6 +267,13 @@ const styles = StyleSheet.create({
   titleTimeout: {
     color: '#5E35B1',
   },
+  errorPinpointContainer: {
+    flexDirection: 'row',
+    gap: 8,
+    marginVertical: 4,
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+  },
   userAnswerChip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -267,6 +294,27 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '900',
     color: '#B71C1C',
+  },
+  correctTargetChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E8F5E9',
+    paddingHorizontal: 14,
+    paddingVertical: 4,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#C8E6C9',
+    marginVertical: 4,
+  },
+  correctTargetLabel: {
+    fontSize: 13,
+    color: '#2E7D32',
+    fontWeight: '700',
+  },
+  correctTargetValue: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: '#1B5E20',
   },
   explanationBox: {
     backgroundColor: '#FFF8E1',

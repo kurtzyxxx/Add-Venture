@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, SafeAreaView,
-  Dimensions, Animated, PanResponder,
+  Dimensions, Animated, PanResponder, Vibration,
 } from 'react-native';
 import Svg, { Circle, Ellipse, Line, Path, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -38,6 +38,7 @@ interface TreeFruit {
 export default function NumberBondsScreen({ navigation }: Props) {
   const [problem, setProblem] = useState<Problem | null>(null);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
+  const [selectedFruitId, setSelectedFruitId] = useState<string | null>(null);
   const [treeFruits, setTreeFruits] = useState<TreeFruit[]>([]);
   const [hintsDisabled, setHintsDisabled] = useState(false);
   const [hintsRemaining, setHintsRemaining] = useState(() => GameManager.getInstance().getSessionHintsRemaining());
@@ -56,6 +57,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
   const [isCheckHighlighted, setIsCheckHighlighted] = useState(false);
   const [demoCountingIndex, setDemoCountingIndex] = useState<number | null>(null);
   const [demoMaxCountedIndex, setDemoMaxCountedIndex] = useState<number | null>(null);
+  const [remediationCycle, setRemediationCycle] = useState(0);
 
   const isDemoCancelled = useRef(false);
 
@@ -171,6 +173,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
     setSelectedOption(null);
     setActiveHint(null);
     setCurrentTry(1);
+    setRemediationCycle(0);
     setTimeLeft(gm.sessionTimerLimit);
     setJustMastered(false);
     setDemoCountingIndex(null);
@@ -202,8 +205,46 @@ export default function NumberBondsScreen({ navigation }: Props) {
     }
   };
 
-  // Drag fruit from canopy into right basket
+  // Tap-to-select fruit from canopy (Hybrid interaction FR-NB-02)
+  const handleSelectFruit = (fruitId: string) => {
+    if (isDemonstrating) return;
+    try {
+      Vibration.vibrate(30);
+    } catch (_) {}
+
+    if (selectedFruitId === fruitId) {
+      setSelectedFruitId(null);
+    } else {
+      setSelectedFruitId(fruitId);
+      AudioManager.stopSpeech();
+      AudioManager.speak('Fruit selected! Tap the right basket to place it!', {
+        rate: 0.95,
+        pitch: 1.3,
+      });
+    }
+  };
+
+  // Tap-to-target placement into right basket (Hybrid interaction FR-NB-02)
+  const handleRightBasketPress = () => {
+    if (isDemonstrating) return;
+    if (selectedFruitId) {
+      handleDropFruit(selectedFruitId);
+    } else {
+      // Direct tap helper: docks next available fruit from canopy
+      const nextAvailable = treeFruits.find(f => !f.dropped);
+      if (nextAvailable) {
+        handleDropFruit(nextAvailable.id);
+      }
+    }
+  };
+
+  // Drag or Tap fruit from canopy into right basket with magnetic snap feedback
   const handleDropFruit = (fruitId: string) => {
+    try {
+      Vibration.vibrate(40);
+    } catch (_) {}
+    setSelectedFruitId(null);
+
     setTreeFruits(prev => {
       const next = prev.map(f => (f.id === fruitId ? { ...f, dropped: true } : f));
       const droppedCount = next.filter(f => f.dropped).length;
@@ -220,6 +261,9 @@ export default function NumberBondsScreen({ navigation }: Props) {
 
   // Tap fruit in right basket to return to tree
   const handleRemoveFruit = (fruitId: string) => {
+    try {
+      Vibration.vibrate(25);
+    } catch (_) {}
     setTreeFruits(prev => {
       const next = prev.map(f => (f.id === fruitId ? { ...f, dropped: false } : f));
       const droppedCount = next.filter(f => f.dropped).length;
@@ -230,6 +274,10 @@ export default function NumberBondsScreen({ navigation }: Props) {
 
   // Reset right basket
   const handleResetRightBasket = () => {
+    try {
+      Vibration.vibrate(25);
+    } catch (_) {}
+    setSelectedFruitId(null);
     setTreeFruits(prev => prev.map(f => ({ ...f, dropped: false })));
     setSelectedOption(null);
     AudioManager.stopSpeech();
@@ -255,6 +303,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
 
   // Reset all tree fruits and player answer selection
   const resetFruitsAndAnswer = () => {
+    setSelectedFruitId(null);
     setTreeFruits(prev => prev.map(f => ({ ...f, dropped: false })));
     setSelectedOption(null);
     setDemoCountingIndex(null);
@@ -315,8 +364,10 @@ export default function NumberBondsScreen({ navigation }: Props) {
     if (!problem) return;
     setIsDemonstrating(true);
     isDemoCancelled.current = false;
+    setRemediationCycle(c => c + 1);
 
     // Reset dropped fruits so demonstration starts clean
+    setSelectedFruitId(null);
     setTreeFruits(prev => prev.map(f => ({ ...f, dropped: false })));
     setSelectedOption(null);
     setHighlightedFruitId(null);
@@ -334,7 +385,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
     setIsTotalBadgeHighlighted(true);
 
     await AudioManager.speakAsync(`Look at the tree! The total number is ${problem.num1}!`, {
-      rate: 0.92,
+      rate: 0.78,
       pitch: 1.25,
     });
     await waitMs(400);
@@ -346,7 +397,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
     setIsLeftBasketHighlighted(true);
 
     await AudioManager.speakAsync(`The left basket already has ${problem.num2}. How many more do we need to make ${problem.num1}?`, {
-      rate: 0.92,
+      rate: 0.78,
       pitch: 1.3,
     });
     await waitMs(400);
@@ -374,7 +425,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
       setHighlightedFruitId(null);
       setAnimatingFruitId(null);
 
-      await AudioManager.speakAsync(`${count}`, { rate: 0.95, pitch: 1.35 });
+      await AudioManager.speakAsync(`${count}`, { rate: 0.78, pitch: 1.35 });
       await waitMs(250);
     }
 
@@ -522,6 +573,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
         <DemonstrationBanner
           message={demoMessage}
           onSkip={endDemonstration}
+          allowSkip={remediationCycle > 0 || currentTry > 1}
         />
       )}
 
@@ -604,7 +656,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
             />
           </View>
           <Text style={styles.instructionText}>
-            What number goes with {problem.num2} to make {problem.num1}? Drag fruits to the right basket!
+            What number goes with {problem.num2} to make {problem.num1}? Tap or drag fruits to the right basket!
           </Text>
         </View>
 
@@ -690,6 +742,8 @@ export default function NumberBondsScreen({ navigation }: Props) {
                       key={`${f.id}_try${currentTry}`}
                       fruit={f}
                       disabled={f.dropped || isDemonstrating}
+                      isSelected={selectedFruitId === f.id}
+                      onSelect={() => handleSelectFruit(f.id)}
                       onDrop={() => handleDropFruit(f.id)}
                       isHighlighted={highlightedFruitId === f.id}
                       isDemoAnimating={animatingFruitId === f.id}
@@ -712,6 +766,8 @@ export default function NumberBondsScreen({ navigation }: Props) {
                       key={`${f.id}_try${currentTry}`}
                       fruit={f}
                       disabled={f.dropped || isDemonstrating}
+                      isSelected={selectedFruitId === f.id}
+                      onSelect={() => handleSelectFruit(f.id)}
                       onDrop={() => handleDropFruit(f.id)}
                       isHighlighted={highlightedFruitId === f.id}
                       isDemoAnimating={animatingFruitId === f.id}
@@ -866,56 +922,71 @@ export default function NumberBondsScreen({ navigation }: Props) {
                 <Text style={styles.centerPlusText}>+</Text>
               </View>
 
-              {/* RIGHT BASKET — Drag Drop Area */}
+              {/* RIGHT BASKET — Hybrid Drag Drop & Tap-to-Target Area (FR-NB-02) */}
               <Animated.View style={[styles.basketColumn, { transform: [{ scale: basketPulse }] }]}>
-                <TopViewBasket
-                  width={126}
-                  height={156}
-                  badgeText={showClues ? (droppedCount > 0 ? droppedCount : '?') : '?'}
-                  badgeColor="#E65100"
-                  isDropZone={true}
-                  title="Drop Zone"
-                  onReset={droppedCount > 0 && !isDemonstrating ? handleResetRightBasket : undefined}
+                <TouchableOpacity
+                  activeOpacity={0.88}
+                  onPress={handleRightBasketPress}
+                  disabled={isDemonstrating}
+                  style={[
+                    styles.expandedDropZoneTarget,
+                    selectedFruitId ? styles.expandedDropZoneActive : null,
+                  ]}
+                  hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
                 >
-                  {droppedCount === 0 ? (
-                    <Text style={styles.dropPromptText}>Drag fruits here!</Text>
-                  ) : (
-                    <View style={styles.fixedFruitsCluster}>
-                      {droppedFruits.map((f, i) => {
-                        const globalIdx = problem.num2 + i;
-                        const isCountingActive = demoCountingIndex === globalIdx;
-                        const showBadge = demoMaxCountedIndex !== null && globalIdx <= demoMaxCountedIndex;
-                        const fruitNum = globalIdx + 1;
-                        return (
-                          <TouchableOpacity
-                            key={f.id}
-                            onPress={() => handleRemoveFruit(f.id)}
-                            disabled={isDemonstrating}
-                            activeOpacity={0.7}
-                          >
-                            <View
-                              style={[
-                                styles.doubleCheckFruitWrap,
-                                isCountingActive && styles.doubleCheckFruitActive,
-                              ]}
+                  <TopViewBasket
+                    width={126}
+                    height={156}
+                    badgeText={showClues ? (droppedCount > 0 ? droppedCount : '?') : '?'}
+                    badgeColor="#E65100"
+                    isDropZone={true}
+                    isSnapActive={selectedFruitId !== null}
+                    title="Drop Zone"
+                    onReset={droppedCount > 0 && !isDemonstrating ? handleResetRightBasket : undefined}
+                  >
+                    {droppedCount === 0 ? (
+                      <Text style={styles.dropPromptText}>
+                        {selectedFruitId ? '🎯 Tap to place!' : 'Tap or drag\nfruits here!'}
+                      </Text>
+                    ) : (
+                      <View style={styles.fixedFruitsCluster}>
+                        {droppedFruits.map((f, i) => {
+                          const globalIdx = problem.num2 + i;
+                          const isCountingActive = demoCountingIndex === globalIdx;
+                          const showBadge = demoMaxCountedIndex !== null && globalIdx <= demoMaxCountedIndex;
+                          const fruitNum = globalIdx + 1;
+                          return (
+                            <TouchableOpacity
+                              key={f.id}
+                              onPress={() => handleRemoveFruit(f.id)}
+                              disabled={isDemonstrating}
+                              activeOpacity={0.7}
+                              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                             >
-                              <Text style={styles.basketFruitEmoji}>{f.emoji}</Text>
-                              {showBadge && (
-                                <View style={styles.doubleCheckFruitBadge}>
-                                  <Text style={styles.doubleCheckFruitBadgeText}>{fruitNum}</Text>
-                                </View>
-                              )}
-                            </View>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-                  )}
-                </TopViewBasket>
+                              <View
+                                style={[
+                                  styles.doubleCheckFruitWrap,
+                                  isCountingActive && styles.doubleCheckFruitActive,
+                                ]}
+                              >
+                                <Text style={styles.basketFruitEmoji}>{f.emoji}</Text>
+                                {showBadge && (
+                                  <View style={styles.doubleCheckFruitBadge}>
+                                    <Text style={styles.doubleCheckFruitBadgeText}>{fruitNum}</Text>
+                                  </View>
+                                )}
+                              </View>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    )}
+                  </TopViewBasket>
+                </TouchableOpacity>
                 <Text style={styles.basketBottomLabel}>
                   {droppedCount > 0
                     ? (showClues ? `Your Part: ${droppedCount}` : 'Your Part')
-                    : 'Drag to answer'}
+                    : 'Tap or drag to add'}
                 </Text>
               </Animated.View>
             </View>
@@ -985,11 +1056,15 @@ export default function NumberBondsScreen({ navigation }: Props) {
         onClose={handleCloseFiveStreak}
       />
 
-      {/* Incorrect Feedback Modal -> Leads to Error Tutorial */}
+      {/* Incorrect Feedback Modal -> Leads to Error Tutorial (Stage 1 Error Pinpointing FR-AP-04) */}
       <IncorrectModal
         visible={showIncorrectModal}
         isTimeout={isTimeoutError}
         userAnswer={lastWrongAnswer}
+        correctAnswer={problem?.correctAnswer}
+        problemNum1={problem?.num1}
+        problemNum2={problem?.num2}
+        strategy="NUMBER_BONDS"
         currentTry={currentTry}
         onContinue={handleContinueAfterIncorrect}
       />
@@ -1004,6 +1079,7 @@ interface TopViewBasketProps {
   badgeText: string | number;
   badgeColor?: string;
   isDropZone?: boolean;
+  isSnapActive?: boolean;
   title?: string;
   onReset?: () => void;
   children: React.ReactNode;
@@ -1015,6 +1091,7 @@ const TopViewBasket: React.FC<TopViewBasketProps> = ({
   badgeText,
   badgeColor = '#0288D1',
   isDropZone = false,
+  isSnapActive = false,
   onReset,
   children,
 }) => {
@@ -1090,16 +1167,17 @@ const TopViewBasket: React.FC<TopViewBasketProps> = ({
         })}
       </Svg>
 
-      {/* Drop zone dashed highlight */}
+      {/* Drop zone dashed highlight with magnetic snap feedback (FR-NB-02) */}
       {isDropZone && (
         <View
           style={[
             StyleSheet.absoluteFill,
             {
               borderRadius: ry,
-              borderWidth: 2.5,
-              borderColor: '#FF9800',
-              borderStyle: 'dashed',
+              borderWidth: isSnapActive ? 4 : 2.5,
+              borderColor: isSnapActive ? '#FF6F00' : '#FF9800',
+              borderStyle: isSnapActive ? 'solid' : 'dashed',
+              backgroundColor: isSnapActive ? 'rgba(255, 179, 0, 0.18)' : 'transparent',
             },
           ]}
           pointerEvents="none"
@@ -1124,10 +1202,12 @@ const TopViewBasket: React.FC<TopViewBasketProps> = ({
   );
 };
 
-// ─── Draggable Fruit on Tree Branch ──────────────────────────────────────────
+// ─── Draggable & Tappable Fruit on Tree Branch (Hybrid FR-NB-02 / >= 84x84dp NFR-AC-01) ─────
 const DraggableFruit = ({
   fruit,
   onDrop,
+  onSelect,
+  isSelected = false,
   disabled,
   isHighlighted = false,
   isDemoAnimating = false,
@@ -1193,7 +1273,13 @@ const DraggableFruit = ({
       ),
       onPanResponderRelease: (_, gesture) => {
         Animated.spring(pressScale, { toValue: 1, friction: 5, useNativeDriver: true }).start();
-        if (gesture.dy > 40) {
+        // Tap-to-select: negligible movement (< 12px)
+        if (Math.abs(gesture.dx) < 12 && Math.abs(gesture.dy) < 12) {
+          onSelect?.();
+          return;
+        }
+        // Magnetic proximity snapping: release within 50px of basket (dy > 30)
+        if (gesture.dy > 30) {
           onDrop();
           Animated.spring(pan, { toValue: { x: 0, y: 0 }, useNativeDriver: false }).start();
           return;
@@ -1205,8 +1291,10 @@ const DraggableFruit = ({
 
   if (fruit.dropped) {
     return (
-      <View style={styles.hangingPlaceholder}>
-        <Text style={styles.placeholderIcon}>🍂</Text>
+      <View style={styles.draggableFruitTouchArea}>
+        <View style={styles.hangingPlaceholder}>
+          <Text style={styles.placeholderIcon}>🍂</Text>
+        </View>
       </View>
     );
   }
@@ -1214,10 +1302,14 @@ const DraggableFruit = ({
   return (
     <Animated.View
       {...panResponder.panHandlers}
-      style={{
-        transform: [{ translateX: pan.x }, { translateY: pan.y }],
-        zIndex: isHighlighted || isDemoAnimating ? 999 : 100,
-      }}
+      style={[
+        styles.draggableFruitTouchArea,
+        {
+          transform: [{ translateX: pan.x }, { translateY: pan.y }],
+          zIndex: isHighlighted || isDemoAnimating || isSelected ? 999 : 100,
+        },
+      ]}
+      hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
     >
       <Animated.View
         style={{
@@ -1228,7 +1320,13 @@ const DraggableFruit = ({
           ],
         }}
       >
-        <View style={[styles.hangingFruitCircle, isHighlighted && styles.fruitCircleHighlighted]}>
+        <View
+          style={[
+            styles.hangingFruitCircle,
+            isHighlighted && styles.fruitCircleHighlighted,
+            isSelected && styles.fruitCircleSelected,
+          ]}
+        >
           <Text style={styles.fruitEmoji}>{fruit.emoji}</Text>
         </View>
       </Animated.View>
@@ -1365,23 +1463,43 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-around',
     width: '100%',
-    marginVertical: 4,
+    marginVertical: 2,
+  },
+  draggableFruitTouchArea: {
+    minWidth: 84,
+    minHeight: 84,
+    width: 84,
+    height: 84,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginHorizontal: -8,
   },
   hangingFruitCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: '#FFF',
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 3,
-    borderWidth: 2,
+    elevation: 4,
+    borderWidth: 2.5,
     borderColor: '#C8E6C9',
   },
+  fruitCircleSelected: {
+    borderColor: '#FF9800',
+    borderWidth: 3.5,
+    backgroundColor: '#FFF3E0',
+    elevation: 8,
+    shadowColor: '#FF9800',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.9,
+    shadowRadius: 8,
+    transform: [{ scale: 1.15 }],
+  },
   hangingPlaceholder: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     justifyContent: 'center',
     alignItems: 'center',
     opacity: 0.35,
@@ -1409,7 +1527,19 @@ const styles = StyleSheet.create({
   basketColumn: {
     alignItems: 'center',
     zIndex: 5,
-    marginHorizontal: 12,
+    marginHorizontal: 8,
+  },
+  expandedDropZoneTarget: {
+    padding: 6,
+    borderRadius: 32,
+  },
+  expandedDropZoneActive: {
+    backgroundColor: 'rgba(255, 235, 59, 0.25)',
+    borderWidth: 2.5,
+    borderColor: '#FFC107',
+    borderStyle: 'dashed',
+    borderRadius: 32,
+    elevation: 6,
   },
   plusSignContainer: {
     width: 36,

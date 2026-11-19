@@ -18,6 +18,7 @@ interface GameTutorialModalProps {
   gameTitle: string;
   steps: TutorialStepConfig[];
   onClose: (dontShowAgain: boolean) => void;
+  allowSkip?: boolean; // When false, Skip is disabled during 1st remediation cycle (FR-AP-04)
 }
 
 export const GameTutorialModal: React.FC<GameTutorialModalProps> = ({
@@ -25,6 +26,7 @@ export const GameTutorialModal: React.FC<GameTutorialModalProps> = ({
   gameTitle,
   steps,
   onClose,
+  allowSkip = true,
 }) => {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [dontShowAgain, setDontShowAgain] = useState(false);
@@ -130,9 +132,11 @@ export const GameTutorialModal: React.FC<GameTutorialModalProps> = ({
               </Text>
             </View>
 
-            <TouchableOpacity style={styles.skipButton} onPress={handleComplete} activeOpacity={0.7}>
-              <Text style={styles.skipButtonText}>Skip ✕</Text>
-            </TouchableOpacity>
+            {allowSkip && (
+              <TouchableOpacity style={styles.skipButton} onPress={handleComplete} activeOpacity={0.7}>
+                <Text style={styles.skipButtonText}>Skip ✕</Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           {/* Oliver Owl & Speech Bubble */}

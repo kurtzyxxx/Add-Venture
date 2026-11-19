@@ -5,12 +5,16 @@ export interface AudioSettings {
   soundsEnabled: boolean;
 }
 
+export const DEFAULT_SPEECH_RATE = 0.78; // Target rate for Grade 1 numeracy comprehension (FR-CO-01, NFR-AC-01)
+
 const settings: AudioSettings = {
   musicEnabled: true,
   soundsEnabled: true,
 };
 
 export const AudioManager = {
+  DEFAULT_SPEECH_RATE,
+
   hydrate(nextSettings: AudioSettings) {
     settings.musicEnabled = nextSettings.musicEnabled;
     settings.soundsEnabled = nextSettings.soundsEnabled;
@@ -25,7 +29,11 @@ export const AudioManager = {
 
   speak(text: string, options?: Speech.SpeechOptions) {
     if (!settings.soundsEnabled) return;
-    Speech.speak(text, options);
+    const finalOptions: Speech.SpeechOptions = {
+      rate: DEFAULT_SPEECH_RATE,
+      ...options,
+    };
+    Speech.speak(text, finalOptions);
   },
 
   speakAsync(text: string, options?: Speech.SpeechOptions): Promise<void> {
@@ -36,8 +44,8 @@ export const AudioManager = {
       }
 
       const words = text.trim().split(/\s+/).length;
-      const rate = options?.rate ?? 1.0;
-      const estimatedMs = Math.ceil(((words / (2.0 * rate)) * 1000) + 1500);
+      const rate = options?.rate ?? DEFAULT_SPEECH_RATE;
+      const estimatedMs = Math.ceil(((words / (2.0 * rate)) * 1000) + 1800);
       const maxWaitMs = Math.max(3000, estimatedMs);
 
       let finished = false;
@@ -51,8 +59,13 @@ export const AudioManager = {
 
       const timeoutId = setTimeout(finish, maxWaitMs);
 
-      Speech.speak(text, {
+      const finalOptions: Speech.SpeechOptions = {
+        rate: DEFAULT_SPEECH_RATE,
         ...options,
+      };
+
+      Speech.speak(text, {
+        ...finalOptions,
         onDone: () => {
           options?.onDone?.();
           finish();

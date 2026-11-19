@@ -47,6 +47,7 @@ export default function CountAllScreen({ navigation }: Props) {
   const [highlightedOption, setHighlightedOption] = useState<number | null>(null);
   const [isSubmitHighlighted, setIsSubmitHighlighted] = useState(false);
   const [isMasteryProblem, setIsMasteryProblem] = useState(false);
+  const [remediationCycle, setRemediationCycle] = useState(0);
 
   const isDemoCancelled = useRef(false);
 
@@ -212,6 +213,7 @@ export default function CountAllScreen({ navigation }: Props) {
     setSelectedAnswer(null);
     setActiveHint(null);
     setCurrentTry(1);
+    setRemediationCycle(0);
     setJustMastered(false);
     resetTimer(gm.sessionTimerLimit);
 
@@ -359,6 +361,7 @@ export default function CountAllScreen({ navigation }: Props) {
     if (!problem) return;
     setIsDemonstrating(true);
     isDemoCancelled.current = false;
+    setRemediationCycle(c => c + 1);
 
     // Reset fruits back to tree so demo starts clean
     setFruits(prev => prev.map(f => ({ ...f, dropped: false })));
@@ -370,10 +373,10 @@ export default function CountAllScreen({ navigation }: Props) {
     setHighlightedOption(null);
     setIsSubmitHighlighted(false);
 
-    setDemoMessage(`Watch Oliver! Let's count Tree 1 and Tree 2 together!`);
+    setDemoMessage(`Guided Practice: Let's count Tree 1 and Tree 2 together!`);
 
     await AudioManager.speakAsync(`Watch Oliver count! Tree 1 has ${problem.num1}, and Tree 2 has ${problem.num2}. Let's count all of them!`, {
-      rate: 0.92,
+      rate: 0.78,
       pitch: 1.25,
     });
     await waitMs(400);
@@ -401,7 +404,7 @@ export default function CountAllScreen({ navigation }: Props) {
       setHighlightedFruitId(null);
       setAnimatingFruitId(null);
 
-      await AudioManager.speakAsync(`${currentCount}`, { rate: 0.95, pitch: 1.35 });
+      await AudioManager.speakAsync(`${currentCount}`, { rate: 0.78, pitch: 1.35 });
       await waitMs(250);
     }
 
@@ -424,14 +427,14 @@ export default function CountAllScreen({ navigation }: Props) {
       setHighlightedFruitId(null);
       setAnimatingFruitId(null);
 
-      await AudioManager.speakAsync(`${currentCount}`, { rate: 0.95, pitch: 1.35 });
+      await AudioManager.speakAsync(`${currentCount}`, { rate: 0.78, pitch: 1.35 });
       await waitMs(250);
     }
 
     if (isDemoCancelled.current) return;
     setDemoMessage(`All fruits in the basket! Total is ${problem.correctAnswer}!`);
     await AudioManager.speakAsync(`We counted ${problem.correctAnswer} fruits in all! Now let's pick ${problem.correctAnswer}!`, {
-      rate: 0.92,
+      rate: 0.78,
       pitch: 1.3,
     });
     await waitMs(400);
@@ -442,7 +445,7 @@ export default function CountAllScreen({ navigation }: Props) {
     setHighlightedOption(problem.correctAnswer);
     setSelectedAnswer(problem.correctAnswer);
 
-    await AudioManager.speakAsync(`${problem.correctAnswer}!`, { rate: 0.95, pitch: 1.3 });
+    await AudioManager.speakAsync(`${problem.correctAnswer}!`, { rate: 0.78, pitch: 1.3 });
     await waitMs(400);
     if (isDemoCancelled.current) return;
 
@@ -450,12 +453,12 @@ export default function CountAllScreen({ navigation }: Props) {
     setDemoMessage(`Tap Submit to finish!`);
     setIsSubmitHighlighted(true);
 
-    await AudioManager.speakAsync(`Tap Submit!`, { rate: 0.95, pitch: 1.3 });
+    await AudioManager.speakAsync(`Tap Submit!`, { rate: 0.78, pitch: 1.3 });
     await waitMs(400);
     if (isDemoCancelled.current) return;
 
     setDemoMessage(`🎯 Now it's your turn! Drag the fruits to count!`);
-    await AudioManager.speakAsync(`Now it's your turn! You can do it!`, { rate: 0.95, pitch: 1.3 });
+    await AudioManager.speakAsync(`Now it's your turn! You can do it!`, { rate: 0.78, pitch: 1.3 });
     await waitMs(400);
     endDemonstration();
   };
@@ -549,6 +552,7 @@ export default function CountAllScreen({ navigation }: Props) {
         <DemonstrationBanner
           message={demoMessage}
           onSkip={endDemonstration}
+          allowSkip={remediationCycle > 0 || currentTry > 1}
         />
       )}
 
@@ -847,11 +851,15 @@ export default function CountAllScreen({ navigation }: Props) {
         onClose={handleCloseFiveStreak}
       />
 
-      {/* Incorrect Feedback Modal -> Leads to Error Tutorial */}
+      {/* Incorrect Feedback Modal -> Leads to Error Tutorial (Stage 1 Error Pinpointing FR-AP-04) */}
       <IncorrectModal
         visible={showIncorrectModal}
         isTimeout={isTimeoutError}
         userAnswer={lastWrongAnswer}
+        correctAnswer={problem?.correctAnswer}
+        problemNum1={problem?.num1}
+        problemNum2={problem?.num2}
+        strategy="COUNT_ALL"
         currentTry={currentTry}
         onContinue={handleContinueAfterIncorrect}
       />

@@ -55,6 +55,7 @@ export default function CountOnScreen({ navigation }: Props) {
   const [demoCountingIndex, setDemoCountingIndex] = useState<number | null>(null);
   const [demoMaxCountedIndex, setDemoMaxCountedIndex] = useState<number | null>(null);
   const [isMasteryProblem, setIsMasteryProblem] = useState(false);
+  const [remediationCycle, setRemediationCycle] = useState(0);
 
   const isDemoCancelled = useRef(false);
 
@@ -93,8 +94,8 @@ export default function CountOnScreen({ navigation }: Props) {
   useEffect(() => {
     loadNewProblem(showTutorial);
     if (!showTutorial) {
-      AudioManager.speak('Count On! Oliver already has some fruits. Drag fruits to his basket, then tap View Basket!', {
-        rate: 0.9, pitch: 1.3,
+      AudioManager.speak('Count On! Start with the anchor number, keep it in your head, and count on!', {
+        rate: 0.78, pitch: 1.25,
       });
     }
   }, []);
@@ -106,8 +107,8 @@ export default function CountOnScreen({ navigation }: Props) {
       await gm.saveSystem.markTutorialSeen('COUNT_ON', true);
     }
     setTimeLeft(gm.sessionTimerLimit);
-    AudioManager.speak('Count On! Drag fruits from the tree to Oliver\'s basket, then tap View Basket!', {
-      rate: 0.9, pitch: 1.3,
+    AudioManager.speak('Count On! Start with the anchor number and count on by adding fruits to the basket!', {
+      rate: 0.78, pitch: 1.25,
     });
   };
 
@@ -197,6 +198,7 @@ export default function CountOnScreen({ navigation }: Props) {
     setSelectedAnswer(null);
     setActiveHint(null);
     setCurrentTry(1);
+    setRemediationCycle(0);
     setTimeLeft(gm.sessionTimerLimit);
     setJustMastered(false);
     setShowViewBasket(false);
@@ -212,9 +214,9 @@ export default function CountOnScreen({ navigation }: Props) {
       AudioManager.stopSpeech();
       setTimeout(() => {
         const msg = isMastery
-          ? `Keep going! Oliver has ${base} fruits. Count on ${extra} more!`
-          : `Oliver has ${base} fruits! Drag fruits to his basket to add ${extra} more!`;
-        AudioManager.speak(msg, { rate: 0.95, pitch: 1.4 });
+          ? `Mastery Challenge! Start with ${base}! Keep it in your head! Now count on ${extra} more!`
+          : `Start with ${base}! Keep it in your head! Now count on ${extra} more!`;
+        AudioManager.speak(msg, { rate: 0.78, pitch: 1.25 });
       }, 300);
     }
   };
@@ -351,6 +353,7 @@ export default function CountOnScreen({ navigation }: Props) {
     if (!problem) return;
     setIsDemonstrating(true);
     isDemoCancelled.current = false;
+    setRemediationCycle(c => c + 1);
 
     // Reset fruits back to tree so demo starts clean
     setShowViewBasket(false);
@@ -369,7 +372,7 @@ export default function CountOnScreen({ navigation }: Props) {
     setIsBasketHighlighted(true);
 
     await AudioManager.speakAsync(`Watch Oliver count on! Oliver already has ${baseN} in his basket. Keep ${baseN} in your head!`, {
-      rate: 0.92,
+      rate: 0.78,
       pitch: 1.25,
     });
     await waitMs(400);
@@ -395,14 +398,14 @@ export default function CountOnScreen({ navigation }: Props) {
       setHighlightedFruitId(null);
       setAnimatingFruitId(null);
 
-      await AudioManager.speakAsync(`${runningCount}`, { rate: 0.95, pitch: 1.35 });
+      await AudioManager.speakAsync(`${runningCount}`, { rate: 0.78, pitch: 1.35 });
       await waitMs(250);
     }
 
     if (isDemoCancelled.current) return;
     setDemoMessage(`We landed on ${problem.correctAnswer}! Now tap View Basket!`);
     await AudioManager.speakAsync(`${baseN} plus ${extraM} equals ${problem.correctAnswer}! Let's open the basket and double-check all fruits!`, {
-      rate: 0.92,
+      rate: 0.78,
       pitch: 1.3,
     });
     await waitMs(400);
@@ -563,6 +566,7 @@ export default function CountOnScreen({ navigation }: Props) {
         <DemonstrationBanner
           message={demoMessage}
           onSkip={endDemonstration}
+          allowSkip={remediationCycle > 0 || currentTry > 1}
         />
       )}
 
@@ -646,12 +650,17 @@ export default function CountOnScreen({ navigation }: Props) {
         <HintBox text={activeHint} onDismiss={() => setActiveHint(null)} />
 
         {/* ═══════════════════════════════════════════════════════════════════
-            1. TOP EQUATION BANNER (Sketch 2: ex. 4 + 2 = ?)
+            1. TOP EQUATION BANNER (Starting Anchor Highlighted FR-CO-01)
         ═══════════════════════════════════════════════════════════════════ */}
         <View style={styles.equationContainer}>
-          <View style={[styles.equationPill, { backgroundColor: '#EDE7F6', borderColor: '#7E57C2' }]}>
-            <Text style={[styles.equationNumber, { color: '#512DA8' }]}>{baseN}</Text>
-          </View>
+          <PulseView active={true} style={styles.anchorPulseWrap}>
+            <View style={[styles.equationPill, styles.anchorEquationPill]}>
+              <View style={styles.anchorBadgeTag}>
+                <Text style={styles.anchorBadgeTagText}>ANCHOR</Text>
+              </View>
+              <Text style={[styles.equationNumber, styles.anchorNumberText]}>{baseN}</Text>
+            </View>
+          </PulseView>
           <Text style={styles.equationSymbol}>+</Text>
           <View style={[styles.equationPill, { backgroundColor: '#E0F2F1', borderColor: '#00897B' }]}>
             <Text style={[styles.equationNumber, { color: '#00796B' }]}>{extraM}</Text>
@@ -677,7 +686,7 @@ export default function CountOnScreen({ navigation }: Props) {
         </View>
 
         {/* ═══════════════════════════════════════════════════════════════════
-            2. CENTERED BASKET SECTION (Large centered basket to fit all fruits)
+            2. CENTERED BASKET SECTION (Large centered basket with Starting Anchor)
         ═══════════════════════════════════════════════════════════════════ */}
         <View
           style={styles.basketCenterContainer}
@@ -685,6 +694,13 @@ export default function CountOnScreen({ navigation }: Props) {
             basketLayoutRef.current = e.nativeEvent.layout;
           }}
         >
+          {/* Starting Anchor Badge with vibrant pulsating glow ring (FR-CO-01) */}
+          <PulseView active={true} style={styles.startingAnchorBasketBadgePulse}>
+            <View style={styles.startingAnchorBasketBadge}>
+              <Text style={styles.startingAnchorIcon}>⚓</Text>
+              <Text style={styles.startingAnchorText}>Starting Anchor: {baseN}</Text>
+            </View>
+          </PulseView>
           <View style={[styles.oliverBasketWrapper, isBasketHighlighted && styles.oliverBasketHighlighted]}>
             <WickerBasketCard
               width={Math.min(sectionWidth, 290)}
@@ -1003,11 +1019,15 @@ export default function CountOnScreen({ navigation }: Props) {
         onClose={handleCloseFiveStreak}
       />
 
-      {/* Incorrect Feedback Modal -> Leads to Error Tutorial */}
+      {/* Incorrect Feedback Modal -> Leads to Error Tutorial (Stage 1 Error Pinpointing FR-AP-04) */}
       <IncorrectModal
         visible={showIncorrectModal}
         isTimeout={isTimeoutError}
         userAnswer={lastWrongAnswer}
+        correctAnswer={problem?.correctAnswer}
+        problemNum1={problem?.num1}
+        problemNum2={problem?.num2}
+        strategy="COUNT_ON"
         currentTry={currentTry}
         onContinue={handleContinueAfterIncorrect}
       />
@@ -1474,6 +1494,72 @@ const styles = StyleSheet.create({
     height: 40,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  anchorPulseWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  anchorEquationPill: {
+    backgroundColor: '#EDE7F6',
+    borderColor: '#7E57C2',
+    borderWidth: 2.5,
+    shadowColor: '#7E57C2',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 6,
+    elevation: 5,
+    position: 'relative',
+  },
+  anchorBadgeTag: {
+    position: 'absolute',
+    top: -9,
+    backgroundColor: '#512DA8',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 8,
+    zIndex: 10,
+    borderWidth: 1,
+    borderColor: '#FFF',
+  },
+  anchorBadgeTagText: {
+    color: '#FFF',
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  anchorNumberText: {
+    color: '#512DA8',
+    fontSize: 22,
+    fontWeight: '900',
+  },
+  startingAnchorBasketBadgePulse: {
+    marginBottom: 6,
+    alignSelf: 'center',
+  },
+  startingAnchorBasketBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#512DA8',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: '#D1C4E9',
+    elevation: 4,
+    shadowColor: '#512DA8',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 5,
+  },
+  startingAnchorIcon: {
+    fontSize: 14,
+    marginRight: 4,
+  },
+  startingAnchorText: {
+    color: '#FFF',
+    fontSize: 13,
+    fontWeight: '900',
+    letterSpacing: 0.5,
   },
   equationNumber: {
     fontSize: 22,
