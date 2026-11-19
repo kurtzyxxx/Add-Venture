@@ -7,9 +7,7 @@ import { GreatJobOverlay } from '../../components/GreatJobOverlay';
 import { HintConfirmModal } from '../../components/HintConfirmModal';
 import { HintBox } from '../../components/HintBox';
 import { PulseView } from '../../components/animations/PulseView';
-import { GameTutorialModal } from '../../components/tutorial/GameTutorialModal';
 import { DemonstrationBanner } from '../../components/tutorial/DemonstrationBanner';
-import { COUNT_ALL_TUTORIAL_STEPS } from '../../components/tutorial/CountAllTutorialContent';
 import { FiveStreakModal } from '../../components/FiveStreakModal';
 import { IncorrectModal } from '../../components/IncorrectModal';
 import { OliverSpeechBalloon } from '../../components/OliverSpeechBalloon';
@@ -41,6 +39,7 @@ export default function CountAllScreen({ navigation }: Props) {
   const [showHintConfirm, setShowHintConfirm] = useState(false);
   const [activeHint, setActiveHint] = useState<string | null>(null);
   const [isDemonstrating, setIsDemonstrating] = useState(false);
+  const isDemonstratingRef = useRef(false);
   const [demoMessage, setDemoMessage] = useState('');
   const [highlightedFruitId, setHighlightedFruitId] = useState<string | null>(null);
   const [animatingFruitId, setAnimatingFruitId] = useState<string | null>(null);
@@ -48,6 +47,10 @@ export default function CountAllScreen({ navigation }: Props) {
   const [isSubmitHighlighted, setIsSubmitHighlighted] = useState(false);
   const [isMasteryProblem, setIsMasteryProblem] = useState(false);
   const [remediationCycle, setRemediationCycle] = useState(0);
+
+  // Synchronized visual highlights when narrator dictates the equation
+  const [highlightPhase, setHighlightPhase] = useState<'idle' | 'tree1' | 'tree2' | 'total'>('idle');
+  const readingTokenRef = useRef(0);
 
   const isDemoCancelled = useRef(false);
 
@@ -65,10 +68,11 @@ export default function CountAllScreen({ navigation }: Props) {
   const tree2ViewRef = useRef<View>(null);
   const dropZoneViewRef = useRef<View>(null);
 
-  // Tutorial overlay
-  const [showTutorial, setShowTutorial] = useState(() => {
-    return !GameManager.getInstance().saveSystem.hasSeenTutorial('COUNT_ALL');
-  });
+  // In-Game Live Tutorial Walkthrough State (FR-CA-01, FR-ON-01)
+  const [isTutorialMode, setIsTutorialMode] = useState(true);
+  const isTutorialModeRef = useRef(true);
+  const [tutorialFinished, setTutorialFinished] = useState(false);
+  const [tutorialMessage, setTutorialMessage] = useState('Watch Oliver show you how to play!');
 
   // 3-try system
   const [currentTry, setCurrentTry] = useState(1);
@@ -94,33 +98,250 @@ export default function CountAllScreen({ navigation }: Props) {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pendingHintAction = useRef<(() => void) | null>(null);
 
-  useEffect(() => {
-    loadNewProblem(showTutorial);
+  const waitMs = (ms: number) => new Promise(res => setTimeout(res, ms));
 
-    if (!showTutorial) {
-      AudioManager.speak('Count All! Help Oliver gather food! Count and drag the fruits to the basket!', {
-        rate: 0.9,
-        pitch: 1.3,
-      });
-    }
-  }, [navigation]);
-
-  const handleCloseTutorial = async (dontShowAgain: boolean) => {
-    setShowTutorial(false);
-    const gm = GameManager.getInstance();
-    if (dontShowAgain) {
-      await gm.saveSystem.markTutorialSeen('COUNT_ALL', true);
-    }
-    resetTimer(gm.sessionTimerLimit);
-    AudioManager.speak('Count All! Help Oliver gather food! Count and drag the fruits to the basket!', {
-      rate: 0.9,
-      pitch: 1.3,
-    });
+  const stopReadingAloud = () => {
+    readingTokenRef.current++;
+    AudioManager.stopSpeech();
+    setHighlightPhase('idle');
   };
 
-  const handleOpenTutorial = () => {
+  const readProblemAloud = async (targetProblem: Problem | null = null) => {
+    const p = targetProblem ?? currentProblemRef.current ?? problem;
+    if (!p || isDemonstratingRef.current || isTutorialModeRef.current) return;
+
+    const token = ++readingTokenRef.current;
     AudioManager.stopSpeech();
-    setShowTutorial(true);
+
+    const n1 = p.num1;
+    const n2 = p.num2;
+    const fruitWord1 = n1 === 1 ? 'fruit' : 'fruits';
+    const fruitWord2 = n2 === 1 ? 'fruit' : 'fruits';
+
+    try {
+      // Phase 1: Highlight number 1 and Tree 1 fruits
+      setHighlightPhase('tree1');
+      await AudioManager.speakAsync(`Oliver has ${n1} ${fruitWord1} in Tree 1,`, {
+        rate: 0.78,
+        pitch: 1.25,
+      });
+      if (readingTokenRef.current !== token) return;
+
+      await new Promise(res => setTimeout(res, 200));
+      if (readingTokenRef.current !== token) return;
+
+      // Phase 2: Highlight number 2 and Tree 2 fruits
+      setHighlightPhase('tree2');
+      await AudioManager.speakAsync(`and ${n2} ${fruitWord2} in Tree 2.`, {
+        rate: 0.78,
+        pitch: 1.25,
+      });
+      if (readingTokenRef.current !== token) return;
+
+      await new Promise(res => setTimeout(res, 200));
+      if (readingTokenRef.current !== token) return;
+
+      // Phase 3: Highlight '?'
+      setHighlightPhase('total');
+      await AudioManager.speakAsync(`How many fruits in all?`, {
+        rate: 0.78,
+        pitch: 1.3,
+      });
+      if (readingTokenRef.current !== token) return;
+
+      await new Promise(res => setTimeout(res, 350));
+      if (readingTokenRef.current !== token) return;
+    } finally {
+      if (readingTokenRef.current === token) {
+        setHighlightPhase('idle');
+      }
+    }
+  };
+
+  const skipOrEndTutorial = async () => {
+    isDemoCancelled.current = true;
+    readingTokenRef.current++;
+    AudioManager.stopSpeech();
+
+    isTutorialModeRef.current = false;
+    isDemonstratingRef.current = false;
+    setIsTutorialMode(false);
+    setTutorialFinished(false);
+    setIsDemonstrating(false);
+    setHighlightedFruitId(null);
+    setAnimatingFruitId(null);
+    setHighlightedOption(null);
+    setIsSubmitHighlighted(false);
+    setHighlightPhase('idle');
+
+    const gm = GameManager.getInstance();
+    resetTimer(gm.sessionTimerLimit);
+    loadNewProblem(false);
+  };
+
+  const startTutorialWalkthrough = async () => {
+    isTutorialModeRef.current = true;
+    isDemonstratingRef.current = true;
+    setIsTutorialMode(true);
+    setTutorialFinished(false);
+    setIsDemonstrating(true);
+    isDemoCancelled.current = false;
+    stopReadingAloud();
+
+    const tutProblem: Problem = {
+      num1: 2,
+      num2: 1,
+      correctAnswer: 3,
+    };
+    currentProblemRef.current = tutProblem;
+    setProblem(tutProblem);
+    setIsMasteryProblem(false);
+    setActivityCount(0);
+    setHintsDisabled(true);
+
+    const emojiType1 = '🍎';
+    const emojiType2 = '🍌';
+    const tutFruits = [
+      { id: 'g1_0', emoji: emojiType1, dropped: false, group: 1 as const },
+      { id: 'g1_1', emoji: emojiType1, dropped: false, group: 1 as const },
+      { id: 'g2_0', emoji: emojiType2, dropped: false, group: 2 as const },
+    ];
+
+    tutFruits.forEach(f => {
+      fruitTapAnims.current[f.id] = new Animated.Value(1);
+      fruitGlowAnims.current[f.id] = new Animated.Value(0);
+    });
+
+    setFruits(tutFruits);
+    setDropCounter(0);
+    setShowCounter(false);
+    setSelectedAnswer(null);
+    setActiveHint(null);
+    setCurrentTry(1);
+    setHighlightedFruitId(null);
+    setAnimatingFruitId(null);
+    setHighlightedOption(null);
+    setIsSubmitHighlighted(false);
+    setOptions([1, 2, 3, 4, 5]);
+
+    setTutorialMessage('Welcome to Count All! Watch Oliver show you how to play.');
+    await AudioManager.speakAsync('Welcome to Count All! Watch Oliver show you how to play.', {
+      rate: 0.78,
+      pitch: 1.25,
+    });
+    await waitMs(350);
+    if (isDemoCancelled.current) return;
+
+    // Dictate equation with highlights
+    setTutorialMessage('Tree 1 has 2 fruits, and Tree 2 has 1 fruit.');
+    setHighlightPhase('tree1');
+    await AudioManager.speakAsync('Oliver has 2 fruits in Tree 1,', { rate: 0.78, pitch: 1.25 });
+    if (isDemoCancelled.current) return;
+    await waitMs(200);
+
+    setHighlightPhase('tree2');
+    await AudioManager.speakAsync('and 1 fruit in Tree 2.', { rate: 0.78, pitch: 1.25 });
+    if (isDemoCancelled.current) return;
+    await waitMs(200);
+
+    setHighlightPhase('total');
+    await AudioManager.speakAsync('How many fruits in all?', { rate: 0.78, pitch: 1.3 });
+    if (isDemoCancelled.current) return;
+    await waitMs(350);
+    setHighlightPhase('idle');
+
+    // Drag fruits
+    setTutorialMessage('Drag each fruit into the basket to count them!');
+    await AudioManager.speakAsync('Watch me drag each fruit into the basket!', { rate: 0.78, pitch: 1.25 });
+    await waitMs(300);
+    if (isDemoCancelled.current) return;
+
+    // Tree 1 fruit 1
+    setHighlightedFruitId('g1_0');
+    setAnimatingFruitId('g1_0');
+    await waitMs(480);
+    if (isDemoCancelled.current) return;
+    setFruits(prev => prev.map(f => f.id === 'g1_0' ? { ...f, dropped: true } : f));
+    setDropCounter(1);
+    setShowCounter(true);
+    setHighlightedFruitId(null);
+    setAnimatingFruitId(null);
+    await AudioManager.speakAsync('One!', { rate: 0.78, pitch: 1.35 });
+    await waitMs(250);
+    if (isDemoCancelled.current) return;
+
+    // Tree 1 fruit 2
+    setHighlightedFruitId('g1_1');
+    setAnimatingFruitId('g1_1');
+    await waitMs(480);
+    if (isDemoCancelled.current) return;
+    setFruits(prev => prev.map(f => f.id === 'g1_1' ? { ...f, dropped: true } : f));
+    setDropCounter(2);
+    setShowCounter(true);
+    setHighlightedFruitId(null);
+    setAnimatingFruitId(null);
+    await AudioManager.speakAsync('Two!', { rate: 0.78, pitch: 1.35 });
+    await waitMs(250);
+    if (isDemoCancelled.current) return;
+
+    // Tree 2 fruit 1
+    setHighlightedFruitId('g2_0');
+    setAnimatingFruitId('g2_0');
+    await waitMs(480);
+    if (isDemoCancelled.current) return;
+    setFruits(prev => prev.map(f => f.id === 'g2_0' ? { ...f, dropped: true } : f));
+    setDropCounter(3);
+    setShowCounter(true);
+    setHighlightedFruitId(null);
+    setAnimatingFruitId(null);
+    await AudioManager.speakAsync('Three!', { rate: 0.78, pitch: 1.35 });
+    await waitMs(350);
+    if (isDemoCancelled.current) return;
+
+    // Pick answer
+    setTutorialMessage('All 3 fruits in the basket! Tap number 3!');
+    await AudioManager.speakAsync('All 3 fruits are in the basket! Now tap 3!', { rate: 0.78, pitch: 1.3 });
+    await waitMs(300);
+    if (isDemoCancelled.current) return;
+
+    setHighlightedOption(3);
+    setSelectedAnswer(3);
+    await AudioManager.speakAsync('Three!', { rate: 0.78, pitch: 1.3 });
+    await waitMs(400);
+    if (isDemoCancelled.current) return;
+
+    // Tap submit
+    setTutorialMessage('Then tap Submit to finish!');
+    setIsSubmitHighlighted(true);
+    await AudioManager.speakAsync('Then tap Submit!', { rate: 0.78, pitch: 1.3 });
+    await waitMs(500);
+    if (isDemoCancelled.current) return;
+
+    // Complete walkthrough
+    setTutorialMessage("Awesome! You're ready to play! 🚀");
+    await AudioManager.speakAsync("Hooray! That's how we Count All! Now you're ready to play!", {
+      rate: 0.78,
+      pitch: 1.3,
+    });
+    if (isDemoCancelled.current) return;
+    setTutorialFinished(true);
+  };
+
+  useEffect(() => {
+    if (isTutorialMode) {
+      startTutorialWalkthrough();
+    } else {
+      loadNewProblem(false);
+    }
+    return () => {
+      isDemoCancelled.current = true;
+      stopReadingAloud();
+    };
+  }, [navigation]);
+
+  const handleOpenTutorial = () => {
+    stopReadingAloud();
+    startTutorialWalkthrough();
   };
 
   const resetTimer = (limit: number) => {
@@ -129,7 +350,7 @@ export default function CountAllScreen({ navigation }: Props) {
 
   // Timer only runs when gameplay is actively running (not in tutorial or modals)
   useEffect(() => {
-    if (showTutorial || isDemonstrating || showGreatJob || showFiveStreak || showIncorrectModal || !problem) {
+    if (isTutorialMode || isDemonstrating || showGreatJob || showFiveStreak || showIncorrectModal || !problem) {
       if (timerRef.current) {
         clearInterval(timerRef.current);
         timerRef.current = null;
@@ -144,13 +365,13 @@ export default function CountAllScreen({ navigation }: Props) {
         timerRef.current = null;
       }
     };
-  }, [showTutorial, isDemonstrating, showGreatJob, showFiveStreak, showIncorrectModal, problem]);
+  }, [isTutorialMode, isDemonstrating, showGreatJob, showFiveStreak, showIncorrectModal, problem]);
 
   useEffect(() => {
-    if (timeLeft === 0 && !showTutorial && !isDemonstrating && !showGreatJob && !showFiveStreak && !showIncorrectModal && problem && selectedAnswer === null) {
+    if (timeLeft === 0 && !isTutorialMode && !isDemonstrating && !showGreatJob && !showFiveStreak && !showIncorrectModal && problem && selectedAnswer === null) {
       handleTimeUp();
     }
-  }, [timeLeft, showTutorial, isDemonstrating, showGreatJob, showFiveStreak, showIncorrectModal, problem, selectedAnswer]);
+  }, [timeLeft, isTutorialMode, isDemonstrating, showGreatJob, showFiveStreak, showIncorrectModal, problem, selectedAnswer]);
 
   const handleTimeUp = async () => {
     if (!problem || isDemonstrating || showIncorrectModal) return;
@@ -223,15 +444,20 @@ export default function CountAllScreen({ navigation }: Props) {
     }
     setOptions(Array.from(opts).sort((a, b) => a - b));
 
-    if (isMastery && !silent) {
-      AudioManager.stopSpeech();
+    if (!silent) {
       setTimeout(() => {
-        AudioManager.speak(`Keep going! Practice makes perfect. Count all the fruits!`, { rate: 0.9, pitch: 1.3 });
-      }, 300);
+        if (isMastery) {
+          AudioManager.speak('Keep going! Practice makes perfect.', { rate: 0.78, pitch: 1.3 });
+          setTimeout(() => readProblemAloud(p), 1800);
+        } else {
+          readProblemAloud(p);
+        }
+      }, 350);
     }
   };
 
   const handleDrop = (fruitId: string) => {
+    stopReadingAloud();
     setFruits(prev => {
       const next = prev.map(f => f.id === fruitId ? { ...f, dropped: true } : f);
       const droppedCount = next.filter(f => f.dropped).length;
@@ -255,6 +481,7 @@ export default function CountAllScreen({ navigation }: Props) {
   };
 
   const resetDroppedFruits = () => {
+    stopReadingAloud();
     setFruits(prev => prev.map(fruit => ({ ...fruit, dropped: false })));
     setDropCounter(0);
     setShowCounter(false);
@@ -264,6 +491,7 @@ export default function CountAllScreen({ navigation }: Props) {
   };
 
   const handleBasketFruitTap = (fruit: { id: string; emoji: string }) => {
+    stopReadingAloud();
     const profile = GameManager.getInstance().saveSystem.getProfile();
     if (profile.consecutiveCorrect < HINT_DISABLE_THRESHOLD) {
       const position = fruits.filter(f => f.dropped).findIndex(f => f.id === fruit.id) + 1;
@@ -296,6 +524,7 @@ export default function CountAllScreen({ navigation }: Props) {
   };
 
   const submitAnswer = async () => {
+    stopReadingAloud();
     const allDropped = fruits.length > 0 && fruits.every(f => f.dropped);
     if (selectedAnswer === null || !problem || !allDropped) return;
 
@@ -355,10 +584,10 @@ export default function CountAllScreen({ navigation }: Props) {
     }
   };
 
-  const waitMs = (ms: number) => new Promise(res => setTimeout(res, ms));
-
   const startAutomatedDemonstration = async (isTimeout = false) => {
+    stopReadingAloud();
     if (!problem) return;
+    isDemonstratingRef.current = true;
     setIsDemonstrating(true);
     isDemoCancelled.current = false;
     setRemediationCycle(c => c + 1);
@@ -465,6 +694,7 @@ export default function CountAllScreen({ navigation }: Props) {
 
   const endDemonstration = () => {
     isDemoCancelled.current = true;
+    isDemonstratingRef.current = false;
     setIsDemonstrating(false);
     setHighlightedFruitId(null);
     setAnimatingFruitId(null);
@@ -490,6 +720,7 @@ export default function CountAllScreen({ navigation }: Props) {
   };
 
   const useHint = () => {
+    stopReadingAloud();
     if (!problem || hintsRemaining <= 0) return;
     const gm = GameManager.getInstance();
     const hint = gm.getHint(problem);
@@ -545,10 +776,29 @@ export default function CountAllScreen({ navigation }: Props) {
   const displayedActivityCount = Math.min(activityCount + 1, MAX_ACTIVITIES_PER_SESSION);
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, isTutorialMode && styles.containerTutorial]}>
       <LinearGradient colors={['#A5D6A7', '#B2DFDB']} style={StyleSheet.absoluteFill} />
 
-      {isDemonstrating && (
+      {/* Tutorial Banner */}
+      {isTutorialMode && (
+        <View style={styles.tutorialBanner}>
+          <View style={styles.tutorialBannerLeft}>
+            <Text style={styles.tutorialBannerIcon}>🎓</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.tutorialBannerKicker}>TUTORIAL MODE</Text>
+              <Text style={styles.tutorialBannerMessage} numberOfLines={2}>
+                {tutorialMessage}
+              </Text>
+            </View>
+          </View>
+          <TouchableOpacity style={styles.tutorialSkipBtn} onPress={skipOrEndTutorial} activeOpacity={0.8}>
+            <Text style={styles.tutorialSkipBtnText}>Skip ⏩</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Guided Remediation Banner (during normal game after mistake) */}
+      {!isTutorialMode && isDemonstrating && (
         <DemonstrationBanner
           message={demoMessage}
           onSkip={endDemonstration}
@@ -568,8 +818,16 @@ export default function CountAllScreen({ navigation }: Props) {
         </TouchableOpacity>
 
         <View style={styles.topCenter}>
-          <TimerBar timeLeft={timeLeft} totalTime={GameManager.getInstance().sessionTimerLimit} />
-          <Text style={styles.activityProgress}>{displayedActivityCount}/{MAX_ACTIVITIES_PER_SESSION}</Text>
+          {isTutorialMode ? (
+            <View style={styles.tutorialBadge}>
+              <Text style={styles.tutorialBadgeText}>🌟 Practice Round</Text>
+            </View>
+          ) : (
+            <>
+              <TimerBar timeLeft={timeLeft} totalTime={GameManager.getInstance().sessionTimerLimit} />
+              <Text style={styles.activityProgress}>{displayedActivityCount}/{MAX_ACTIVITIES_PER_SESSION}</Text>
+            </>
+          )}
         </View>
 
         <View style={styles.badgesContainer}>
@@ -577,7 +835,7 @@ export default function CountAllScreen({ navigation }: Props) {
             <Text style={styles.helpIcon}>❓</Text>
           </TouchableOpacity>
           <View style={styles.badge}>
-            <Text style={styles.badgeText}>⭐ {profile.totalStars}</Text>
+            <Text style={styles.badgeText}>⭐ {isTutorialMode ? 'Practice' : profile.totalStars}</Text>
           </View>
         </View>
       </View>
@@ -624,7 +882,7 @@ export default function CountAllScreen({ navigation }: Props) {
             <Text style={{ fontSize: 36 }}>🦉</Text>
             <OliverSpeechBalloon
               active={
-                !showTutorial &&
+                !isTutorialMode &&
                 !isDemonstrating &&
                 !showGreatJob &&
                 !showFiveStreak &&
@@ -642,11 +900,35 @@ export default function CountAllScreen({ navigation }: Props) {
 
         {/* Equation */}
         <View style={styles.equationContainer}>
-          <Text style={[styles.equationNumber, { color: '#FF5252' }]}>{problem.num1}</Text>
+          <Text
+            style={[
+              styles.equationNumber,
+              { color: '#FF5252' },
+              highlightPhase === 'tree1' && styles.equationNumberHighlighted,
+            ]}
+          >
+            {problem.num1}
+          </Text>
           <Text style={styles.equationSymbol}> + </Text>
-          <Text style={[styles.equationNumber, { color: '#00BFA5' }]}>{problem.num2}</Text>
+          <Text
+            style={[
+              styles.equationNumber,
+              { color: '#00BFA5' },
+              highlightPhase === 'tree2' && styles.equationNumberHighlighted,
+            ]}
+          >
+            {problem.num2}
+          </Text>
           <Text style={styles.equationSymbol}> = </Text>
-          <Text style={[styles.equationNumber, { color: '#FFCA28' }]}>?</Text>
+          <Text
+            style={[
+              styles.equationNumber,
+              { color: '#FFCA28' },
+              highlightPhase === 'total' && styles.equationNumberHighlighted,
+            ]}
+          >
+            ?
+          </Text>
         </View>
 
         {/* Fruit Groups */}
@@ -674,7 +956,7 @@ export default function CountAllScreen({ navigation }: Props) {
                   fruit={fruit}
                   disabled={isDemonstrating}
                   onDrop={() => handleDrop(fruit.id)}
-                  isHighlighted={highlightedFruitId === fruit.id}
+                  isHighlighted={highlightedFruitId === fruit.id || highlightPhase === 'tree1'}
                   isDemoAnimating={animatingFruitId === fruit.id}
                   demoDistance={180}
                 />
@@ -700,7 +982,7 @@ export default function CountAllScreen({ navigation }: Props) {
                   fruit={fruit}
                   disabled={isDemonstrating || !isGroup1Finished}
                   onDrop={() => handleDrop(fruit.id)}
-                  isHighlighted={highlightedFruitId === fruit.id}
+                  isHighlighted={highlightedFruitId === fruit.id || highlightPhase === 'tree2'}
                   isDemoAnimating={animatingFruitId === fruit.id}
                   demoDistance={95}
                 />
@@ -837,13 +1119,23 @@ export default function CountAllScreen({ navigation }: Props) {
         masteryProgress={isMasteryProblem && !justMastered ? masteryProgress : null}
       />
 
-      {/* Tutorial Modal */}
-      <GameTutorialModal
-        visible={showTutorial}
-        gameTitle="Count All"
-        steps={COUNT_ALL_TUTORIAL_STEPS}
-        onClose={handleCloseTutorial}
-      />
+      {/* Tutorial Completion Card */}
+      {isTutorialMode && tutorialFinished && (
+        <View style={styles.tutorialFinishOverlay}>
+          <View style={styles.tutorialFinishCard}>
+            <Text style={{ fontSize: 48, marginBottom: 8 }}>🦉🎉</Text>
+            <Text style={styles.tutorialFinishTitle}>You're Ready to Play!</Text>
+            <Text style={styles.tutorialFinishSub}>Now help Oliver count all the fruits!</Text>
+            <TouchableOpacity
+              style={styles.tutorialStartBtn}
+              onPress={skipOrEndTutorial}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.tutorialStartBtnText}>Start Game! 🚀</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       {/* 5-Streak Independence Reward Modal */}
       <FiveStreakModal
@@ -987,6 +1279,12 @@ const styles = StyleSheet.create({
   instructionText: { flex: 1, fontSize: 13, color: '#4E342E', fontWeight: 'bold' },
   equationContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
   equationNumber: { fontSize: 40, fontWeight: '900' },
+  equationNumberHighlighted: {
+    transform: [{ scale: 1.35 }],
+    textShadowColor: '#FFD700',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 10,
+  },
   equationSymbol: { fontSize: 32, fontWeight: '900', color: '#263238', marginHorizontal: 4 },
   groupsWrapper: { zIndex: 10 },
   groupCard: { backgroundColor: '#FFF', borderRadius: 16, padding: 10, marginBottom: 8, elevation: 2 },
@@ -1061,5 +1359,119 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.8,
     shadowRadius: 10,
     elevation: 10,
+  },
+  containerTutorial: {
+    borderWidth: 4,
+    borderColor: '#FFB300',
+  },
+  tutorialBanner: {
+    backgroundColor: '#FFE082',
+    borderBottomWidth: 3,
+    borderBottomColor: '#FFA000',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    zIndex: 9998,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 5,
+  },
+  tutorialBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  tutorialBannerIcon: {
+    fontSize: 28,
+  },
+  tutorialBannerKicker: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#E65100',
+    letterSpacing: 1,
+  },
+  tutorialBannerMessage: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: '#4E342E',
+  },
+  tutorialSkipBtn: {
+    backgroundColor: '#FFF',
+    borderWidth: 2,
+    borderColor: '#FFA000',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    elevation: 2,
+  },
+  tutorialSkipBtnText: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: '#E65100',
+  },
+  tutorialBadge: {
+    backgroundColor: '#FFF9C4',
+    borderWidth: 2,
+    borderColor: '#FBC02D',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+  },
+  tutorialBadgeText: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: '#F57F17',
+  },
+  tutorialFinishOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 9999,
+    padding: 24,
+  },
+  tutorialFinishCard: {
+    backgroundColor: '#FFF',
+    borderRadius: 24,
+    padding: 24,
+    alignItems: 'center',
+    width: '100%',
+    maxWidth: 340,
+    elevation: 10,
+    borderWidth: 3,
+    borderColor: '#FFE082',
+  },
+  tutorialFinishTitle: {
+    fontSize: 24,
+    fontWeight: '900',
+    color: '#2E7D32',
+    textAlign: 'center',
+    marginBottom: 6,
+  },
+  tutorialFinishSub: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#555',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  tutorialStartBtn: {
+    backgroundColor: '#4CAF50',
+    borderRadius: 24,
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    borderWidth: 2,
+    borderColor: '#FFF',
+    elevation: 4,
+  },
+  tutorialStartBtnText: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#FFF',
   },
 });
