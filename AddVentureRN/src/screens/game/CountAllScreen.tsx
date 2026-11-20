@@ -300,6 +300,72 @@ export default function CountAllScreen({ navigation }: Props) {
     await waitMs(350);
     if (isDemoCancelled.current) return;
 
+    // Demonstrate Tap-to-Count in arbitrary order inside the basket
+    setTutorialMessage('Tap each fruit in the basket in any order to count!');
+    await AudioManager.speakAsync('Now tap each fruit in the basket in any order to count them!', { rate: 0.78, pitch: 1.25 });
+    await waitMs(350);
+    if (isDemoCancelled.current) return;
+
+    // Fruit 1 (Tree 1 fruit 0) -> Badge 1
+    setCountedFruits({ g1_0: 1 });
+    const tapAnim0 = fruitTapAnims.current['g1_0'];
+    const glowAnim0 = fruitGlowAnims.current['g1_0'];
+    if (tapAnim0) {
+      Animated.sequence([
+        Animated.spring(tapAnim0, { toValue: 1.35, friction: 3, useNativeDriver: true }),
+        Animated.spring(tapAnim0, { toValue: 1, friction: 4, useNativeDriver: true }),
+      ]).start();
+    }
+    if (glowAnim0) {
+      Animated.sequence([
+        Animated.timing(glowAnim0, { toValue: 1, duration: 150, useNativeDriver: true }),
+        Animated.timing(glowAnim0, { toValue: 0, duration: 400, useNativeDriver: true }),
+      ]).start();
+    }
+    await AudioManager.speakAsync('One!', { rate: 0.85, pitch: 1.35 });
+    await waitMs(350);
+    if (isDemoCancelled.current) return;
+
+    // Fruit 2 (Tree 2 fruit 0 - demonstrating arbitrary order!) -> Badge 2
+    setCountedFruits(prev => ({ ...prev, g2_0: 2 }));
+    const tapAnim2 = fruitTapAnims.current['g2_0'];
+    const glowAnim2 = fruitGlowAnims.current['g2_0'];
+    if (tapAnim2) {
+      Animated.sequence([
+        Animated.spring(tapAnim2, { toValue: 1.35, friction: 3, useNativeDriver: true }),
+        Animated.spring(tapAnim2, { toValue: 1, friction: 4, useNativeDriver: true }),
+      ]).start();
+    }
+    if (glowAnim2) {
+      Animated.sequence([
+        Animated.timing(glowAnim2, { toValue: 1, duration: 150, useNativeDriver: true }),
+        Animated.timing(glowAnim2, { toValue: 0, duration: 400, useNativeDriver: true }),
+      ]).start();
+    }
+    await AudioManager.speakAsync('Two!', { rate: 0.85, pitch: 1.35 });
+    await waitMs(350);
+    if (isDemoCancelled.current) return;
+
+    // Fruit 3 (Tree 1 fruit 1) -> Badge 3
+    setCountedFruits(prev => ({ ...prev, g1_1: 3 }));
+    const tapAnim1 = fruitTapAnims.current['g1_1'];
+    const glowAnim1 = fruitGlowAnims.current['g1_1'];
+    if (tapAnim1) {
+      Animated.sequence([
+        Animated.spring(tapAnim1, { toValue: 1.35, friction: 3, useNativeDriver: true }),
+        Animated.spring(tapAnim1, { toValue: 1, friction: 4, useNativeDriver: true }),
+      ]).start();
+    }
+    if (glowAnim1) {
+      Animated.sequence([
+        Animated.timing(glowAnim1, { toValue: 1, duration: 150, useNativeDriver: true }),
+        Animated.timing(glowAnim1, { toValue: 0, duration: 400, useNativeDriver: true }),
+      ]).start();
+    }
+    await AudioManager.speakAsync("Three! That's 3 fruits in all!", { rate: 0.85, pitch: 1.35 });
+    await waitMs(450);
+    if (isDemoCancelled.current) return;
+
     // Pick answer
     setTutorialMessage('All 3 fruits in the basket! Tap number 3!');
     await AudioManager.speakAsync('All 3 fruits are in the basket! Now tap 3!', { rate: 0.78, pitch: 1.3 });

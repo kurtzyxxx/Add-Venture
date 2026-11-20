@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, SafeAreaView,
-  Dimensions, Animated, PanResponder, Vibration,
+  Dimensions, Animated, PanResponder, Vibration, Modal, ScrollView,
 } from 'react-native';
 import Svg, { Circle, Ellipse, Line, Path, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -77,6 +77,26 @@ export default function NumberBondsScreen({ navigation }: Props) {
   // Fruit tap & glow animation tracking
   const fruitTapAnims = useRef<Record<string, Animated.Value>>({});
   const fruitGlowAnims = useRef<Record<string, Animated.Value>>({});
+  const trunkTotalScaleAnim = useRef(new Animated.Value(1)).current;
+
+  // Zoomed-in Total Fruits Modal
+  const [showTotalModal, setShowTotalModal] = useState(false);
+  const [countedTotalFruits, setCountedTotalFruits] = useState<Record<string, number>>({});
+  const totalFruitTapAnims = useRef<Record<string, Animated.Value>>({});
+  const totalFruitGlowAnims = useRef<Record<string, Animated.Value>>({});
+
+  const getTotalFruitAnims = (id: string) => {
+    if (!totalFruitTapAnims.current[id]) {
+      totalFruitTapAnims.current[id] = new Animated.Value(1);
+    }
+    if (!totalFruitGlowAnims.current[id]) {
+      totalFruitGlowAnims.current[id] = new Animated.Value(0);
+    }
+    return {
+      tapAnim: totalFruitTapAnims.current[id],
+      glowAnim: totalFruitGlowAnims.current[id],
+    };
+  };
 
   const getFruitAnims = (id: string) => {
     if (!fruitTapAnims.current[id]) {
@@ -172,7 +192,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
 
       // Phase 3: Highlight Total on the tree trunk
       setHighlightPhase('total');
-      await AudioManager.speakAsync(`Find the missing part to make a total of ${total}!`, {
+      await AudioManager.speakAsync(`Find the missing part to make a total of ${total} fruits!`, {
         rate: 0.78,
         pitch: 1.3,
       });
@@ -197,6 +217,8 @@ export default function NumberBondsScreen({ navigation }: Props) {
     setIsTutorialMode(false);
     setTutorialFinished(false);
     setIsDemonstrating(false);
+    setShowTotalModal(false);
+    setCountedTotalFruits({});
     setSelectedFruitId(null);
     setCountedFruits({});
     setHighlightedFruitId(null);
@@ -228,6 +250,8 @@ export default function NumberBondsScreen({ navigation }: Props) {
     setIsDemonstrating(true);
     isDemoCancelled.current = false;
     stopReadingAloud();
+    setShowTotalModal(false);
+    setCountedTotalFruits({});
 
     const tutProblem: Problem = {
       num1: 5,
@@ -276,38 +300,89 @@ export default function NumberBondsScreen({ navigation }: Props) {
     await waitMs(350);
     if (isDemoCancelled.current) return;
 
-    // Dictate equation with highlights (Left Basket, Right Basket, Total Badge)
-    setTutorialMessage('The tree total is 5, and the left basket has 3.');
+    // 1. Individually count the fruits in the Left Basket first
     setHighlightPhase('partA');
     setIsLeftBasketHighlighted(true);
-    await AudioManager.speakAsync('The left basket has 3 fruits,', { rate: 0.78, pitch: 1.25 });
-    if (isDemoCancelled.current) return;
-    await waitMs(200);
-
-    setHighlightPhase('partB');
-    setIsLeftBasketHighlighted(false);
-    setIsRightBasketHighlighted(true);
-    await AudioManager.speakAsync('what number goes with 3 to make 5?', { rate: 0.78, pitch: 1.25 });
-    if (isDemoCancelled.current) return;
-    await waitMs(200);
-
-    setHighlightPhase('total');
-    setIsRightBasketHighlighted(false);
-    setIsTotalBadgeHighlighted(true);
-    await AudioManager.speakAsync('The total on the tree trunk is 5!', { rate: 0.78, pitch: 1.3 });
-    if (isDemoCancelled.current) return;
+    setTutorialMessage("First, let's count each fruit in the left basket!");
+    await AudioManager.speakAsync("First, let's count each fruit in the left basket!", { rate: 0.78, pitch: 1.25 });
     await waitMs(350);
+    if (isDemoCancelled.current) return;
 
-    setHighlightPhase('idle');
+    // Count Fruit 1 in left basket
+    setCountedFruits({ left_0: 1 });
+    setDemoCountingIndex(0);
+    setDemoMaxCountedIndex(0);
+    const anim0 = getFruitAnims('left_0');
+    Animated.sequence([
+      Animated.spring(anim0.tapAnim, { toValue: 1.35, friction: 3, useNativeDriver: true }),
+      Animated.spring(anim0.tapAnim, { toValue: 1, friction: 4, useNativeDriver: true }),
+    ]).start();
+    Animated.sequence([
+      Animated.timing(anim0.glowAnim, { toValue: 1, duration: 150, useNativeDriver: true }),
+      Animated.timing(anim0.glowAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
+    ]).start();
+    setTutorialMessage('Left basket: 1 fruit!');
+    await AudioManager.speakAsync('One!', { rate: 0.85, pitch: 1.35 });
+    await waitMs(350);
+    if (isDemoCancelled.current) return;
+
+    // Count Fruit 2 in left basket
+    setCountedFruits(prev => ({ ...prev, left_1: 2 }));
+    setDemoCountingIndex(1);
+    setDemoMaxCountedIndex(1);
+    const anim1 = getFruitAnims('left_1');
+    Animated.sequence([
+      Animated.spring(anim1.tapAnim, { toValue: 1.35, friction: 3, useNativeDriver: true }),
+      Animated.spring(anim1.tapAnim, { toValue: 1, friction: 4, useNativeDriver: true }),
+    ]).start();
+    Animated.sequence([
+      Animated.timing(anim1.glowAnim, { toValue: 1, duration: 150, useNativeDriver: true }),
+      Animated.timing(anim1.glowAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
+    ]).start();
+    setTutorialMessage('Left basket: 2 fruits!');
+    await AudioManager.speakAsync('Two!', { rate: 0.85, pitch: 1.35 });
+    await waitMs(350);
+    if (isDemoCancelled.current) return;
+
+    // Count Fruit 3 in left basket
+    setCountedFruits(prev => ({ ...prev, left_2: 3 }));
+    setDemoCountingIndex(2);
+    setDemoMaxCountedIndex(2);
+    const anim2 = getFruitAnims('left_2');
+    Animated.sequence([
+      Animated.spring(anim2.tapAnim, { toValue: 1.35, friction: 3, useNativeDriver: true }),
+      Animated.spring(anim2.tapAnim, { toValue: 1, friction: 4, useNativeDriver: true }),
+    ]).start();
+    Animated.sequence([
+      Animated.timing(anim2.glowAnim, { toValue: 1, duration: 150, useNativeDriver: true }),
+      Animated.timing(anim2.glowAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
+    ]).start();
+    setTutorialMessage('Left basket has 3 fruits!');
+    await AudioManager.speakAsync("Three! That's 3 fruits in the left basket.", { rate: 0.85, pitch: 1.35 });
+    await waitMs(400);
+    if (isDemoCancelled.current) return;
+    setIsLeftBasketHighlighted(false);
+
+    // 2. Point to the Total Box on the trunk
+    setHighlightPhase('total');
+    setIsTotalBadgeHighlighted(true);
+    setTutorialMessage('The total is 5 fruits! Tap it anytime to count in the modal!');
+    await AudioManager.speakAsync('The total on the tree trunk is 5 fruits! You can tap it anytime to count up close in the popup modal!', { rate: 0.78, pitch: 1.3 });
+    await waitMs(400);
+    if (isDemoCancelled.current) return;
     setIsTotalBadgeHighlighted(false);
 
-    // Drag fruits to right basket
-    setTutorialMessage('Let’s drag 2 fruits into the right basket to make 5!');
-    await AudioManager.speakAsync('Let’s drag fruits from the branches into the right basket to make 5!', { rate: 0.78, pitch: 1.25 });
-    await waitMs(300);
+    // 3. Right Basket & Prompt to drag fruits and count on from 3
+    setHighlightPhase('partB');
+    setIsRightBasketHighlighted(true);
+    setTutorialMessage('Keep 3 in your head! How many more make 5?');
+    await AudioManager.speakAsync('Keep 3 in your head. What number goes with 3 to make 5? Let’s drag fruits from the branches and count on from 3!', { rate: 0.78, pitch: 1.25 });
+    await waitMs(350);
     if (isDemoCancelled.current) return;
+    setIsRightBasketHighlighted(false);
+    setHighlightPhase('idle');
 
-    // Drag Fruit 1 (id: nb_fruit_0)
+    // 4. Drag Fruit 1 (id: nb_fruit_0)
     setTutorialMessage('Fruit 1: Drag to right basket! (3 + 1 = 4)');
     setHighlightedFruitId('nb_fruit_0');
     setAnimatingFruitId('nb_fruit_0');
@@ -316,13 +391,16 @@ export default function NumberBondsScreen({ navigation }: Props) {
 
     setTreeFruits(prev => prev.map(f => f.id === 'nb_fruit_0' ? { ...f, dropped: true } : f));
     setSelectedOption(1);
+    setCountedFruits(prev => ({ ...prev, nb_fruit_0: 4 }));
+    setDemoCountingIndex(3);
+    setDemoMaxCountedIndex(3);
     setHighlightedFruitId(null);
     setAnimatingFruitId(null);
-    await AudioManager.speakAsync('One! 3 plus 1 is 4.', { rate: 0.78, pitch: 1.3 });
-    await waitMs(250);
+    await AudioManager.speakAsync('Four! 3 plus 1 is 4.', { rate: 0.78, pitch: 1.3 });
+    await waitMs(300);
     if (isDemoCancelled.current) return;
 
-    // Drag Fruit 2 (id: nb_fruit_1)
+    // 5. Drag Fruit 2 (id: nb_fruit_1)
     setTutorialMessage('Fruit 2: Drag to right basket! (3 + 2 = 5)');
     setHighlightedFruitId('nb_fruit_1');
     setAnimatingFruitId('nb_fruit_1');
@@ -331,60 +409,29 @@ export default function NumberBondsScreen({ navigation }: Props) {
 
     setTreeFruits(prev => prev.map(f => f.id === 'nb_fruit_1' ? { ...f, dropped: true } : f));
     setSelectedOption(2);
+    setCountedFruits(prev => ({ ...prev, nb_fruit_1: 5 }));
+    setDemoCountingIndex(4);
+    setDemoMaxCountedIndex(4);
     setHighlightedFruitId(null);
     setAnimatingFruitId(null);
-    await AudioManager.speakAsync('Two! 3 plus 2 is 5!', { rate: 0.78, pitch: 1.3 });
-    await waitMs(300);
-    if (isDemoCancelled.current) return;
-
-    // Double-check count across both baskets
-    setTutorialMessage("Let's count both baskets together!");
-    await AudioManager.speakAsync("Let's count all the fruits to double-check!", { rate: 0.78, pitch: 1.25 });
-    await waitMs(250);
-    if (isDemoCancelled.current) return;
-
-    // Count Left basket (1, 2, 3)
-    setIsLeftBasketHighlighted(true);
-    for (let i = 0; i < 3; i++) {
-      if (isDemoCancelled.current) return;
-      const countNum = i + 1;
-      setDemoCountingIndex(i);
-      setDemoMaxCountedIndex(i);
-      setTutorialMessage(`Left basket: Fruit #${countNum}!`);
-      await AudioManager.speakAsync(`${countNum}`, { rate: 0.78, pitch: 1.35 });
-      await waitMs(250);
-    }
-    setIsLeftBasketHighlighted(false);
-
-    // Count Right basket (4, 5)
-    setIsRightBasketHighlighted(true);
-    for (let i = 0; i < 2; i++) {
-      if (isDemoCancelled.current) return;
-      const countNum = 3 + i + 1;
-      const globalIdx = 3 + i;
-      setDemoCountingIndex(globalIdx);
-      setDemoMaxCountedIndex(globalIdx);
-      setTutorialMessage(`Right basket: Fruit #${countNum}!`);
-      await AudioManager.speakAsync(`${countNum}`, { rate: 0.78, pitch: 1.35 });
-      await waitMs(250);
-    }
-    setIsRightBasketHighlighted(false);
-    setDemoCountingIndex(null);
-
-    // Recap equation
-    setTutorialMessage('3 + 2 = 5! A total of 5!');
-    await AudioManager.speakAsync('Double-checked! 3 plus 2 equals 5 in all!', { rate: 0.78, pitch: 1.3 });
+    await AudioManager.speakAsync('Five! 3 plus 2 is 5! We reached 5 fruits in all!', { rate: 0.78, pitch: 1.3 });
     await waitMs(350);
     if (isDemoCancelled.current) return;
 
-    // Tap Check button
+    // 6. Double-check & Tap-to-count recap
+    setTutorialMessage("Both baskets make 5 fruits in all! Tap any fruit to count!");
+    await AudioManager.speakAsync("Both baskets make 5 fruits in all! You can tap any fruit in either basket to count them, or tap the Total Box to count in the modal!", { rate: 0.78, pitch: 1.25 });
+    await waitMs(400);
+    if (isDemoCancelled.current) return;
+
+    // 7. Tap Check button
     setTutorialMessage('Then tap Check to finish!');
     setIsCheckHighlighted(true);
     await AudioManager.speakAsync('Then tap Check!', { rate: 0.78, pitch: 1.3 });
     await waitMs(450);
     if (isDemoCancelled.current) return;
 
-    // Completion
+    // 8. Completion
     setIsCheckHighlighted(false);
     setTutorialMessage("Awesome! You're ready to play! 🚀");
     await AudioManager.speakAsync("Hooray! That's how Number Bonds work! Now you're ready to play!", {
@@ -414,7 +461,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
 
   // Timer only runs during active gameplay
   useEffect(() => {
-    if (isTutorialMode || isDemonstrating || showGreatJob || showFiveStreak || showIncorrectModal || !problem) {
+    if (isTutorialMode || isDemonstrating || showGreatJob || showFiveStreak || showIncorrectModal || showTotalModal || !problem) {
       if (timerRef.current) {
         clearInterval(timerRef.current);
         timerRef.current = null;
@@ -429,13 +476,13 @@ export default function NumberBondsScreen({ navigation }: Props) {
         timerRef.current = null;
       }
     };
-  }, [isTutorialMode, isDemonstrating, showGreatJob, showFiveStreak, showIncorrectModal, problem]);
+  }, [isTutorialMode, isDemonstrating, showGreatJob, showFiveStreak, showIncorrectModal, showTotalModal, problem]);
 
   useEffect(() => {
-    if (timeLeft === 0 && !isTutorialMode && !isDemonstrating && !showGreatJob && !showFiveStreak && !showIncorrectModal && problem && selectedOption === null) {
+    if (timeLeft === 0 && !isTutorialMode && !isDemonstrating && !showGreatJob && !showFiveStreak && !showIncorrectModal && !showTotalModal && problem && selectedOption === null) {
       handleTimeUp();
     }
-  }, [timeLeft, isTutorialMode, isDemonstrating, showGreatJob, showFiveStreak, showIncorrectModal, problem, selectedOption]);
+  }, [timeLeft, isTutorialMode, isDemonstrating, showGreatJob, showFiveStreak, showIncorrectModal, showTotalModal, problem, selectedOption]);
 
   // Pulse right basket when awaiting answers
   useEffect(() => {
@@ -486,6 +533,8 @@ export default function NumberBondsScreen({ navigation }: Props) {
     currentProblemRef.current = p;
     setIsMasteryProblem(isMastery);
     setProblem(p);
+    setShowTotalModal(false);
+    setCountedTotalFruits({});
     setSelectedOption(null);
     setSelectedFruitId(null);
     setCountedFruits({});
@@ -659,6 +708,71 @@ export default function NumberBondsScreen({ navigation }: Props) {
     handleBasketFruitTap(fruitId);
   };
 
+  // User tap on Trunk Total Fruits -> Opens Zoomed Total Modal
+  const handleTapTrunkTotal = () => {
+    if (isDemonstrating || !problem) return;
+    try {
+      Vibration.vibrate(25);
+    } catch (_) {}
+    Animated.sequence([
+      Animated.spring(trunkTotalScaleAnim, { toValue: 1.15, friction: 3, useNativeDriver: true }),
+      Animated.spring(trunkTotalScaleAnim, { toValue: 1, friction: 4, useNativeDriver: true }),
+    ]).start();
+
+    setShowTotalModal(true);
+  };
+
+  // User tap-to-count fruit inside Total Modal (arbitrary order)
+  const handleTotalModalFruitTap = (fruitKey: string) => {
+    if (!problem) return;
+    stopReadingAloud();
+    try {
+      Vibration.vibrate(25);
+    } catch (_) {}
+
+    const profile = GameManager.getInstance().saveSystem.getProfile();
+    const isFiveStreakActive = profile.consecutiveCorrect >= HINT_DISABLE_THRESHOLD;
+
+    const assignedCount = countedTotalFruits[fruitKey];
+    let spokenNumber: number;
+
+    if (assignedCount !== undefined) {
+      spokenNumber = assignedCount;
+    } else {
+      const nextCount = Object.keys(countedTotalFruits).length + 1;
+      spokenNumber = nextCount;
+      setCountedTotalFruits(prev => ({
+        ...prev,
+        [fruitKey]: nextCount,
+      }));
+
+      // When all fruits in the total modal are counted
+      if (!isFiveStreakActive && nextCount === problem.num1) {
+        setTimeout(() => {
+          AudioManager.speak(`That's all ${problem.num1} fruits in total!`, {
+            rate: 0.92,
+            pitch: 1.35,
+          });
+        }, 750);
+      }
+    }
+
+    if (!isFiveStreakActive) {
+      AudioManager.stopSpeech();
+      AudioManager.speak(`${spokenNumber}`, { rate: 0.95, pitch: 1.35 });
+    }
+
+    const { tapAnim, glowAnim } = getTotalFruitAnims(fruitKey);
+    Animated.sequence([
+      Animated.spring(tapAnim, { toValue: 1.35, friction: 3, useNativeDriver: true }),
+      Animated.spring(tapAnim, { toValue: 1, friction: 4, useNativeDriver: true }),
+    ]).start();
+    Animated.sequence([
+      Animated.timing(glowAnim, { toValue: 1, duration: 150, useNativeDriver: true }),
+      Animated.timing(glowAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
+    ]).start();
+  };
+
   // Tap fruit in right basket to return to tree (or long-press)
   const handleRemoveFruit = (fruitId: string) => {
     stopReadingAloud();
@@ -796,10 +910,10 @@ export default function NumberBondsScreen({ navigation }: Props) {
     const missingCount = problem.correctAnswer;
 
     // Step 1: Highlight Trunk Total Badge
-    setDemoMessage(`Total on the tree is ${problem.num1}!`);
+    setDemoMessage(`Total on the tree is ${problem.num1} fruits!`);
     setIsTotalBadgeHighlighted(true);
 
-    await AudioManager.speakAsync(`Look at the tree! The total number is ${problem.num1}!`, {
+    await AudioManager.speakAsync(`Look at the tree! The total is ${problem.num1} fruits!`, {
       rate: 0.78,
       pitch: 1.25,
     });
@@ -1357,8 +1471,8 @@ export default function NumberBondsScreen({ navigation }: Props) {
                       const isUserCounted = assignedCount !== undefined;
 
                       const isCountingActive = isDemoCountingActive;
-                      const showBadge = isDemonstrating ? isDemoBadge : (isUserCounted && !isFiveStreakActive);
-                      const fruitNum = isDemonstrating ? i + 1 : assignedCount;
+                      const showBadge = isDemonstrating ? (isDemoBadge || isUserCounted) : (isUserCounted && !isFiveStreakActive);
+                      const fruitNum = assignedCount !== undefined ? assignedCount : (isDemonstrating ? i + 1 : undefined);
 
                       const { tapAnim, glowAnim } = getFruitAnims(fruitId);
                       const glowOpacity = glowAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 0.6] });
@@ -1442,8 +1556,8 @@ export default function NumberBondsScreen({ navigation }: Props) {
                           const isUserCounted = assignedCount !== undefined;
 
                           const isCountingActive = isDemoCountingActive;
-                          const showBadge = isDemonstrating ? isDemoBadge : (isUserCounted && !isFiveStreakActive);
-                          const fruitNum = isDemonstrating ? globalIdx + 1 : assignedCount;
+                          const showBadge = isDemonstrating ? (isDemoBadge || isUserCounted) : (isUserCounted && !isFiveStreakActive);
+                          const fruitNum = assignedCount !== undefined ? assignedCount : (isDemonstrating ? globalIdx + 1 : undefined);
 
                           const { tapAnim, glowAnim } = getFruitAnims(f.id);
                           const glowOpacity = glowAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 0.6] });
@@ -1489,15 +1603,42 @@ export default function NumberBondsScreen({ navigation }: Props) {
               </Animated.View>
             </View>
 
-            {/* Total Number Badge at the V-vertex on the trunk */}
+            {/* Total Fruits Badge at the V-vertex on the trunk */}
             <View style={styles.totalNumberBadgeWrap}>
-              <View style={[
-                styles.totalNumberBadge,
-                (isTotalBadgeHighlighted || highlightPhase === 'total') && styles.totalBadgeHighlighted
-              ]}>
-                <Text style={styles.totalBadgeLabel}>TOTAL</Text>
-                <Text style={styles.totalBadgeValue}>{problem.num1}</Text>
-              </View>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={handleTapTrunkTotal}
+                disabled={isDemonstrating}
+              >
+                <Animated.View style={[
+                  styles.totalFruitsBadge,
+                  (isTotalBadgeHighlighted || highlightPhase === 'total') && styles.totalBadgeHighlighted,
+                  { transform: [{ scale: trunkTotalScaleAnim }] },
+                ]}>
+                  <View style={styles.totalBadgeHeaderRow}>
+                    <Text style={styles.totalBadgeLabel}>TOTAL FRUITS</Text>
+                    {showClues && (
+                      <View style={styles.totalClueCountPill}>
+                        <Text style={styles.totalClueCountText}>{problem.num1}</Text>
+                      </View>
+                    )}
+                  </View>
+                  <View style={styles.totalFruitsCluster}>
+                    {Array.from({ length: problem.num1 }).map((_, i) => (
+                      <Text
+                        key={i}
+                        style={[
+                          styles.totalFruitEmoji,
+                          problem.num1 > 6 && styles.totalFruitEmojiCompact,
+                        ]}
+                      >
+                        {treeFruits[0]?.emoji ?? '🍎'}
+                      </Text>
+                    ))}
+                  </View>
+                  <Text style={styles.totalTapHintText}>🔍 Tap to count</Text>
+                </Animated.View>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -1579,6 +1720,122 @@ export default function NumberBondsScreen({ navigation }: Props) {
         currentTry={currentTry}
         onContinue={handleContinueAfterIncorrect}
       />
+
+      {/* ═══════════════════════════════════════════════════════════════════
+          TOTAL FRUITS INSPECTION / COUNTING MODAL
+      ═══════════════════════════════════════════════════════════════════ */}
+      {problem && (
+        <Modal visible={showTotalModal} animationType="fade" transparent={true}>
+          <View style={styles.totalModalBackdrop}>
+            <View style={styles.totalModalCard}>
+              {/* 'X' Close Button */}
+              <TouchableOpacity
+                style={styles.totalModalCloseBtn}
+                onPress={() => setShowTotalModal(false)}
+                activeOpacity={0.75}
+              >
+                <Text style={styles.totalModalCloseText}>✕</Text>
+              </TouchableOpacity>
+
+              <ScrollView
+                contentContainerStyle={styles.totalModalScrollContent}
+                showsVerticalScrollIndicator={false}
+                style={{ width: '100%' }}
+              >
+                {/* Header */}
+                <View style={styles.totalModalHeader}>
+                  <Text style={styles.totalModalTitle}>🌳 Total Fruits on the Tree</Text>
+                  <Text style={styles.totalModalSubtitle}>Tap each fruit in any order to count them all!</Text>
+                </View>
+
+                {/* Basket Card with all Total Fruits */}
+                <View style={styles.totalModalBasketWrap}>
+                  <TopViewBasket
+                    width={Math.min(width - 48, 300)}
+                    height={230}
+                    badgeText={showClues ? problem.num1 : '?'}
+                    badgeColor="#FF6F00"
+                    title="Total Fruits"
+                    onReset={Object.keys(countedTotalFruits).length > 0 ? () => setCountedTotalFruits({}) : undefined}
+                  >
+                    <View style={styles.totalModalFruitsCluster}>
+                      {Array.from({ length: problem.num1 }).map((_, i) => {
+                        const fruitKey = `total_modal_${i}`;
+                        const assignedCount = countedTotalFruits[fruitKey];
+                        const isCounted = assignedCount !== undefined;
+                        const { tapAnim, glowAnim } = getTotalFruitAnims(fruitKey);
+                        const glowOpacity = glowAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 0.6] });
+                        const showBadge = isCounted && !isFiveStreakActive;
+
+                        return (
+                          <TouchableOpacity
+                            key={fruitKey}
+                            activeOpacity={0.75}
+                            onPress={() => handleTotalModalFruitTap(fruitKey)}
+                          >
+                            <Animated.View
+                              style={[
+                                styles.totalModalFruitBadgeWrap,
+                                isCounted && styles.totalModalFruitCounted,
+                                { transform: [{ scale: tapAnim }] },
+                              ]}
+                            >
+                              <Text style={styles.totalModalFruitEmoji}>
+                                {treeFruits[0]?.emoji ?? '🍎'}
+                              </Text>
+                              {showBadge && (
+                                <View style={styles.totalModalIndexTag}>
+                                  <Text style={styles.totalModalIndexText}>{assignedCount}</Text>
+                                </View>
+                              )}
+                              <Animated.View
+                                style={[
+                                  StyleSheet.absoluteFill,
+                                  styles.fruitGlow,
+                                  { opacity: glowOpacity },
+                                ]}
+                              />
+                            </Animated.View>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </TopViewBasket>
+                </View>
+
+                {/* Progress Summary Pill */}
+                <View style={styles.totalModalProgressPill}>
+                  <Text style={styles.totalModalProgressText}>
+                    {Object.keys(countedTotalFruits).length === problem.num1
+                      ? `🎉 All ${problem.num1} fruits counted! Total = ${problem.num1}`
+                      : `Counted: ${Object.keys(countedTotalFruits).length} of ${problem.num1} fruits`}
+                  </Text>
+                </View>
+
+                {/* Actions Row */}
+                <View style={styles.totalModalActionsRow}>
+                  {Object.keys(countedTotalFruits).length > 0 && (
+                    <TouchableOpacity
+                      style={styles.totalModalResetBtn}
+                      onPress={() => setCountedTotalFruits({})}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.totalModalResetText}>↺ Reset</Text>
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity
+                    style={styles.totalModalDoneBtn}
+                    onPress={() => setShowTotalModal(false)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.totalModalDoneText}>Done Counting ✓</Text>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
+      )}
     </SafeAreaView>
   );
 }
@@ -2023,7 +2280,7 @@ const styles = StyleSheet.create({
   // Unified Trunk & Baskets Area
   trunkAreaWrapper: {
     width: width - 24,
-    height: 300,
+    height: 310,
     position: 'relative',
     alignItems: 'center',
     marginTop: -6,
@@ -2205,43 +2462,252 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
 
-  // Total Number on Trunk
+  // Total Fruits on Trunk
   totalNumberBadgeWrap: {
     position: 'absolute',
-    top: 198,
+    top: 206,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 7,
   },
-  totalNumberBadge: {
-    backgroundColor: '#FF6F00',
+  totalFruitsBadge: {
+    backgroundColor: 'rgba(255, 111, 0, 0.70)',
     borderWidth: 3,
-    borderColor: '#FFF',
+    borderColor: 'rgba(255, 255, 255, 0.95)',
     borderRadius: 22,
-    paddingHorizontal: 20,
-    paddingVertical: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
     alignItems: 'center',
     justifyContent: 'center',
-    elevation: 6,
+    elevation: 7,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.28,
+    shadowRadius: 5,
+    minWidth: 112,
+    maxWidth: 195,
+  },
+  totalTapHintText: {
+    fontSize: 9.5,
+    fontWeight: '800',
+    color: '#FFF8E1',
+    marginTop: 2,
+    letterSpacing: 0.5,
+  },
+
+  // Total Fruits Modal
+  totalModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  totalModalCard: {
+    backgroundColor: '#FFFDE7',
+    borderRadius: 24,
+    borderWidth: 3,
+    borderColor: '#FFD54F',
+    padding: 16,
+    width: '100%',
+    maxWidth: 360,
+    alignItems: 'center',
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  totalModalCloseBtn: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#FF5252',
+    borderWidth: 2,
+    borderColor: '#FFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 4,
+    zIndex: 10,
+  },
+  totalModalCloseText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  totalModalScrollContent: {
+    alignItems: 'center',
+    paddingBottom: 4,
+  },
+  totalModalHeader: {
+    alignItems: 'center',
+    marginTop: 4,
+    marginBottom: 8,
+    paddingHorizontal: 20,
+  },
+  totalModalTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#4E342E',
+    textAlign: 'center',
+  },
+  totalModalSubtitle: {
+    fontSize: 12,
+    color: '#5D4037',
+    fontWeight: '600',
+    textAlign: 'center',
+    marginTop: 2,
+  },
+  totalModalBasketWrap: {
+    alignItems: 'center',
+    marginVertical: 8,
+  },
+  totalModalFruitsCluster: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 10,
+    maxWidth: 260,
+  },
+  totalModalFruitBadgeWrap: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: '#FFF',
+    borderWidth: 2,
+    borderColor: '#E0E0E0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 2,
+  },
+  totalModalFruitCounted: {
+    borderColor: '#FFB300',
+    backgroundColor: '#FFF9C4',
+    elevation: 4,
+  },
+  totalModalFruitEmoji: {
+    fontSize: 26,
+  },
+  totalModalIndexTag: {
+    position: 'absolute',
+    top: -6,
+    right: -4,
+    backgroundColor: '#FF6F00',
+    borderRadius: 9,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 3,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#FFF',
+    zIndex: 5,
+  },
+  totalModalIndexText: {
+    color: '#FFF',
+    fontSize: 10,
+    fontWeight: '900',
+  },
+  totalModalProgressPill: {
+    backgroundColor: '#EDE7F6',
+    borderWidth: 1,
+    borderColor: '#B39DDB',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 5,
+    marginVertical: 6,
+  },
+  totalModalProgressText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#512DA8',
+    textAlign: 'center',
+  },
+  totalModalActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 12,
+    marginTop: 8,
+    width: '100%',
+  },
+  totalModalResetBtn: {
+    backgroundColor: '#CFD8DC',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: '#90A4AE',
+  },
+  totalModalResetText: {
+    color: '#37474F',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  totalModalDoneBtn: {
+    backgroundColor: '#4CAF50',
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 20,
+    elevation: 3,
+    borderWidth: 2,
+    borderColor: '#FFF',
+  },
+  totalModalDoneText: {
+    color: '#FFF',
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  totalBadgeHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginBottom: 3,
   },
   totalBadgeLabel: {
-    fontSize: 9,
+    fontSize: 10.5,
     fontWeight: '900',
     color: '#FFE082',
-    letterSpacing: 1,
+    letterSpacing: 1.2,
   },
-  totalBadgeValue: {
-    fontSize: 26,
+  totalClueCountPill: {
+    backgroundColor: '#FFD54F',
+    paddingHorizontal: 7,
+    paddingVertical: 1.5,
+    borderRadius: 10,
+  },
+  totalClueCountText: {
+    fontSize: 11,
     fontWeight: '900',
-    color: '#FFF',
-    marginTop: -2,
+    color: '#4E342E',
+  },
+  totalFruitsCluster: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    alignItems: 'center',
+    maxWidth: 175,
+  },
+  totalFruitEmoji: {
+    fontSize: 22,
+    marginHorizontal: 2,
+    marginVertical: 1,
+  },
+  totalFruitEmojiCompact: {
+    fontSize: 17.5,
+    marginHorizontal: 1.5,
   },
 
   // Actions Section
   actionsContainer: {
     width: '100%',
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: 18,
     marginBottom: 12,
   },
   actionBtn: {

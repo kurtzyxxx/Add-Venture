@@ -313,6 +313,38 @@ export default function CountOnScreen({ navigation }: Props) {
     await waitMs(600);
     if (isDemoCancelled.current) return;
 
+    // Inside View Basket modal: Tap to count together demonstration
+    setTutorialMessage('Inside View Basket, tap any fruit in any order to count!');
+    await AudioManager.speakAsync('Inside View Basket, you can tap any fruit in any order to count them all!', { rate: 0.78, pitch: 1.25 });
+    await waitMs(350);
+    if (isDemoCancelled.current) return;
+
+    // Animate tapping fruits in the basket (fixed_0, fixed_1, fixed_2, co_fruit_0, co_fruit_1)
+    const basketTaps = [
+      { id: 'fixed_0', num: 1, spoken: 'One!' },
+      { id: 'fixed_1', num: 2, spoken: 'Two!' },
+      { id: 'fixed_2', num: 3, spoken: 'Three!' },
+      { id: 'co_fruit_0', num: 4, spoken: 'Four!' },
+      { id: 'co_fruit_1', num: 5, spoken: "Five! That's 5 fruits in all!" },
+    ];
+
+    for (const tap of basketTaps) {
+      if (isDemoCancelled.current) return;
+      setCountedFruits(prev => ({ ...prev, [tap.id]: tap.num }));
+      const { tapAnim, glowAnim } = getFruitAnims(tap.id);
+      Animated.sequence([
+        Animated.spring(tapAnim, { toValue: 1.35, friction: 3, useNativeDriver: true }),
+        Animated.spring(tapAnim, { toValue: 1, friction: 4, useNativeDriver: true }),
+      ]).start();
+      Animated.sequence([
+        Animated.timing(glowAnim, { toValue: 1, duration: 150, useNativeDriver: true }),
+        Animated.timing(glowAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
+      ]).start();
+      await AudioManager.speakAsync(tap.spoken, { rate: 0.85, pitch: 1.35 });
+      await waitMs(350);
+    }
+    if (isDemoCancelled.current) return;
+
     // Inside View Basket modal: Select option 5
     setTutorialMessage('There are 5 fruits in all! Tap number 5!');
     await AudioManager.speakAsync('There are 5 fruits in all! Tap number 5!', { rate: 0.78, pitch: 1.3 });

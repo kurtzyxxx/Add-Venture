@@ -214,46 +214,57 @@ export const StepThreeVisual: React.FC = () => {
 
 // ─── Step 4: Tap Basket Fruits to Count ───────────────────────────────────────
 export const StepFourVisual: React.FC = () => {
-  const activeIdxAnim = useRef(new Animated.Value(0)).current;
-  const [highlightIdx, setHighlightIdx] = React.useState(0);
+  const [countedMap, setCountedMap] = React.useState<{ [key: number]: number }>({ 2: 1 });
+  const [highlightIdx, setHighlightIdx] = React.useState<number | null>(2);
 
+  // Demonstrate arbitrary-order sequential counting (order: 2 -> 0 -> 4 -> 1 -> 3)
   useEffect(() => {
-    let count = 0;
+    const demoOrder = [2, 0, 4, 1, 3];
+    let step = 1;
     const interval = setInterval(() => {
-      count = (count + 1) % 5;
-      setHighlightIdx(count);
-    }, 700);
+      const idx = demoOrder[step % demoOrder.length];
+      setHighlightIdx(idx);
+      setCountedMap(prev => {
+        const nextNum = Object.keys(prev).length >= 5 ? 1 : Object.keys(prev).length + 1;
+        if (nextNum === 1) return { [idx]: 1 };
+        return { ...prev, [idx]: nextNum };
+      });
+      step++;
+    }, 950);
     return () => clearInterval(interval);
   }, []);
 
   const fruits = [
-    { emoji: '🍎', num: 1 },
-    { emoji: '🍎', num: 2 },
-    { emoji: '🍌', num: 3 },
-    { emoji: '🍌', num: 4 },
-    { emoji: '🍌', num: 5 },
+    { emoji: '🍎', id: 0 },
+    { emoji: '🍎', id: 1 },
+    { emoji: '🍌', id: 2 },
+    { emoji: '🍌', id: 3 },
+    { emoji: '🍌', id: 4 },
   ];
 
   return (
     <View style={styles.cardVisualContainer}>
-      <Text style={styles.hintSubtext}>Tap each fruit in the basket to hear its count!</Text>
+      <Text style={styles.hintSubtext}>Tap fruits in ANY order — counts sequentially!</Text>
       
       <View style={styles.basketTapContainer}>
         <View style={styles.basketFruitsRow}>
           {fruits.map((f, i) => {
             const isCurrent = highlightIdx === i;
+            const assignedNum = countedMap[i];
+            const isCounted = assignedNum !== undefined;
             return (
               <View key={i} style={styles.fruitTapWrapper}>
                 <View
                   style={[
                     styles.fruitTapCircle,
-                    isCurrent && { transform: [{ scale: 1.25 }], borderColor: '#FF9800', backgroundColor: '#FFF3E0' },
+                    isCounted && { borderColor: '#FFB300', backgroundColor: '#FFF9C4' },
+                    isCurrent && { transform: [{ scale: 1.25 }], borderColor: '#FF9800', elevation: 4 },
                   ]}
                 >
                   <Text style={styles.miniFruit}>{f.emoji}</Text>
-                  {isCurrent && (
+                  {isCounted && (
                     <View style={styles.tapNumBadge}>
-                      <Text style={styles.tapNumText}>{f.num}</Text>
+                      <Text style={styles.tapNumText}>{assignedNum}</Text>
                     </View>
                   )}
                 </View>
@@ -266,6 +277,10 @@ export const StepFourVisual: React.FC = () => {
 
       <View style={styles.totalBadge}>
         <Text style={styles.totalBadgeText}>Total = 5 Fruits! 🎉</Text>
+      </View>
+
+      <View style={styles.streakInfoPill}>
+        <Text style={styles.streakInfoText}>⚡ 5-Streak Mode: Silent highlight (mental math mode!)</Text>
       </View>
     </View>
   );
@@ -373,9 +388,9 @@ export const COUNT_ALL_TUTORIAL_STEPS: TutorialStepConfig[] = [
   },
   {
     stepNumber: 4,
-    title: 'Tap to Count in Basket!',
-    tagline: 'You can tap any fruit in the basket to count them.',
-    speechText: 'You can tap any fruit in the basket to count them one by one!',
+    title: 'Tap in Any Order to Count!',
+    tagline: 'Tap any fruit in the basket to count sequentially.',
+    speechText: 'You can tap each fruit in the basket in any order to count them! On a five streak, fruits highlight silently so you can count in your head!',
     renderVisual: () => <StepFourVisual />,
   },
   {
@@ -611,6 +626,20 @@ const styles = StyleSheet.create({
     color: '#1B5E20',
     fontWeight: 'bold',
     fontSize: 13,
+  },
+  streakInfoPill: {
+    marginTop: 8,
+    backgroundColor: '#EDE7F6',
+    borderWidth: 1,
+    borderColor: '#B39DDB',
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  streakInfoText: {
+    fontSize: 11,
+    color: '#512DA8',
+    fontWeight: '700',
   },
   optionsDemoRow: {
     flexDirection: 'row',

@@ -139,61 +139,75 @@ export const CountOnStepTwoVisual: React.FC = () => {
 
 // ─── Step 3: Tap Basket to Hear Counts ─────────────────────────────────────────
 export const CountOnStepThreeVisual: React.FC = () => {
-  const [activeIdx, setActiveIdx] = useState(0);
+  const [countedMap, setCountedMap] = useState<{ [key: number]: number }>({ 3: 1, 0: 2 });
+  const [activeIdx, setActiveIdx] = useState<number | null>(0);
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      setActiveIdx(prev => (prev + 1) % 3);
-    }, 850);
-    return () => clearInterval(timer);
+    const demoOrder = [3, 0, 4, 1, 5, 2];
+    let step = 2;
+    const interval = setInterval(() => {
+      const idx = demoOrder[step % demoOrder.length];
+      setActiveIdx(idx);
+      setCountedMap(prev => {
+        const nextNum = Object.keys(prev).length >= 6 ? 1 : Object.keys(prev).length + 1;
+        if (nextNum === 1) return { [idx]: 1 };
+        return { ...prev, [idx]: nextNum };
+      });
+      step++;
+    }, 950);
+    return () => clearInterval(interval);
   }, []);
 
-  const extraFruits = [
-    { num: 6, emoji: '🍎' },
-    { num: 7, emoji: '🍎' },
-    { num: 8, emoji: '🍎' },
+  const fruits = [
+    { id: 0, emoji: '🍎' },
+    { id: 1, emoji: '🍎' },
+    { id: 2, emoji: '🍎' },
+    { id: 3, emoji: '🍎' },
+    { id: 4, emoji: '🍎' },
+    { id: 5, emoji: '🍎' },
   ];
 
   return (
     <View style={styles.cardVisualContainer}>
-      <Text style={styles.cardHintText}>Tap any added fruit to hear its count!</Text>
+      <Text style={styles.cardHintText}>🔍 View Basket: Tap ANY fruit in any order to count!</Text>
 
       <View style={styles.interactiveBasketBox}>
-        {/* Base bundle */}
-        <View style={styles.staticBundle}>
-          <Text style={{ fontSize: 36 }}>🧺</Text>
-          <View style={styles.staticBundleBadge}>
-            <Text style={styles.staticBundleText}>5</Text>
-          </View>
+        <View style={styles.zoomBasketHeader}>
+          <Text style={{ fontSize: 16 }}>🧺</Text>
+          <Text style={styles.zoomBasketTitle}>View Basket (All 6 Fruits)</Text>
         </View>
 
-        <Text style={styles.plusDivider}>+</Text>
-
-        {/* Added fruits */}
         <View style={styles.addedFruitsRow}>
-          {extraFruits.map((item, idx) => {
+          {fruits.map((item, idx) => {
             const isSelected = activeIdx === idx;
+            const assignedNum = countedMap[idx];
+            const isCounted = assignedNum !== undefined;
             return (
               <TouchableOpacity
-                key={item.num}
+                key={item.id}
                 style={styles.extraFruitItem}
                 activeOpacity={0.7}
                 onPress={() => {
                   setActiveIdx(idx);
+                  const nextNum = countedMap[idx] ?? Object.keys(countedMap).length + 1;
+                  setCountedMap(prev => ({ ...prev, [idx]: nextNum }));
                   AudioManager.stopSpeech();
-                  AudioManager.speak(`${item.num}`, { rate: 0.95, pitch: 1.35 });
+                  AudioManager.speak(`${nextNum}`, { rate: 0.95, pitch: 1.35 });
                 }}
               >
                 <View
                   style={[
                     styles.extraFruitCircle,
+                    isCounted && { borderColor: '#FFB300', backgroundColor: '#FFF9C4' },
                     isSelected && styles.extraFruitCircleActive,
                   ]}
                 >
                   <Text style={styles.fruitEmoji}>{item.emoji}</Text>
-                  <View style={[styles.numTag, isSelected && styles.numTagActive]}>
-                    <Text style={styles.numTagText}>{item.num}</Text>
-                  </View>
+                  {isCounted && (
+                    <View style={[styles.numTag, styles.numTagActive]}>
+                      <Text style={styles.numTagText}>{assignedNum}</Text>
+                    </View>
+                  )}
                 </View>
                 {isSelected && <Text style={styles.handSmall}>👆</Text>}
               </TouchableOpacity>
@@ -203,7 +217,11 @@ export const CountOnStepThreeVisual: React.FC = () => {
       </View>
 
       <View style={styles.resultBanner}>
-        <Text style={styles.resultBannerText}>5 ... 6 ... 7 ... 8 in all! 🌟</Text>
+        <Text style={styles.resultBannerText}>Sequential counting: 1 ... 2 ... 3 ... up to total! 🌟</Text>
+      </View>
+
+      <View style={styles.streakInfoPill}>
+        <Text style={styles.streakInfoText}>⚡ 5-Streak Mode: Silent highlight (mental math mode!)</Text>
       </View>
     </View>
   );
@@ -294,9 +312,9 @@ export const COUNT_ON_TUTORIAL_STEPS: TutorialStepConfig[] = [
   },
   {
     stepNumber: 3,
-    title: 'Tap to Practice!',
-    tagline: 'Tap any fruit in the basket to hear its count.',
-    speechText: 'You can tap each fruit in the basket to hear: 6, 7, 8! That tells you the total!',
+    title: 'View Basket & Tap to Count!',
+    tagline: 'Tap View Basket and count any fruit in arbitrary order.',
+    speechText: 'You can tap View Basket to see all fruits up close! Tap any fruit in any order to count them all together. On a five streak, they highlight silently without badges!',
     renderVisual: () => <CountOnStepThreeVisual />,
   },
   {
@@ -447,16 +465,27 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   interactiveBasketBox: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#FFFDE7',
     borderWidth: 2,
     borderColor: '#FFF59D',
     borderRadius: 18,
-    padding: 12,
+    padding: 10,
     width: '95%',
     marginVertical: 6,
+  },
+  zoomBasketHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+    gap: 6,
+  },
+  zoomBasketTitle: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#8D6E63',
   },
   staticBundle: {
     alignItems: 'center',
@@ -537,6 +566,20 @@ const styles = StyleSheet.create({
     color: '#2E7D32',
     fontWeight: '900',
     fontSize: 13,
+  },
+  streakInfoPill: {
+    marginTop: 8,
+    backgroundColor: '#EDE7F6',
+    borderWidth: 1,
+    borderColor: '#B39DDB',
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  streakInfoText: {
+    fontSize: 11,
+    color: '#512DA8',
+    fontWeight: '700',
   },
   optionsRow: {
     flexDirection: 'row',

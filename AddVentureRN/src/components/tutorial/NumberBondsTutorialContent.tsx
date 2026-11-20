@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Animated } from 'react-native';
+import { View, Text, StyleSheet, Animated, TouchableOpacity } from 'react-native';
+import { AudioManager } from '../../core/AudioManager';
 import { TutorialStepConfig } from './CountAllTutorialContent';
 
 // ─── Step 1: Meet the Number Bond Tree ─────────────────────────────────────────
@@ -55,11 +56,16 @@ export const NumberBondsStepOneVisual: React.FC = () => {
           </View>
         </View>
 
-        {/* V-Bond Lines & Total */}
+        {/* V-Bond Lines & Total Fruits */}
         <View style={styles.vBondContainer}>
           <Text style={styles.vLineText}>\  /</Text>
           <View style={styles.totalBadge}>
-            <Text style={styles.totalBadgeText}>Total = 10</Text>
+            <Text style={styles.totalBadgeText}>TOTAL FRUITS</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', maxWidth: 110, marginTop: 2 }}>
+              {Array.from({ length: 10 }).map((_, i) => (
+                <Text key={i} style={{ fontSize: 13, marginHorizontal: 1 }}>🍎</Text>
+              ))}
+            </View>
           </View>
         </View>
       </Animated.View>
@@ -67,48 +73,89 @@ export const NumberBondsStepOneVisual: React.FC = () => {
   );
 };
 
-// ─── Step 2: Check the Left Basket ───────────────────────────────────────────
+// ─── Step 2: Count Left Basket First ──────────────────────────────────────────
 export const NumberBondsStepTwoVisual: React.FC = () => {
-  const highlightAnim = useRef(new Animated.Value(1)).current;
+  const [activeFruitIdx, setActiveFruitIdx] = useState(0);
 
   useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(highlightAnim, { toValue: 1.15, duration: 600, useNativeDriver: true }),
-        Animated.timing(highlightAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
-      ])
-    );
-    loop.start();
-    return () => loop.stop();
+    let count = 0;
+    const interval = setInterval(() => {
+      count = (count + 1) % 4;
+      setActiveFruitIdx(count);
+    }, 850);
+    return () => clearInterval(interval);
   }, []);
+
+  const fruits = [1, 2, 3, 4];
+
+  const handleFruitTap = (num: number) => {
+    setActiveFruitIdx(num - 1);
+    AudioManager.stopSpeech();
+    AudioManager.speak(`${num}`, { rate: 0.95, pitch: 1.35 });
+  };
 
   return (
     <View style={styles.cardVisualContainer}>
+      <Text style={styles.explainText}>
+        Count each fruit in the left basket first to know where to start!
+      </Text>
+
       <View style={styles.stepTwoCard}>
-        <Animated.View style={[styles.focusBasketBox, { transform: [{ scale: highlightAnim }] }]}>
+        <View style={styles.focusBasketBox}>
           <Text style={styles.basketIconLarge}>🧺</Text>
-          <View style={styles.basketFruitsInside}>
-            <Text style={{ fontSize: 18 }}>🍎 🍎 🍎 🍎</Text>
+          <View style={styles.leftBasketCountRow}>
+            {fruits.map(num => {
+              const isCounted = num <= activeFruitIdx + 1;
+              const isCurrent = num === activeFruitIdx + 1;
+              return (
+                <TouchableOpacity
+                  key={num}
+                  activeOpacity={0.75}
+                  onPress={() => handleFruitTap(num)}
+                  style={styles.tapFruitWrapper}
+                >
+                  <View
+                    style={[
+                      styles.tapFruitCircle,
+                      isCounted && { borderColor: '#FFB300', backgroundColor: '#FFF9C4' },
+                      isCurrent && { transform: [{ scale: 1.2 }], borderColor: '#FF9800', elevation: 4 },
+                    ]}
+                  >
+                    <Text style={{ fontSize: 20 }}>🍎</Text>
+                    {isCounted && (
+                      <View style={styles.numTagBadge}>
+                        <Text style={styles.numTagBadgeText}>{num}</Text>
+                      </View>
+                    )}
+                  </View>
+                  {isCurrent && <Text style={styles.tapHandMini}>👆</Text>}
+                </TouchableOpacity>
+              );
+            })}
           </View>
           <View style={styles.partPill}>
-            <Text style={styles.partPillText}>Fixed Part: 4</Text>
+            <Text style={styles.partPillText}>Left Basket: 4 Fruits</Text>
           </View>
-        </Animated.View>
+        </View>
 
-        <Text style={styles.explainText}>
-          The left basket holds the known part (4). Look at the total on the trunk (10) to see what is missing!
+        <Text style={styles.subExplainText}>
+          Count 1, 2, 3, 4! Keep 4 in your head, then count on!
         </Text>
       </View>
     </View>
   );
 };
 
-// ─── Step 3: Drag Fruits to Right Basket ──────────────────────────────────────
+// ─── Step 3: Drag & Count On to Right Basket ─────────────────────────────────
 export const NumberBondsStepThreeVisual: React.FC = () => {
   const dragY = useRef(new Animated.Value(0)).current;
   const handOpacity = useRef(new Animated.Value(0)).current;
   const basketScale = useRef(new Animated.Value(1)).current;
   const [basketCount, setBasketCount] = useState(1);
+
+  // Left basket has 4. Next number clue begins at 4 + 1 = 5, then 6, 7...
+  const baseLeft = 4;
+  const currentTotal = baseLeft + basketCount;
 
   useEffect(() => {
     let active = true;
@@ -132,7 +179,7 @@ export const NumberBondsStepThreeVisual: React.FC = () => {
         Animated.delay(300),
       ]).start(() => {
         if (active) {
-          count = count >= 6 ? 1 : count + 1;
+          count = count >= 3 ? 1 : count + 1;
           setBasketCount(count);
           runDrag();
         }
@@ -145,7 +192,11 @@ export const NumberBondsStepThreeVisual: React.FC = () => {
 
   return (
     <View style={styles.cardVisualContainer}>
-      {/* Tree canopy with drag fruit */}
+      <Text style={styles.explainText}>
+        Narrator starts counting from the next number of the left basket!
+      </Text>
+
+      {/* Canopy with draggable fruit */}
       <View style={styles.demoCanopyBox}>
         <Text style={styles.demoCanopyTitle}>🌳 Tree Branches</Text>
         <View style={styles.demoBranchFruitRow}>
@@ -162,20 +213,155 @@ export const NumberBondsStepThreeVisual: React.FC = () => {
 
       <Text style={styles.arrowDown}>⬇️</Text>
 
-      {/* Right basket drop area */}
-      <Animated.View style={[styles.demoRightBasket, { transform: [{ scale: basketScale }] }]}>
-        <Text style={styles.basketIconLarge}>🧺</Text>
-        <Text style={styles.demoRightBasketLabel}>Right Basket (Answer Area)</Text>
-        <View style={styles.counterBadge}>
-          <Text style={styles.counterBadgeText}>Added: {basketCount}</Text>
+      {/* Dual preview: Left basket (4) + Right basket receiving fruit */}
+      <View style={styles.dualBasketsPreviewRow}>
+        <View style={styles.previewLeftBasket}>
+          <Text style={{ fontSize: 20 }}>🧺</Text>
+          <Text style={styles.previewBasketLabel}>Left: 4</Text>
         </View>
-      </Animated.View>
+        <Text style={styles.plusSign}>+</Text>
+        <Animated.View style={[styles.previewRightBasket, { transform: [{ scale: basketScale }] }]}>
+          <Text style={{ fontSize: 20 }}>🧺</Text>
+          <View style={styles.counterBadge}>
+            <Text style={styles.counterBadgeText}>
+              Count: {currentTotal}! ({baseLeft}+{basketCount})
+            </Text>
+          </View>
+        </Animated.View>
+      </View>
     </View>
   );
 };
 
-// ─── Step 4: Select Choice & Submit ───────────────────────────────────────────
-export const NumberBondsStepFourVisual: React.FC = () => {
+// ─── Step 4: Tap Either Basket in Any Order to Count ──────────────────────────
+export const NumberBondsTapToCountVisual: React.FC = () => {
+  const [countedMap, setCountedMap] = useState<{ [key: string]: number }>({
+    left_0: 1,
+    right_0: 2,
+  });
+  const [highlightKey, setHighlightKey] = useState<string | null>('right_0');
+
+  // Demonstrate arbitrary-order tapping: left 0 -> right 0 -> left 1 -> right 1 -> left 2
+  useEffect(() => {
+    const demoOrder = ['left_0', 'right_0', 'left_1', 'right_1', 'left_2'];
+    let step = 2;
+    const interval = setInterval(() => {
+      const key = demoOrder[step % demoOrder.length];
+      setHighlightKey(key);
+      setCountedMap(prev => {
+        const nextNum = Object.keys(prev).length >= 5 ? 1 : Object.keys(prev).length + 1;
+        if (nextNum === 1) return { [key]: 1 };
+        return { ...prev, [key]: nextNum };
+      });
+      step++;
+    }, 950);
+    return () => clearInterval(interval);
+  }, []);
+
+  const leftFruits = ['left_0', 'left_1', 'left_2'];
+  const rightFruits = ['right_0', 'right_1'];
+
+  const handleFruitTap = (key: string) => {
+    setHighlightKey(key);
+    setCountedMap(prev => {
+      const nextNum = prev[key] ?? Object.keys(prev).length + 1;
+      AudioManager.stopSpeech();
+      AudioManager.speak(`${nextNum}`, { rate: 0.95, pitch: 1.35 });
+      return { ...prev, [key]: nextNum };
+    });
+  };
+
+  return (
+    <View style={styles.cardVisualContainer}>
+      <Text style={styles.explainText}>
+        Tap fruits in EITHER basket in any order to count them all!
+      </Text>
+
+      <View style={styles.dualBasketsInteractiveRow}>
+        {/* Left Basket Cluster */}
+        <View style={styles.interactiveBasketCol}>
+          <Text style={styles.interactiveBasketTitle}>🧺 Left Basket</Text>
+          <View style={styles.miniClusterRow}>
+            {leftFruits.map(key => {
+              const isSelected = highlightKey === key;
+              const assignedNum = countedMap[key];
+              const isCounted = assignedNum !== undefined;
+              return (
+                <TouchableOpacity
+                  key={key}
+                  style={styles.tapFruitWrapper}
+                  activeOpacity={0.7}
+                  onPress={() => handleFruitTap(key)}
+                >
+                  <View
+                    style={[
+                      styles.tapFruitCircle,
+                      isCounted && { borderColor: '#FFB300', backgroundColor: '#FFF9C4' },
+                      isSelected && styles.tapFruitCircleActive,
+                    ]}
+                  >
+                    <Text style={{ fontSize: 20 }}>🍎</Text>
+                    {isCounted && (
+                      <View style={styles.numTagBadge}>
+                        <Text style={styles.numTagBadgeText}>{assignedNum}</Text>
+                      </View>
+                    )}
+                  </View>
+                  {isSelected && <Text style={styles.tapHandMini}>👆</Text>}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        <Text style={styles.plusSign}>+</Text>
+
+        {/* Right Basket Cluster */}
+        <View style={styles.interactiveBasketCol}>
+          <Text style={styles.interactiveBasketTitle}>🧺 Right Basket</Text>
+          <View style={styles.miniClusterRow}>
+            {rightFruits.map(key => {
+              const isSelected = highlightKey === key;
+              const assignedNum = countedMap[key];
+              const isCounted = assignedNum !== undefined;
+              return (
+                <TouchableOpacity
+                  key={key}
+                  style={styles.tapFruitWrapper}
+                  activeOpacity={0.7}
+                  onPress={() => handleFruitTap(key)}
+                >
+                  <View
+                    style={[
+                      styles.tapFruitCircle,
+                      isCounted && { borderColor: '#FFB300', backgroundColor: '#FFF9C4' },
+                      isSelected && styles.tapFruitCircleActive,
+                    ]}
+                  >
+                    <Text style={{ fontSize: 20 }}>🍎</Text>
+                    {isCounted && (
+                      <View style={styles.numTagBadge}>
+                        <Text style={styles.numTagBadgeText}>{assignedNum}</Text>
+                      </View>
+                    )}
+                  </View>
+                  {isSelected && <Text style={styles.tapHandMini}>👆</Text>}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.streakInfoPill}>
+        <Text style={styles.streakInfoText}>⚡ 5-Streak Mode: Silent highlight (mental math mode!)</Text>
+      </View>
+    </View>
+  );
+};
+
+// ─── Step 5: Select Choice & Submit ───────────────────────────────────────────
+export const NumberBondsStepFiveVisual: React.FC = () => {
   const submitScale = useRef(new Animated.Value(1)).current;
   const starOpacity = useRef(new Animated.Value(0)).current;
 
@@ -246,30 +432,37 @@ export const NUMBER_BONDS_TUTORIAL_STEPS: TutorialStepConfig[] = [
   {
     stepNumber: 1,
     title: 'Meet the Number Bond Tree!',
-    tagline: 'See the two baskets and the total number on the trunk.',
-    speechText: 'Welcome to Number Bonds! The tree shows two baskets and the total number on the trunk!',
+    tagline: 'See the two baskets and the total fruits on the trunk.',
+    speechText: 'Welcome to Number Bonds! The tree shows two baskets and the total fruits on the trunk! Tap the total box to count them up close in the modal!',
     renderVisual: () => <NumberBondsStepOneVisual />,
   },
   {
     stepNumber: 2,
-    title: 'Check the Left Basket!',
-    tagline: 'The left basket holds the fixed number pair.',
-    speechText: 'The left basket already has a fixed number of fruits. Look at the total on the trunk to see how many we need in all!',
+    title: 'Count Left Basket First!',
+    tagline: 'Count each fruit in the left basket individually to know where to start.',
+    speechText: 'Count each fruit in the left basket individually first! One, two, three, four! Keep that starting number in your head!',
     renderVisual: () => <NumberBondsStepTwoVisual />,
   },
   {
     stepNumber: 3,
-    title: 'Drag Fruits from Tree to Basket!',
-    tagline: 'Drag fruits down from the branches into the right basket.',
-    speechText: 'Drag fruits from the tree branches down into the right basket to fill in the missing number!',
+    title: 'Drag Fruits & Count On!',
+    tagline: 'Drag fruits down into the right basket to count on from the left basket.',
+    speechText: 'Now count on from the left basket! Drag fruits into the right basket and count: 5, 6, 7... to reach the total!',
     renderVisual: () => <NumberBondsStepThreeVisual />,
   },
   {
     stepNumber: 4,
+    title: 'Tap to Count & Total Modal!',
+    tagline: 'Tap either basket or tap the Total Box to count all fruits.',
+    speechText: 'You can tap fruits in either basket in any order to count sequentially, or tap the Total Box to count all fruits in the popup modal! On a 5-streak, fruits highlight silently!',
+    renderVisual: () => <NumberBondsTapToCountVisual />,
+  },
+  {
+    stepNumber: 5,
     title: 'Select Choice & Submit!',
     tagline: 'Pick the matching number and tap Submit to win stars!',
     speechText: 'Pick the matching number below and press Submit to complete the bond and earn your stars! Have fun!',
-    renderVisual: () => <NumberBondsStepFourVisual />,
+    renderVisual: () => <NumberBondsStepFiveVisual />,
   },
 ];
 
@@ -377,15 +570,17 @@ const styles = StyleSheet.create({
   },
   totalBadge: {
     backgroundColor: '#FF6F00',
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: 12,
     marginTop: 2,
+    alignItems: 'center',
   },
   totalBadgeText: {
-    color: '#FFF',
-    fontSize: 14,
+    color: '#FFE082',
+    fontSize: 10,
     fontWeight: '900',
+    letterSpacing: 0.5,
   },
   stepTwoCard: {
     alignItems: 'center',
@@ -396,12 +591,26 @@ const styles = StyleSheet.create({
     borderWidth: 2.5,
     borderColor: '#FFB300',
     borderRadius: 25,
-    padding: 12,
+    padding: 10,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 8,
-    width: 140,
-    height: 165,
+    width: 175,
+    minHeight: 145,
+  },
+  leftBasketCountRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    marginVertical: 6,
+  },
+  subExplainText: {
+    fontSize: 11,
+    color: '#2E7D32',
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginTop: 4,
   },
   basketFruitsInside: {
     marginVertical: 4,
@@ -541,5 +750,114 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '900',
     color: '#FFF',
+  },
+  dualBasketsPreviewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    marginTop: 4,
+  },
+  previewLeftBasket: {
+    backgroundColor: '#E1F5FE',
+    borderWidth: 1.5,
+    borderColor: '#0288D1',
+    borderRadius: 14,
+    padding: 6,
+    alignItems: 'center',
+  },
+  previewBasketLabel: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    color: '#0288D1',
+  },
+  previewRightBasket: {
+    backgroundColor: '#FFF3E0',
+    borderWidth: 1.5,
+    borderColor: '#FF9800',
+    borderStyle: 'dashed',
+    borderRadius: 14,
+    padding: 6,
+    alignItems: 'center',
+  },
+  dualBasketsInteractiveRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginVertical: 6,
+    width: '95%',
+  },
+  interactiveBasketCol: {
+    backgroundColor: '#FFFDE7',
+    borderWidth: 1.5,
+    borderColor: '#FFD54F',
+    borderRadius: 14,
+    padding: 8,
+    alignItems: 'center',
+    flex: 1,
+  },
+  interactiveBasketTitle: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    color: '#5D4037',
+    marginBottom: 4,
+  },
+  miniClusterRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  tapFruitWrapper: {
+    alignItems: 'center',
+  },
+  tapFruitCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FFF',
+    borderWidth: 1.5,
+    borderColor: '#E0E0E0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  tapFruitCircleActive: {
+    borderColor: '#FF9800',
+    transform: [{ scale: 1.15 }],
+  },
+  numTagBadge: {
+    position: 'absolute',
+    top: -5,
+    right: -4,
+    backgroundColor: '#E65100',
+    borderRadius: 7,
+    width: 15,
+    height: 15,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  numTagBadgeText: {
+    color: '#FFF',
+    fontSize: 9,
+    fontWeight: '900',
+  },
+  tapHandMini: {
+    fontSize: 14,
+    marginTop: 2,
+  },
+  streakInfoPill: {
+    marginTop: 8,
+    backgroundColor: '#EDE7F6',
+    borderWidth: 1,
+    borderColor: '#B39DDB',
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  streakInfoText: {
+    fontSize: 11,
+    color: '#512DA8',
+    fontWeight: '700',
   },
 });
