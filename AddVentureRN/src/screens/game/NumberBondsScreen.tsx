@@ -15,8 +15,6 @@ import { HintBox } from '../../components/HintBox';
 import { PulseView } from '../../components/animations/PulseView';
 import { TimerBar } from '../../components/TimerBar';
 import { AudioManager } from '../../core/AudioManager';
-import { GameTutorialModal } from '../../components/tutorial/GameTutorialModal';
-import { NUMBER_BONDS_TUTORIAL_STEPS } from '../../components/tutorial/NumberBondsTutorialContent';
 import { FiveStreakModal } from '../../components/FiveStreakModal';
 import { IncorrectModal } from '../../components/IncorrectModal';
 import { OliverSpeechBalloon } from '../../components/OliverSpeechBalloon';
@@ -35,6 +33,16 @@ interface TreeFruit {
   dropped: boolean;
 }
 
+const getBasketDimensions = (count: number) => {
+  if (count >= 8) {
+    return { width: 132, height: 164, emojiSize: 18, clusterMaxWidth: 110 };
+  }
+  if (count >= 6) {
+    return { width: 126, height: 156, emojiSize: 20, clusterMaxWidth: 104 };
+  }
+  return { width: 120, height: 148, emojiSize: 22, clusterMaxWidth: 98 };
+};
+
 export default function NumberBondsScreen({ navigation }: Props) {
   const [problem, setProblem] = useState<Problem | null>(null);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
@@ -49,15 +57,33 @@ export default function NumberBondsScreen({ navigation }: Props) {
 
   // In-UI automated demonstration states & refs
   const [isDemonstrating, setIsDemonstrating] = useState(false);
+  const isDemonstratingRef = useRef(false);
   const [demoMessage, setDemoMessage] = useState('');
   const [highlightedFruitId, setHighlightedFruitId] = useState<string | null>(null);
   const [animatingFruitId, setAnimatingFruitId] = useState<string | null>(null);
   const [isTotalBadgeHighlighted, setIsTotalBadgeHighlighted] = useState(false);
   const [isLeftBasketHighlighted, setIsLeftBasketHighlighted] = useState(false);
+  const [isRightBasketHighlighted, setIsRightBasketHighlighted] = useState(false);
   const [isCheckHighlighted, setIsCheckHighlighted] = useState(false);
   const [demoCountingIndex, setDemoCountingIndex] = useState<number | null>(null);
   const [demoMaxCountedIndex, setDemoMaxCountedIndex] = useState<number | null>(null);
   const [remediationCycle, setRemediationCycle] = useState(0);
+
+  // User interactive fruit counting states
+  const [userCountedIndices, setUserCountedIndices] = useState<Set<number>>(new Set());
+  const [userActiveCountIndex, setUserActiveCountIndex] = useState<number | null>(null);
+
+  // Synchronized problem dictation
+  const [highlightPhase, setHighlightPhase] = useState<'idle' | 'partA' | 'partB' | 'total'>('idle');
+  const readingTokenRef = useRef(0);
+  const currentProblemRef = useRef<Problem | null>(null);
+
+  // In-game tutorial walkthrough mode
+  const [isTutorialMode, setIsTutorialMode] = useState(true);
+  const isTutorialModeRef = useRef(true);
+  const [tutorialMessage, setTutorialMessage] = useState('');
+  const [tutorialFinished, setTutorialFinished] = useState(false);
+  const [roundKey, setRoundKey] = useState(0);
 
   const isDemoCancelled = useRef(false);
 
@@ -79,28 +105,292 @@ export default function NumberBondsScreen({ navigation }: Props) {
   const [isTimeoutError, setIsTimeoutError] = useState(false);
   const [lastWrongAnswer, setLastWrongAnswer] = useState<number | null>(null);
 
-  // Tutorial overlay
-  const [showTutorial, setShowTutorial] = useState(() => {
-    return !GameManager.getInstance().saveSystem.hasSeenTutorial('NUMBER_BONDS');
-  });
-
   // Pulse animation for the right basket drop zone when empty
   const basketPulse = useRef(new Animated.Value(1)).current;
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const pendingHintAction = useRef<(() => void) | null>(null);
 
-  useEffect(() => {
-    loadNewProblem(showTutorial);
-    if (!showTutorial) {
-      AudioManager.speak('Number Bonds! Look at the tree and fill the right basket to complete the bond!', {
-        rate: 0.9, pitch: 1.3,
+  const waitMs = (ms: number) => new Promise(res => setTimeout(res, ms));
+
+  const stopReadingAloud = () => {
+    readingTokenRef.current++;
+    AudioManager.stopSpeech();
+    setHighlightPhase('idle');
+  };
+
+  const readProblemAloud = async (targetProblem: Problem | null = null) => {
+    const p = targetProblem ?? currentProblemRef.current ?? problem;
+    if (!p || isDemonstratingRef.current || isTutorialModeRef.current) return;
+
+    const token = ++readingTokenRef.current;
+    AudioManager.stopSpeech();
+
+    const partA = p.num2;
+    const total = p.num1;
+    const partAFruitWord = partA === 1 ? 'fruit' : 'fruits';
+
+    try {
+      // Phase 1: Highlight Left Basket (Part A)
+      setHighlightPhase('partA');
+      await AudioManager.speakAsync(`The left basket has ${partA} ${partAFruitWord},`, {
+        rate: 0.78,
+        pitch: 1.25,
       });
+      if (readingTokenRef.current !== token) return;
+
+      await waitMs(200);
+      if (readingTokenRef.current !== token) return;
+
+      // Phase 2: Highlight Right Basket (?)
+      setHighlightPhase('partB');
+      await AudioManager.speakAsync(`what number goes with ${partA} to make ${total}?`, {
+        rate: 0.78,
+        pitch: 1.25,
+      });
+      if (readingTokenRef.current !== token) return;
+
+      await waitMs(200);
+      if (readingTokenRef.current !== token) return;
+
+      // Phase 3: Highlight Total on the tree trunk
+      setHighlightPhase('total');
+      await AudioManager.speakAsync(`Find the missing part to make a total of ${total}!`, {
+        rate: 0.78,
+        pitch: 1.3,
+      });
+      if (readingTokenRef.current !== token) return;
+
+      await waitMs(350);
+      if (readingTokenRef.current !== token) return;
+    } finally {
+      if (readingTokenRef.current === token) {
+        setHighlightPhase('idle');
+      }
     }
-  }, []);
+  };
+
+  const skipOrEndTutorial = async () => {
+    isDemoCancelled.current = true;
+    readingTokenRef.current++;
+    AudioManager.stopSpeech();
+
+    isTutorialModeRef.current = false;
+    isDemonstratingRef.current = false;
+    setIsTutorialMode(false);
+    setTutorialFinished(false);
+    setIsDemonstrating(false);
+    setSelectedFruitId(null);
+    setHighlightedFruitId(null);
+    setAnimatingFruitId(null);
+    setIsTotalBadgeHighlighted(false);
+    setIsLeftBasketHighlighted(false);
+    setIsRightBasketHighlighted(false);
+    setIsCheckHighlighted(false);
+    setDemoCountingIndex(null);
+    setDemoMaxCountedIndex(null);
+    setUserCountedIndices(new Set());
+    setUserActiveCountIndex(null);
+    setUserCountedIndices(new Set());
+    setUserActiveCountIndex(null);
+    setHighlightPhase('idle');
+
+    const gm = GameManager.getInstance();
+    setTimeLeft(gm.sessionTimerLimit);
+    loadNewProblem(false);
+  };
+
+  const startTutorialWalkthrough = async () => {
+    isTutorialModeRef.current = true;
+    isDemonstratingRef.current = true;
+    setIsTutorialMode(true);
+    setTutorialFinished(false);
+    setIsDemonstrating(true);
+    isDemoCancelled.current = false;
+    stopReadingAloud();
+
+    const tutProblem: Problem = {
+      num1: 5,
+      num2: 3,
+      correctAnswer: 2,
+    };
+    currentProblemRef.current = tutProblem;
+    setProblem(tutProblem);
+    setIsMasteryProblem(false);
+    setActivityCount(0);
+    setHintsDisabled(true);
+    setRoundKey(k => k + 1);
+
+    const fruitEmoji = '🍎';
+    const tutFruits: TreeFruit[] = Array.from({ length: 10 }, (_, i) => ({
+      id: `nb_fruit_${i}`,
+      emoji: fruitEmoji,
+      dropped: false,
+    }));
+    setTreeFruits(tutFruits);
+    setSelectedFruitId(null);
+    setSelectedOption(null);
+    setActiveHint(null);
+    setCurrentTry(1);
+    setHighlightedFruitId(null);
+    setAnimatingFruitId(null);
+    setIsTotalBadgeHighlighted(false);
+    setIsLeftBasketHighlighted(false);
+    setIsRightBasketHighlighted(false);
+    setIsCheckHighlighted(false);
+    setDemoCountingIndex(null);
+    setDemoMaxCountedIndex(null);
+    setUserCountedIndices(new Set());
+    setUserActiveCountIndex(null);
+    setUserCountedIndices(new Set());
+    setUserActiveCountIndex(null);
+
+    setTutorialMessage('Welcome to Number Bonds! Watch Oliver show you how to play.');
+    await AudioManager.speakAsync('Welcome to Number Bonds! Watch Oliver show you how to play.', {
+      rate: 0.78,
+      pitch: 1.25,
+    });
+    await waitMs(350);
+    if (isDemoCancelled.current) return;
+
+    // Dictate equation with highlights (Left Basket, Right Basket, Total Badge)
+    setTutorialMessage('The tree total is 5, and the left basket has 3.');
+    setHighlightPhase('partA');
+    setIsLeftBasketHighlighted(true);
+    await AudioManager.speakAsync('The left basket has 3 fruits,', { rate: 0.78, pitch: 1.25 });
+    if (isDemoCancelled.current) return;
+    await waitMs(200);
+
+    setHighlightPhase('partB');
+    setIsLeftBasketHighlighted(false);
+    setIsRightBasketHighlighted(true);
+    await AudioManager.speakAsync('what number goes with 3 to make 5?', { rate: 0.78, pitch: 1.25 });
+    if (isDemoCancelled.current) return;
+    await waitMs(200);
+
+    setHighlightPhase('total');
+    setIsRightBasketHighlighted(false);
+    setIsTotalBadgeHighlighted(true);
+    await AudioManager.speakAsync('The total on the tree trunk is 5!', { rate: 0.78, pitch: 1.3 });
+    if (isDemoCancelled.current) return;
+    await waitMs(350);
+
+    setHighlightPhase('idle');
+    setIsTotalBadgeHighlighted(false);
+
+    // Drag fruits to right basket
+    setTutorialMessage('Let’s drag 2 fruits into the right basket to make 5!');
+    await AudioManager.speakAsync('Let’s drag fruits from the branches into the right basket to make 5!', { rate: 0.78, pitch: 1.25 });
+    await waitMs(300);
+    if (isDemoCancelled.current) return;
+
+    // Drag Fruit 1 (id: nb_fruit_0)
+    setTutorialMessage('Fruit 1: Drag to right basket! (3 + 1 = 4)');
+    setHighlightedFruitId('nb_fruit_0');
+    setAnimatingFruitId('nb_fruit_0');
+    await waitMs(480);
+    if (isDemoCancelled.current) return;
+
+    setTreeFruits(prev => prev.map(f => f.id === 'nb_fruit_0' ? { ...f, dropped: true } : f));
+    setSelectedOption(1);
+    setHighlightedFruitId(null);
+    setAnimatingFruitId(null);
+    await AudioManager.speakAsync('One! 3 plus 1 is 4.', { rate: 0.78, pitch: 1.3 });
+    await waitMs(250);
+    if (isDemoCancelled.current) return;
+
+    // Drag Fruit 2 (id: nb_fruit_1)
+    setTutorialMessage('Fruit 2: Drag to right basket! (3 + 2 = 5)');
+    setHighlightedFruitId('nb_fruit_1');
+    setAnimatingFruitId('nb_fruit_1');
+    await waitMs(480);
+    if (isDemoCancelled.current) return;
+
+    setTreeFruits(prev => prev.map(f => f.id === 'nb_fruit_1' ? { ...f, dropped: true } : f));
+    setSelectedOption(2);
+    setHighlightedFruitId(null);
+    setAnimatingFruitId(null);
+    await AudioManager.speakAsync('Two! 3 plus 2 is 5!', { rate: 0.78, pitch: 1.3 });
+    await waitMs(300);
+    if (isDemoCancelled.current) return;
+
+    // Double-check count across both baskets
+    setTutorialMessage("Let's count both baskets together!");
+    await AudioManager.speakAsync("Let's count all the fruits to double-check!", { rate: 0.78, pitch: 1.25 });
+    await waitMs(250);
+    if (isDemoCancelled.current) return;
+
+    // Count Left basket (1, 2, 3)
+    setIsLeftBasketHighlighted(true);
+    for (let i = 0; i < 3; i++) {
+      if (isDemoCancelled.current) return;
+      const countNum = i + 1;
+      setDemoCountingIndex(i);
+      setDemoMaxCountedIndex(i);
+      setTutorialMessage(`Left basket: Fruit #${countNum}!`);
+      await AudioManager.speakAsync(`${countNum}`, { rate: 0.78, pitch: 1.35 });
+      await waitMs(250);
+    }
+    setIsLeftBasketHighlighted(false);
+
+    // Count Right basket (4, 5)
+    setIsRightBasketHighlighted(true);
+    for (let i = 0; i < 2; i++) {
+      if (isDemoCancelled.current) return;
+      const countNum = 3 + i + 1;
+      const globalIdx = 3 + i;
+      setDemoCountingIndex(globalIdx);
+      setDemoMaxCountedIndex(globalIdx);
+      setTutorialMessage(`Right basket: Fruit #${countNum}!`);
+      await AudioManager.speakAsync(`${countNum}`, { rate: 0.78, pitch: 1.35 });
+      await waitMs(250);
+    }
+    setIsRightBasketHighlighted(false);
+    setDemoCountingIndex(null);
+
+    // Recap equation
+    setTutorialMessage('3 + 2 = 5! A total of 5!');
+    await AudioManager.speakAsync('Double-checked! 3 plus 2 equals 5 in all!', { rate: 0.78, pitch: 1.3 });
+    await waitMs(350);
+    if (isDemoCancelled.current) return;
+
+    // Tap Check button
+    setTutorialMessage('Then tap Check to finish!');
+    setIsCheckHighlighted(true);
+    await AudioManager.speakAsync('Then tap Check!', { rate: 0.78, pitch: 1.3 });
+    await waitMs(450);
+    if (isDemoCancelled.current) return;
+
+    // Completion
+    setIsCheckHighlighted(false);
+    setTutorialMessage("Awesome! You're ready to play! 🚀");
+    await AudioManager.speakAsync("Hooray! That's how Number Bonds work! Now you're ready to play!", {
+      rate: 0.78,
+      pitch: 1.3,
+    });
+    if (isDemoCancelled.current) return;
+    setTutorialFinished(true);
+  };
+
+  useEffect(() => {
+    if (isTutorialMode) {
+      startTutorialWalkthrough();
+    } else {
+      loadNewProblem(false);
+    }
+    return () => {
+      isDemoCancelled.current = true;
+      stopReadingAloud();
+    };
+  }, [navigation]);
+
+  const handleOpenTutorial = () => {
+    stopReadingAloud();
+    startTutorialWalkthrough();
+  };
 
   // Timer only runs during active gameplay
   useEffect(() => {
-    if (showTutorial || isDemonstrating || showGreatJob || showFiveStreak || showIncorrectModal || !problem) {
+    if (isTutorialMode || isDemonstrating || showGreatJob || showFiveStreak || showIncorrectModal || !problem) {
       if (timerRef.current) {
         clearInterval(timerRef.current);
         timerRef.current = null;
@@ -115,17 +405,17 @@ export default function NumberBondsScreen({ navigation }: Props) {
         timerRef.current = null;
       }
     };
-  }, [showTutorial, isDemonstrating, showGreatJob, showFiveStreak, showIncorrectModal, problem]);
+  }, [isTutorialMode, isDemonstrating, showGreatJob, showFiveStreak, showIncorrectModal, problem]);
 
   useEffect(() => {
-    if (timeLeft === 0 && !showTutorial && !isDemonstrating && !showGreatJob && !showFiveStreak && !showIncorrectModal && problem && selectedOption === null) {
+    if (timeLeft === 0 && !isTutorialMode && !isDemonstrating && !showGreatJob && !showFiveStreak && !showIncorrectModal && problem && selectedOption === null) {
       handleTimeUp();
     }
-  }, [timeLeft, showTutorial, isDemonstrating, showGreatJob, showFiveStreak, showIncorrectModal, problem, selectedOption]);
+  }, [timeLeft, isTutorialMode, isDemonstrating, showGreatJob, showFiveStreak, showIncorrectModal, problem, selectedOption]);
 
   // Pulse right basket when awaiting answers
   useEffect(() => {
-    if (selectedOption === null) {
+    if (selectedOption === null && !isTutorialMode && !isDemonstrating) {
       const loop = Animated.loop(
         Animated.sequence([
           Animated.timing(basketPulse, { toValue: 1.05, duration: 800, useNativeDriver: true }),
@@ -137,7 +427,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
     } else {
       basketPulse.setValue(1);
     }
-  }, [selectedOption]);
+  }, [selectedOption, isTutorialMode, isDemonstrating]);
 
   const handleTimeUp = async () => {
     if (!problem || isDemonstrating || showIncorrectModal) return;
@@ -156,6 +446,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
   };
 
   const loadNewProblem = (silent = false) => {
+    stopReadingAloud();
     const gm = GameManager.getInstance();
     let p: Problem;
     let isMastery = false;
@@ -168,9 +459,11 @@ export default function NumberBondsScreen({ navigation }: Props) {
       p = gm.generateProblem();
     }
 
+    currentProblemRef.current = p;
     setIsMasteryProblem(isMastery);
     setProblem(p);
     setSelectedOption(null);
+    setSelectedFruitId(null);
     setActiveHint(null);
     setCurrentTry(1);
     setRemediationCycle(0);
@@ -178,6 +471,11 @@ export default function NumberBondsScreen({ navigation }: Props) {
     setJustMastered(false);
     setDemoCountingIndex(null);
     setDemoMaxCountedIndex(null);
+    setUserCountedIndices(new Set());
+    setUserActiveCountIndex(null);
+    setUserCountedIndices(new Set());
+    setUserActiveCountIndex(null);
+    setRoundKey(k => k + 1);
 
     const pCount = gm.getSessionActivityCount();
     setActivityCount(pCount);
@@ -195,18 +493,20 @@ export default function NumberBondsScreen({ navigation }: Props) {
     setTreeFruits(newTreeFruits);
 
     if (!silent) {
-      AudioManager.stopSpeech();
       setTimeout(() => {
-        const msg = isMastery
-          ? `Keep going! What goes with ${p.num2} to make ${p.num1}?`
-          : `What number goes with ${p.num2} to make ${p.num1}?`;
-        AudioManager.speak(msg, { rate: 0.95, pitch: 1.4 });
-      }, 300);
+        if (isMastery) {
+          AudioManager.speak('Keep going! Practice makes perfect.', { rate: 0.78, pitch: 1.3 });
+          setTimeout(() => readProblemAloud(p), 1800);
+        } else {
+          readProblemAloud(p);
+        }
+      }, 350);
     }
   };
 
   // Tap-to-select fruit from canopy (Hybrid interaction FR-NB-02)
   const handleSelectFruit = (fruitId: string) => {
+    stopReadingAloud();
     if (isDemonstrating) return;
     try {
       Vibration.vibrate(30);
@@ -226,6 +526,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
 
   // Tap-to-target placement into right basket (Hybrid interaction FR-NB-02)
   const handleRightBasketPress = () => {
+    stopReadingAloud();
     if (isDemonstrating) return;
     if (selectedFruitId) {
       handleDropFruit(selectedFruitId);
@@ -240,10 +541,17 @@ export default function NumberBondsScreen({ navigation }: Props) {
 
   // Drag or Tap fruit from canopy into right basket with magnetic snap feedback
   const handleDropFruit = (fruitId: string) => {
+    stopReadingAloud();
     try {
       Vibration.vibrate(40);
     } catch (_) {}
     setSelectedFruitId(null);
+
+    // Dynamic expand bounce feedback on the basket
+    Animated.sequence([
+      Animated.timing(basketPulse, { toValue: 1.1, duration: 100, useNativeDriver: true }),
+      Animated.spring(basketPulse, { toValue: 1, friction: 4, useNativeDriver: true }),
+    ]).start();
 
     setTreeFruits(prev => {
       const next = prev.map(f => (f.id === fruitId ? { ...f, dropped: true } : f));
@@ -259,11 +567,64 @@ export default function NumberBondsScreen({ navigation }: Props) {
     });
   };
 
-  // Tap fruit in right basket to return to tree
-  const handleRemoveFruit = (fruitId: string) => {
+  // User tap-to-count fruit in Left Basket
+  const handleTapLeftFruit = (index: number) => {
+    if (isDemonstrating) return;
+    stopReadingAloud();
     try {
       Vibration.vibrate(25);
     } catch (_) {}
+
+    const fruitNum = index + 1;
+    setUserCountedIndices(prev => new Set(prev).add(index));
+    setUserActiveCountIndex(index);
+
+    AudioManager.stopSpeech();
+    AudioManager.speak(`${fruitNum}`, { rate: 0.95, pitch: 1.35 });
+
+    setTimeout(() => {
+      setUserActiveCountIndex(current => (current === index ? null : current));
+    }, 600);
+  };
+
+  // User tap-to-count fruit in Right Basket
+  const handleTapRightFruit = (index: number) => {
+    if (isDemonstrating) return;
+    stopReadingAloud();
+    try {
+      Vibration.vibrate(25);
+    } catch (_) {}
+
+    if (!problem) return;
+    const globalIdx = problem.num2 + index;
+    const fruitNum = globalIdx + 1;
+
+    setUserCountedIndices(prev => new Set(prev).add(globalIdx));
+    setUserActiveCountIndex(globalIdx);
+
+    AudioManager.stopSpeech();
+    if (fruitNum === problem.num1) {
+      AudioManager.speak(`${fruitNum}! That makes ${problem.num1} fruits in all!`, {
+        rate: 0.92,
+        pitch: 1.35,
+      });
+    } else {
+      AudioManager.speak(`${fruitNum}`, { rate: 0.95, pitch: 1.35 });
+    }
+
+    setTimeout(() => {
+      setUserActiveCountIndex(current => (current === globalIdx ? null : current));
+    }, 600);
+  };
+
+  // Tap fruit in right basket to return to tree (or long-press)
+  const handleRemoveFruit = (fruitId: string) => {
+    stopReadingAloud();
+    try {
+      Vibration.vibrate(25);
+    } catch (_) {}
+    setUserCountedIndices(new Set());
+    setUserActiveCountIndex(null);
     setTreeFruits(prev => {
       const next = prev.map(f => (f.id === fruitId ? { ...f, dropped: false } : f));
       const droppedCount = next.filter(f => f.dropped).length;
@@ -274,43 +635,37 @@ export default function NumberBondsScreen({ navigation }: Props) {
 
   // Reset right basket
   const handleResetRightBasket = () => {
+    stopReadingAloud();
     try {
       Vibration.vibrate(25);
     } catch (_) {}
     setSelectedFruitId(null);
+    setUserCountedIndices(new Set());
+    setUserActiveCountIndex(null);
+    setRoundKey(k => k + 1);
     setTreeFruits(prev => prev.map(f => ({ ...f, dropped: false })));
     setSelectedOption(null);
     AudioManager.stopSpeech();
     AudioManager.speak('Basket cleared.', { rate: 0.95, pitch: 1.25 });
   };
 
-  const handleCloseTutorial = async (dontShowAgain: boolean) => {
-    setShowTutorial(false);
-    const gm = GameManager.getInstance();
-    if (dontShowAgain) {
-      await gm.saveSystem.markTutorialSeen('NUMBER_BONDS', true);
-    }
-    setTimeLeft(gm.sessionTimerLimit);
-    AudioManager.speak('Number Bonds! Look at the tree and fill the right basket to complete the bond!', {
-      rate: 0.9, pitch: 1.3,
-    });
-  };
-
-  const handleOpenTutorial = () => {
-    AudioManager.stopSpeech();
-    setShowTutorial(true);
-  };
-
   // Reset all tree fruits and player answer selection
   const resetFruitsAndAnswer = () => {
+    stopReadingAloud();
     setSelectedFruitId(null);
+    setUserCountedIndices(new Set());
+    setUserActiveCountIndex(null);
+    setRoundKey(k => k + 1);
     setTreeFruits(prev => prev.map(f => ({ ...f, dropped: false })));
     setSelectedOption(null);
     setDemoCountingIndex(null);
     setDemoMaxCountedIndex(null);
+    setUserCountedIndices(new Set());
+    setUserActiveCountIndex(null);
   };
 
   const submitCheck = async () => {
+    stopReadingAloud();
     if (selectedOption === null || !problem) return;
     const gm = GameManager.getInstance();
     const isCorrect = selectedOption === problem.correctAnswer;
@@ -358,16 +713,17 @@ export default function NumberBondsScreen({ navigation }: Props) {
     else loadNewProblem();
   };
 
-  const waitMs = (ms: number) => new Promise(res => setTimeout(res, ms));
-
   const startAutomatedDemonstration = async (isTimeout = false) => {
+    stopReadingAloud();
     if (!problem) return;
+    isDemonstratingRef.current = true;
     setIsDemonstrating(true);
     isDemoCancelled.current = false;
     setRemediationCycle(c => c + 1);
 
     // Reset dropped fruits so demonstration starts clean
     setSelectedFruitId(null);
+    setRoundKey(k => k + 1);
     setTreeFruits(prev => prev.map(f => ({ ...f, dropped: false })));
     setSelectedOption(null);
     setHighlightedFruitId(null);
@@ -377,6 +733,8 @@ export default function NumberBondsScreen({ navigation }: Props) {
     setIsCheckHighlighted(false);
     setDemoCountingIndex(null);
     setDemoMaxCountedIndex(null);
+    setUserCountedIndices(new Set());
+    setUserActiveCountIndex(null);
 
     const missingCount = problem.correctAnswer;
 
@@ -496,17 +854,22 @@ export default function NumberBondsScreen({ navigation }: Props) {
 
   const endDemonstration = () => {
     isDemoCancelled.current = true;
+    isDemonstratingRef.current = false;
     setIsDemonstrating(false);
     setHighlightedFruitId(null);
     setAnimatingFruitId(null);
     setIsTotalBadgeHighlighted(false);
     setIsLeftBasketHighlighted(false);
+    setIsRightBasketHighlighted(false);
     setIsCheckHighlighted(false);
     setDemoCountingIndex(null);
     setDemoMaxCountedIndex(null);
+    setUserCountedIndices(new Set());
+    setUserActiveCountIndex(null);
     setCurrentTry(prev => prev + 1);
 
     // Clear right basket for the student
+    setRoundKey(k => k + 1);
     setTreeFruits(prev => prev.map(f => ({ ...f, dropped: false })));
     setSelectedOption(null);
 
@@ -515,6 +878,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
   };
 
   const useHint = () => {
+    stopReadingAloud();
     if (!problem || hintsRemaining <= 0) return;
     const gm = GameManager.getInstance();
     const hint = gm.getHint(problem);
@@ -523,6 +887,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
   };
 
   const confirmUseHint = (beforeConfirm?: () => void) => {
+    stopReadingAloud();
     if (!problem || hintsRemaining <= 0) return;
     pendingHintAction.current = beforeConfirm ?? null;
     setShowHintConfirm(true);
@@ -562,14 +927,36 @@ export default function NumberBondsScreen({ navigation }: Props) {
   const droppedCount = droppedFruits.length;
   const showClues = profile.consecutiveCorrect < HINT_DISABLE_THRESHOLD;
 
+  const leftDim = getBasketDimensions(problem.num2);
+  const rightDim = getBasketDimensions(droppedCount);
+
   const sectionWidth = width - 24;
   const treeCenterX = sectionWidth / 2;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, isTutorialMode && styles.containerTutorial]}>
       <LinearGradient colors={['#A5D6A7', '#B2DFDB']} style={StyleSheet.absoluteFill} />
 
-      {isDemonstrating && (
+      {/* Tutorial Banner */}
+      {isTutorialMode && (
+        <View style={styles.tutorialBanner}>
+          <View style={styles.tutorialBannerLeft}>
+            <Text style={styles.tutorialBannerIcon}>🎓</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.tutorialBannerKicker}>TUTORIAL MODE</Text>
+              <Text style={styles.tutorialBannerMessage} numberOfLines={2}>
+                {tutorialMessage}
+              </Text>
+            </View>
+          </View>
+          <TouchableOpacity style={styles.tutorialSkipBtn} onPress={skipOrEndTutorial} activeOpacity={0.8}>
+            <Text style={styles.tutorialSkipBtnText}>Skip ⏩</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Guided Remediation Banner (during normal game after mistake) */}
+      {!isTutorialMode && isDemonstrating && (
         <DemonstrationBanner
           message={demoMessage}
           onSkip={endDemonstration}
@@ -588,16 +975,26 @@ export default function NumberBondsScreen({ navigation }: Props) {
         </TouchableOpacity>
 
         <View style={styles.topCenter}>
-          <TimerBar timeLeft={timeLeft} totalTime={GameManager.getInstance().sessionTimerLimit} />
-          <Text style={styles.activityProgress}>{displayedActivityCount}/{MAX_ACTIVITIES_PER_SESSION}</Text>
+          {isTutorialMode ? (
+            <View style={styles.tutorialBadge}>
+              <Text style={styles.tutorialBadgeText}>🌟 Practice Round</Text>
+            </View>
+          ) : (
+            <>
+              <TimerBar timeLeft={timeLeft} totalTime={GameManager.getInstance().sessionTimerLimit} />
+              <Text style={styles.activityProgress}>{displayedActivityCount}/{MAX_ACTIVITIES_PER_SESSION}</Text>
+            </>
+          )}
         </View>
 
         <View style={styles.badgesContainer}>
-          <TouchableOpacity onPress={handleOpenTutorial} style={styles.helpCircleButton} activeOpacity={0.8}>
-            <Text style={styles.helpIcon}>❓</Text>
-          </TouchableOpacity>
+          {!isTutorialMode && (
+            <TouchableOpacity onPress={handleOpenTutorial} style={styles.helpCircleButton} activeOpacity={0.8}>
+              <Text style={styles.helpIcon}>❓</Text>
+            </TouchableOpacity>
+          )}
           <View style={styles.badge}>
-            <Text style={styles.badgeText}>⭐ {profile.totalStars}</Text>
+            <Text style={styles.badgeText}>⭐ {isTutorialMode ? 'Practice' : profile.totalStars}</Text>
           </View>
         </View>
       </View>
@@ -645,7 +1042,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
             <Text style={{ fontSize: 32 }}>🦉</Text>
             <OliverSpeechBalloon
               active={
-                !showTutorial &&
+                !isTutorialMode &&
                 !isDemonstrating &&
                 !showGreatJob &&
                 !showFiveStreak &&
@@ -660,33 +1057,37 @@ export default function NumberBondsScreen({ navigation }: Props) {
           </Text>
         </View>
 
-        {/* Equation Banner (e.g. 3 + _ = 5) above "Fruits here" area */}
+        {/* Equation */}
         <View style={styles.equationContainer}>
-          <View style={[styles.equationPill, { backgroundColor: '#E1F5FE', borderColor: '#0288D1' }]}>
-            <Text style={[styles.equationNumber, { color: '#0288D1' }]}>{problem.num2}</Text>
-          </View>
-          <Text style={styles.equationSymbol}>+</Text>
-          <View
+          <Text
             style={[
-              styles.equationPill,
-              selectedOption !== null
-                ? { backgroundColor: '#FFF3E0', borderColor: '#E65100' }
-                : { backgroundColor: '#FFFFFF', borderColor: '#E65100', borderStyle: 'dashed' },
+              styles.equationNumber,
+              { color: '#0288D1' },
+              (highlightPhase === 'partA' || isLeftBasketHighlighted) && styles.equationNumberHighlighted,
             ]}
           >
-            <Text
-              style={[
-                styles.equationNumber,
-                { color: selectedOption !== null ? '#E65100' : '#BDBDBD' },
-              ]}
-            >
-              {selectedOption !== null ? selectedOption : '_'}
-            </Text>
-          </View>
-          <Text style={styles.equationSymbol}>=</Text>
-          <View style={[styles.equationPill, { backgroundColor: '#FFF9C4', borderColor: '#F57F17' }]}>
-            <Text style={[styles.equationNumber, { color: '#F57F17' }]}>{problem.num1}</Text>
-          </View>
+            {problem.num2}
+          </Text>
+          <Text style={styles.equationSymbol}> + </Text>
+          <Text
+            style={[
+              styles.equationNumber,
+              { color: '#E65100' },
+              (highlightPhase === 'partB' || isRightBasketHighlighted) && styles.equationNumberHighlighted,
+            ]}
+          >
+            {selectedOption !== null ? selectedOption : '?'}
+          </Text>
+          <Text style={styles.equationSymbol}> = </Text>
+          <Text
+            style={[
+              styles.equationNumber,
+              { color: '#F57F17' },
+              (highlightPhase === 'total' || isTotalBadgeHighlighted) && styles.equationNumberHighlighted,
+            ]}
+          >
+            {problem.num1}
+          </Text>
         </View>
 
         {/* ═══════════════════════════════════════════════════════════════════
@@ -739,7 +1140,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
                   const demoTargetY = 175;
                   return (
                     <DraggableFruit
-                      key={`${f.id}_try${currentTry}`}
+                      key={`${f.id}_r${roundKey}_try${currentTry}`}
                       fruit={f}
                       disabled={f.dropped || isDemonstrating}
                       isSelected={selectedFruitId === f.id}
@@ -763,7 +1164,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
                   const demoTargetY = 145;
                   return (
                     <DraggableFruit
-                      key={`${f.id}_try${currentTry}`}
+                      key={`${f.id}_r${roundKey}_try${currentTry}`}
                       fruit={f}
                       disabled={f.dropped || isDemonstrating}
                       isSelected={selectedFruitId === f.id}
@@ -859,20 +1260,20 @@ export default function NumberBondsScreen({ navigation }: Props) {
               {/* V-Bond Connection Lines converging at the trunk vertex */}
               <Line
                 x1={treeCenterX - 75}
-                y1={172}
+                y1={160}
                 x2={treeCenterX}
-                y2={212}
+                y2={206}
                 stroke="#2E1C14"
-                strokeWidth="5.5"
+                strokeWidth="5"
                 strokeLinecap="round"
               />
               <Line
                 x1={treeCenterX + 75}
-                y1={172}
+                y1={160}
                 x2={treeCenterX}
-                y2={212}
+                y2={206}
                 stroke="#2E1C14"
-                strokeWidth="5.5"
+                strokeWidth="5"
                 strokeLinecap="round"
               />
             </Svg>
@@ -880,36 +1281,43 @@ export default function NumberBondsScreen({ navigation }: Props) {
             {/* Dual Vertically Elongated Baskets & Center + */}
             <View style={styles.basketsRow}>
               {/* LEFT BASKET — Fixed Number Pair */}
-              <View style={[styles.basketColumn, isLeftBasketHighlighted && styles.basketHighlighted]}>
+              <View style={[styles.basketColumn, (isLeftBasketHighlighted || highlightPhase === 'partA') && styles.basketHighlighted]}>
                 <TopViewBasket
-                  width={126}
-                  height={156}
+                  width={leftDim.width}
+                  height={leftDim.height}
                   badgeText={problem.num2}
                   badgeColor="#0288D1"
                   title="Fixed Pair"
                 >
-                  <View style={styles.fixedFruitsCluster}>
+                  <View style={[styles.fixedFruitsCluster, { maxWidth: leftDim.clusterMaxWidth }]}>
                     {Array.from({ length: problem.num2 }).map((_, i) => {
-                      const isCountingActive = demoCountingIndex === i;
-                      const showBadge = demoMaxCountedIndex !== null && i <= demoMaxCountedIndex;
+                      const isCountingActive = demoCountingIndex === i || userActiveCountIndex === i;
+                      const showBadge = (demoMaxCountedIndex !== null && i <= demoMaxCountedIndex) || userCountedIndices.has(i);
                       const fruitNum = i + 1;
                       return (
-                        <View
+                        <TouchableOpacity
                           key={i}
-                          style={[
-                            styles.doubleCheckFruitWrap,
-                            isCountingActive && styles.doubleCheckFruitActive,
-                          ]}
+                          onPress={() => handleTapLeftFruit(i)}
+                          disabled={isDemonstrating}
+                          activeOpacity={0.7}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                         >
-                          <Text style={styles.basketFruitEmoji}>
-                            {treeFruits[0]?.emoji ?? '🍎'}
-                          </Text>
-                          {showBadge && (
-                            <View style={styles.doubleCheckFruitBadge}>
-                              <Text style={styles.doubleCheckFruitBadgeText}>{fruitNum}</Text>
-                            </View>
-                          )}
-                        </View>
+                          <View
+                            style={[
+                              styles.doubleCheckFruitWrap,
+                              isCountingActive && styles.doubleCheckFruitActive,
+                            ]}
+                          >
+                            <Text style={[styles.basketFruitEmoji, { fontSize: leftDim.emojiSize }]}>
+                              {treeFruits[0]?.emoji ?? '🍎'}
+                            </Text>
+                            {showBadge && (
+                              <View style={styles.doubleCheckFruitBadge}>
+                                <Text style={styles.doubleCheckFruitBadgeText}>{fruitNum}</Text>
+                              </View>
+                            )}
+                          </View>
+                        </TouchableOpacity>
                       );
                     })}
                   </View>
@@ -923,7 +1331,11 @@ export default function NumberBondsScreen({ navigation }: Props) {
               </View>
 
               {/* RIGHT BASKET — Hybrid Drag Drop & Tap-to-Target Area (FR-NB-02) */}
-              <Animated.View style={[styles.basketColumn, { transform: [{ scale: basketPulse }] }]}>
+              <Animated.View style={[
+                styles.basketColumn,
+                (isRightBasketHighlighted || highlightPhase === 'partB') && styles.basketHighlighted,
+                { transform: [{ scale: basketPulse }] }
+              ]}>
                 <TouchableOpacity
                   activeOpacity={0.88}
                   onPress={handleRightBasketPress}
@@ -935,8 +1347,8 @@ export default function NumberBondsScreen({ navigation }: Props) {
                   hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
                 >
                   <TopViewBasket
-                    width={126}
-                    height={156}
+                    width={rightDim.width}
+                    height={rightDim.height}
                     badgeText={showClues ? (droppedCount > 0 ? droppedCount : '?') : '?'}
                     badgeColor="#E65100"
                     isDropZone={true}
@@ -949,19 +1361,21 @@ export default function NumberBondsScreen({ navigation }: Props) {
                         {selectedFruitId ? '🎯 Tap to place!' : 'Tap or drag\nfruits here!'}
                       </Text>
                     ) : (
-                      <View style={styles.fixedFruitsCluster}>
+                      <View style={[styles.fixedFruitsCluster, { maxWidth: rightDim.clusterMaxWidth }]}>
                         {droppedFruits.map((f, i) => {
                           const globalIdx = problem.num2 + i;
-                          const isCountingActive = demoCountingIndex === globalIdx;
-                          const showBadge = demoMaxCountedIndex !== null && globalIdx <= demoMaxCountedIndex;
+                          const isCountingActive = demoCountingIndex === globalIdx || userActiveCountIndex === globalIdx;
+                          const showBadge = (demoMaxCountedIndex !== null && globalIdx <= demoMaxCountedIndex) || userCountedIndices.has(globalIdx);
                           const fruitNum = globalIdx + 1;
                           return (
                             <TouchableOpacity
                               key={f.id}
-                              onPress={() => handleRemoveFruit(f.id)}
+                              onPress={() => handleTapRightFruit(i)}
+                              onLongPress={() => handleRemoveFruit(f.id)}
+                              delayLongPress={350}
                               disabled={isDemonstrating}
                               activeOpacity={0.7}
-                              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                             >
                               <View
                                 style={[
@@ -969,7 +1383,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
                                   isCountingActive && styles.doubleCheckFruitActive,
                                 ]}
                               >
-                                <Text style={styles.basketFruitEmoji}>{f.emoji}</Text>
+                                <Text style={[styles.basketFruitEmoji, { fontSize: rightDim.emojiSize }]}>{f.emoji}</Text>
                                 {showBadge && (
                                   <View style={styles.doubleCheckFruitBadge}>
                                     <Text style={styles.doubleCheckFruitBadgeText}>{fruitNum}</Text>
@@ -993,7 +1407,10 @@ export default function NumberBondsScreen({ navigation }: Props) {
 
             {/* Total Number Badge at the V-vertex on the trunk */}
             <View style={styles.totalNumberBadgeWrap}>
-              <View style={[styles.totalNumberBadge, isTotalBadgeHighlighted && styles.totalBadgeHighlighted]}>
+              <View style={[
+                styles.totalNumberBadge,
+                (isTotalBadgeHighlighted || highlightPhase === 'total') && styles.totalBadgeHighlighted
+              ]}>
                 <Text style={styles.totalBadgeLabel}>TOTAL</Text>
                 <Text style={styles.totalBadgeValue}>{problem.num1}</Text>
               </View>
@@ -1042,13 +1459,23 @@ export default function NumberBondsScreen({ navigation }: Props) {
         masteryProgress={isMasteryProblem && !justMastered ? masteryProgress : null}
       />
 
-      {/* Tutorial Modal */}
-      <GameTutorialModal
-        visible={showTutorial}
-        gameTitle="Number Bonds"
-        steps={NUMBER_BONDS_TUTORIAL_STEPS}
-        onClose={handleCloseTutorial}
-      />
+      {/* Tutorial Completion Card */}
+      {isTutorialMode && tutorialFinished && (
+        <View style={styles.tutorialFinishOverlay}>
+          <View style={styles.tutorialFinishCard}>
+            <Text style={{ fontSize: 48, marginBottom: 8 }}>🦉🎉</Text>
+            <Text style={styles.tutorialFinishTitle}>You're Ready to Play!</Text>
+            <Text style={styles.tutorialFinishSub}>Find what number goes with {problem.num2} to make {problem.num1}!</Text>
+            <TouchableOpacity
+              style={styles.tutorialStartBtn}
+              onPress={skipOrEndTutorial}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.tutorialStartBtnText}>Start Game! 🚀</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       {/* 5-Streak Independence Reward Modal */}
       <FiveStreakModal
@@ -1082,6 +1509,7 @@ interface TopViewBasketProps {
   isSnapActive?: boolean;
   title?: string;
   onReset?: () => void;
+  basketOpacity?: number;
   children: React.ReactNode;
 }
 
@@ -1093,6 +1521,7 @@ const TopViewBasket: React.FC<TopViewBasketProps> = ({
   isDropZone = false,
   isSnapActive = false,
   onReset,
+  basketOpacity = 0.7,
   children,
 }) => {
   const rx = bWidth / 2;
@@ -1100,8 +1529,8 @@ const TopViewBasket: React.FC<TopViewBasketProps> = ({
 
   return (
     <View style={[styles.basketContainer, { width: bWidth, height: bHeight }]}>
-      {/* SVG Wicker concentric weave texture (vertically elongated ellipse) */}
-      <Svg width={bWidth} height={bHeight} style={StyleSheet.absoluteFill}>
+      {/* SVG Wicker concentric weave texture with 70% opacity for fruit visibility */}
+      <Svg width={bWidth} height={bHeight} style={[StyleSheet.absoluteFill, { opacity: basketOpacity }]}>
         {/* Outer wicker shadow */}
         <Ellipse cx={rx} cy={ry} rx={rx - 2} ry={ry - 2} fill="#6D4C41" />
         {/* Outer braided rim */}
@@ -1227,6 +1656,8 @@ const DraggableFruit = ({
   useEffect(() => {
     if (!fruit.dropped) {
       pan.setValue({ x: 0, y: 0 });
+      demoAnimX.setValue(0);
+      demoAnimY.setValue(0);
       pressScale.setValue(1);
     }
   }, [fruit.dropped]);
@@ -1339,9 +1770,10 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#A5D6A7' },
   content: {
     flex: 1,
-    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingBottom: 10,
     alignItems: 'center',
-    paddingBottom: 12,
+    justifyContent: 'space-between',
   },
   cloud: { position: 'absolute', color: '#FFF' },
   topBar: {
@@ -1411,7 +1843,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
     marginHorizontal: 16,
-    marginBottom: 8,
+    marginBottom: 6,
     elevation: 2,
   },
   owlPlaceholder: {
@@ -1429,7 +1861,7 @@ const styles = StyleSheet.create({
   treeSection: {
     alignItems: 'center',
     marginHorizontal: 12,
-    marginTop: 4,
+    marginTop: 2,
   },
   canopyContainer: {
     width: width - 24,
@@ -1454,7 +1886,7 @@ const styles = StyleSheet.create({
     color: '#2E7D32',
   },
   canopyFruitsGrid: {
-    width: '90%',
+    width: '94%',
     marginTop: 18,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1466,23 +1898,20 @@ const styles = StyleSheet.create({
     marginVertical: 2,
   },
   draggableFruitTouchArea: {
-    minWidth: 84,
-    minHeight: 84,
-    width: 84,
-    height: 84,
+    width: 52,
+    height: 52,
     justifyContent: 'center',
     alignItems: 'center',
-    marginHorizontal: -8,
   },
   hangingFruitCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: '#FFF',
     justifyContent: 'center',
     alignItems: 'center',
     elevation: 4,
-    borderWidth: 2.5,
+    borderWidth: 2,
     borderColor: '#C8E6C9',
   },
   fruitCircleSelected: {
@@ -1497,23 +1926,23 @@ const styles = StyleSheet.create({
     transform: [{ scale: 1.15 }],
   },
   hangingPlaceholder: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
     opacity: 0.35,
   },
   placeholderIcon: { fontSize: 20 },
-  fruitEmoji: { fontSize: 26 },
+  fruitEmoji: { fontSize: 24 },
 
   // Unified Trunk & Baskets Area
   trunkAreaWrapper: {
     width: width - 24,
-    height: 310,
+    height: 300,
     position: 'relative',
     alignItems: 'center',
-    marginTop: -8,
+    marginTop: -6,
   },
   basketsRow: {
     flexDirection: 'row',
@@ -1521,13 +1950,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: '100%',
     position: 'absolute',
-    top: 15,
+    top: 10,
     zIndex: 5,
   },
   basketColumn: {
     alignItems: 'center',
     zIndex: 5,
-    marginHorizontal: 8,
+    marginHorizontal: 6,
   },
   expandedDropZoneTarget: {
     padding: 6,
@@ -1542,9 +1971,9 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   plusSignContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     backgroundColor: '#3E2723',
     borderWidth: 2.5,
     borderColor: '#FFF',
@@ -1552,15 +1981,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     zIndex: 6,
     elevation: 4,
+    marginHorizontal: 4,
   },
   centerPlusText: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '900',
     color: '#FFF',
     marginTop: -2,
   },
   basketBottomLabel: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: 'bold',
     color: '#4E342E',
     marginTop: 4,
@@ -1574,20 +2004,21 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   basketBowlInner: {
-    width: '82%',
-    height: '84%',
+    width: '90%',
+    height: '90%',
     borderRadius: 45,
     justifyContent: 'center',
     alignItems: 'center',
-    overflow: 'hidden',
+    overflow: 'visible',
+    backgroundColor: 'rgba(255, 255, 255, 0.35)',
   },
   fixedFruitsCluster: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 4,
-    maxWidth: 95,
+    padding: 2,
+    maxWidth: 104,
   },
   basketFruitEmoji: {
     fontSize: 22,
@@ -1675,7 +2106,7 @@ const styles = StyleSheet.create({
   // Total Number on Trunk
   totalNumberBadgeWrap: {
     position: 'absolute',
-    top: 195,
+    top: 198,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 7,
@@ -1684,8 +2115,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#FF6F00',
     borderWidth: 3,
     borderColor: '#FFF',
-    borderRadius: 24,
-    paddingHorizontal: 16,
+    borderRadius: 22,
+    paddingHorizontal: 20,
     paddingVertical: 4,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1701,20 +2132,21 @@ const styles = StyleSheet.create({
     fontSize: 26,
     fontWeight: '900',
     color: '#FFF',
-    marginTop: -3,
+    marginTop: -2,
   },
 
   // Actions Section
   actionsContainer: {
     width: '100%',
     alignItems: 'center',
-    marginTop: 6,
-    marginBottom: 8,
+    marginTop: 8,
+    marginBottom: 12,
   },
   actionBtn: {
-    paddingVertical: 14,
-    borderRadius: 28,
+    paddingVertical: 12,
+    borderRadius: 26,
     width: '85%',
+    maxWidth: 320,
     justifyContent: 'center',
     alignItems: 'center',
     elevation: 4,
@@ -1722,48 +2154,25 @@ const styles = StyleSheet.create({
     borderColor: '#FFF',
   },
   actionBtnText: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '900',
     color: '#FFF',
   },
   equationContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
-    paddingVertical: 6,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    marginTop: 6,
-    marginBottom: 6,
-    alignSelf: 'center',
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 4,
-    borderWidth: 2,
-    borderColor: '#C8E6C9',
-  },
-  equationPill: {
-    paddingHorizontal: 14,
-    paddingVertical: 2,
-    borderRadius: 12,
-    borderWidth: 2,
-    minWidth: 44,
-    height: 40,
     alignItems: 'center',
-    justifyContent: 'center',
+    marginVertical: 6,
   },
   equationNumber: {
-    fontSize: 22,
+    fontSize: 38,
     fontWeight: '900',
   },
   equationSymbol: {
-    fontSize: 22,
+    fontSize: 30,
     fontWeight: '900',
-    color: '#3E2723',
-    marginHorizontal: 8,
+    color: '#263238',
+    marginHorizontal: 4,
   },
   fruitCircleHighlighted: {
     borderColor: '#FF6F00',
@@ -1805,5 +2214,125 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.8,
     shadowRadius: 10,
     elevation: 10,
+  },
+  equationNumberHighlighted: {
+    transform: [{ scale: 1.35 }],
+    textShadowColor: '#FFD700',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 10,
+  },
+  containerTutorial: {
+    borderWidth: 4,
+    borderColor: '#FFB300',
+  },
+  tutorialBanner: {
+    backgroundColor: '#FFE082',
+    borderBottomWidth: 3,
+    borderBottomColor: '#FFA000',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    zIndex: 9998,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 5,
+  },
+  tutorialBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  tutorialBannerIcon: {
+    fontSize: 28,
+  },
+  tutorialBannerKicker: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#E65100',
+    letterSpacing: 1,
+  },
+  tutorialBannerMessage: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: '#4E342E',
+  },
+  tutorialSkipBtn: {
+    backgroundColor: '#FFF',
+    borderWidth: 2,
+    borderColor: '#FFA000',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    elevation: 2,
+  },
+  tutorialSkipBtnText: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: '#E65100',
+  },
+  tutorialBadge: {
+    backgroundColor: '#FFF9C4',
+    borderWidth: 2,
+    borderColor: '#FBC02D',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+  },
+  tutorialBadgeText: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: '#F57F17',
+  },
+  tutorialFinishOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 9999,
+    padding: 24,
+  },
+  tutorialFinishCard: {
+    backgroundColor: '#FFF',
+    borderRadius: 24,
+    padding: 24,
+    alignItems: 'center',
+    width: '100%',
+    maxWidth: 340,
+    elevation: 10,
+    borderWidth: 3,
+    borderColor: '#FFE082',
+  },
+  tutorialFinishTitle: {
+    fontSize: 24,
+    fontWeight: '900',
+    color: '#2E7D32',
+    textAlign: 'center',
+    marginBottom: 6,
+  },
+  tutorialFinishSub: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#555',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  tutorialStartBtn: {
+    backgroundColor: '#4CAF50',
+    borderRadius: 24,
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    borderWidth: 2,
+    borderColor: '#FFF',
+    elevation: 4,
+  },
+  tutorialStartBtnText: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#FFF',
   },
 });
