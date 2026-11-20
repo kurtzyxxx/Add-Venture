@@ -72,6 +72,24 @@ export default function NumberBondsScreen({ navigation }: Props) {
   // User interactive fruit counting states
   const [userCountedIndices, setUserCountedIndices] = useState<Set<number>>(new Set());
   const [userActiveCountIndex, setUserActiveCountIndex] = useState<number | null>(null);
+  const [countedFruits, setCountedFruits] = useState<Record<string, number>>({});
+
+  // Fruit tap & glow animation tracking
+  const fruitTapAnims = useRef<Record<string, Animated.Value>>({});
+  const fruitGlowAnims = useRef<Record<string, Animated.Value>>({});
+
+  const getFruitAnims = (id: string) => {
+    if (!fruitTapAnims.current[id]) {
+      fruitTapAnims.current[id] = new Animated.Value(1);
+    }
+    if (!fruitGlowAnims.current[id]) {
+      fruitGlowAnims.current[id] = new Animated.Value(0);
+    }
+    return {
+      tapAnim: fruitTapAnims.current[id],
+      glowAnim: fruitGlowAnims.current[id],
+    };
+  };
 
   // Synchronized problem dictation
   const [highlightPhase, setHighlightPhase] = useState<'idle' | 'partA' | 'partB' | 'total'>('idle');
@@ -180,6 +198,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
     setTutorialFinished(false);
     setIsDemonstrating(false);
     setSelectedFruitId(null);
+    setCountedFruits({});
     setHighlightedFruitId(null);
     setAnimatingFruitId(null);
     setIsTotalBadgeHighlighted(false);
@@ -190,8 +209,10 @@ export default function NumberBondsScreen({ navigation }: Props) {
     setDemoMaxCountedIndex(null);
     setUserCountedIndices(new Set());
     setUserActiveCountIndex(null);
+    setCountedFruits({});
     setUserCountedIndices(new Set());
     setUserActiveCountIndex(null);
+    setCountedFruits({});
     setHighlightPhase('idle');
 
     const gm = GameManager.getInstance();
@@ -228,6 +249,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
     }));
     setTreeFruits(tutFruits);
     setSelectedFruitId(null);
+    setCountedFruits({});
     setSelectedOption(null);
     setActiveHint(null);
     setCurrentTry(1);
@@ -241,8 +263,10 @@ export default function NumberBondsScreen({ navigation }: Props) {
     setDemoMaxCountedIndex(null);
     setUserCountedIndices(new Set());
     setUserActiveCountIndex(null);
+    setCountedFruits({});
     setUserCountedIndices(new Set());
     setUserActiveCountIndex(null);
+    setCountedFruits({});
 
     setTutorialMessage('Welcome to Number Bonds! Watch Oliver show you how to play.');
     await AudioManager.speakAsync('Welcome to Number Bonds! Watch Oliver show you how to play.', {
@@ -464,6 +488,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
     setProblem(p);
     setSelectedOption(null);
     setSelectedFruitId(null);
+    setCountedFruits({});
     setActiveHint(null);
     setCurrentTry(1);
     setRemediationCycle(0);
@@ -473,8 +498,10 @@ export default function NumberBondsScreen({ navigation }: Props) {
     setDemoMaxCountedIndex(null);
     setUserCountedIndices(new Set());
     setUserActiveCountIndex(null);
+    setCountedFruits({});
     setUserCountedIndices(new Set());
     setUserActiveCountIndex(null);
+    setCountedFruits({});
     setRoundKey(k => k + 1);
 
     const pCount = gm.getSessionActivityCount();
@@ -546,6 +573,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
       Vibration.vibrate(40);
     } catch (_) {}
     setSelectedFruitId(null);
+    setCountedFruits({});
 
     // Dynamic expand bounce feedback on the basket
     Animated.sequence([
@@ -560,61 +588,75 @@ export default function NumberBondsScreen({ navigation }: Props) {
 
       const profile = GameManager.getInstance().saveSystem.getProfile();
       if (profile.consecutiveCorrect < HINT_DISABLE_THRESHOLD) {
+        // Counting clue on drag starts from the next number of the left basket!
+        const currentTotal = problem ? problem.num2 + droppedCount : droppedCount;
         AudioManager.stopSpeech();
-        AudioManager.speak(`${droppedCount}`, { rate: 0.95, pitch: 1.3 });
+        AudioManager.speak(`${currentTotal}`, { rate: 0.95, pitch: 1.3 });
       }
       return next;
     });
   };
 
-  // User tap-to-count fruit in Left Basket
-  const handleTapLeftFruit = (index: number) => {
-    if (isDemonstrating) return;
+  // Unified tap-to-count for any fruit in Left Basket or Right Basket (arbitrary order)
+  const handleBasketFruitTap = (fruitId: string) => {
+    if (isDemonstrating || !problem) return;
     stopReadingAloud();
     try {
       Vibration.vibrate(25);
     } catch (_) {}
 
-    const fruitNum = index + 1;
-    setUserCountedIndices(prev => new Set(prev).add(index));
-    setUserActiveCountIndex(index);
+    const profile = GameManager.getInstance().saveSystem.getProfile();
+    const isFiveStreakActive = profile.consecutiveCorrect >= HINT_DISABLE_THRESHOLD;
 
-    AudioManager.stopSpeech();
-    AudioManager.speak(`${fruitNum}`, { rate: 0.95, pitch: 1.35 });
+    const totalFruitsInBaskets = problem.num2 + treeFruits.filter(f => f.dropped).length;
+    const assignedCount = countedFruits[fruitId];
+    let spokenNumber: number;
 
-    setTimeout(() => {
-      setUserActiveCountIndex(current => (current === index ? null : current));
-    }, 600);
+    if (assignedCount !== undefined) {
+      spokenNumber = assignedCount;
+    } else {
+      const nextCount = Object.keys(countedFruits).length + 1;
+      spokenNumber = nextCount;
+      setCountedFruits(prev => ({
+        ...prev,
+        [fruitId]: nextCount,
+      }));
+
+      // When all fruits across both baskets are counted
+      if (!isFiveStreakActive && nextCount === totalFruitsInBaskets) {
+        setTimeout(() => {
+          AudioManager.speak(`That's ${totalFruitsInBaskets} fruits in all!`, {
+            rate: 0.92,
+            pitch: 1.35,
+          });
+        }, 750);
+      }
+    }
+
+    if (!isFiveStreakActive) {
+      AudioManager.stopSpeech();
+      AudioManager.speak(`${spokenNumber}`, { rate: 0.95, pitch: 1.35 });
+    }
+
+    const { tapAnim, glowAnim } = getFruitAnims(fruitId);
+    Animated.sequence([
+      Animated.spring(tapAnim, { toValue: 1.35, friction: 3, useNativeDriver: true }),
+      Animated.spring(tapAnim, { toValue: 1, friction: 4, useNativeDriver: true }),
+    ]).start();
+    Animated.sequence([
+      Animated.timing(glowAnim, { toValue: 1, duration: 150, useNativeDriver: true }),
+      Animated.timing(glowAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
+    ]).start();
+  };
+
+  // User tap-to-count fruit in Left Basket
+  const handleTapLeftFruit = (index: number) => {
+    handleBasketFruitTap(`left_${index}`);
   };
 
   // User tap-to-count fruit in Right Basket
-  const handleTapRightFruit = (index: number) => {
-    if (isDemonstrating) return;
-    stopReadingAloud();
-    try {
-      Vibration.vibrate(25);
-    } catch (_) {}
-
-    if (!problem) return;
-    const globalIdx = problem.num2 + index;
-    const fruitNum = globalIdx + 1;
-
-    setUserCountedIndices(prev => new Set(prev).add(globalIdx));
-    setUserActiveCountIndex(globalIdx);
-
-    AudioManager.stopSpeech();
-    if (fruitNum === problem.num1) {
-      AudioManager.speak(`${fruitNum}! That makes ${problem.num1} fruits in all!`, {
-        rate: 0.92,
-        pitch: 1.35,
-      });
-    } else {
-      AudioManager.speak(`${fruitNum}`, { rate: 0.95, pitch: 1.35 });
-    }
-
-    setTimeout(() => {
-      setUserActiveCountIndex(current => (current === globalIdx ? null : current));
-    }, 600);
+  const handleTapRightFruit = (fruitId: string) => {
+    handleBasketFruitTap(fruitId);
   };
 
   // Tap fruit in right basket to return to tree (or long-press)
@@ -625,10 +667,18 @@ export default function NumberBondsScreen({ navigation }: Props) {
     } catch (_) {}
     setUserCountedIndices(new Set());
     setUserActiveCountIndex(null);
+    setCountedFruits({});
     setTreeFruits(prev => {
       const next = prev.map(f => (f.id === fruitId ? { ...f, dropped: false } : f));
       const droppedCount = next.filter(f => f.dropped).length;
       setSelectedOption(droppedCount > 0 ? droppedCount : null);
+
+      const profile = GameManager.getInstance().saveSystem.getProfile();
+      if (profile.consecutiveCorrect < HINT_DISABLE_THRESHOLD && droppedCount > 0 && problem) {
+        const currentTotal = problem.num2 + droppedCount;
+        AudioManager.stopSpeech();
+        AudioManager.speak(`${currentTotal}`, { rate: 0.95, pitch: 1.3 });
+      }
       return next;
     });
   };
@@ -640,8 +690,10 @@ export default function NumberBondsScreen({ navigation }: Props) {
       Vibration.vibrate(25);
     } catch (_) {}
     setSelectedFruitId(null);
+    setCountedFruits({});
     setUserCountedIndices(new Set());
     setUserActiveCountIndex(null);
+    setCountedFruits({});
     setRoundKey(k => k + 1);
     setTreeFruits(prev => prev.map(f => ({ ...f, dropped: false })));
     setSelectedOption(null);
@@ -653,8 +705,10 @@ export default function NumberBondsScreen({ navigation }: Props) {
   const resetFruitsAndAnswer = () => {
     stopReadingAloud();
     setSelectedFruitId(null);
+    setCountedFruits({});
     setUserCountedIndices(new Set());
     setUserActiveCountIndex(null);
+    setCountedFruits({});
     setRoundKey(k => k + 1);
     setTreeFruits(prev => prev.map(f => ({ ...f, dropped: false })));
     setSelectedOption(null);
@@ -662,6 +716,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
     setDemoMaxCountedIndex(null);
     setUserCountedIndices(new Set());
     setUserActiveCountIndex(null);
+    setCountedFruits({});
   };
 
   const submitCheck = async () => {
@@ -723,6 +778,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
 
     // Reset dropped fruits so demonstration starts clean
     setSelectedFruitId(null);
+    setCountedFruits({});
     setRoundKey(k => k + 1);
     setTreeFruits(prev => prev.map(f => ({ ...f, dropped: false })));
     setSelectedOption(null);
@@ -735,6 +791,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
     setDemoMaxCountedIndex(null);
     setUserCountedIndices(new Set());
     setUserActiveCountIndex(null);
+    setCountedFruits({});
 
     const missingCount = problem.correctAnswer;
 
@@ -866,6 +923,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
     setDemoMaxCountedIndex(null);
     setUserCountedIndices(new Set());
     setUserActiveCountIndex(null);
+    setCountedFruits({});
     setCurrentTry(prev => prev + 1);
 
     // Clear right basket for the student
@@ -926,6 +984,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
   const droppedFruits = treeFruits.filter(f => f.dropped);
   const droppedCount = droppedFruits.length;
   const showClues = profile.consecutiveCorrect < HINT_DISABLE_THRESHOLD;
+  const isFiveStreakActive = profile.consecutiveCorrect >= HINT_DISABLE_THRESHOLD;
 
   const leftDim = getBasketDimensions(problem.num2);
   const rightDim = getBasketDimensions(droppedCount);
@@ -1291,32 +1350,45 @@ export default function NumberBondsScreen({ navigation }: Props) {
                 >
                   <View style={[styles.fixedFruitsCluster, { maxWidth: leftDim.clusterMaxWidth }]}>
                     {Array.from({ length: problem.num2 }).map((_, i) => {
-                      const isCountingActive = demoCountingIndex === i || userActiveCountIndex === i;
-                      const showBadge = (demoMaxCountedIndex !== null && i <= demoMaxCountedIndex) || userCountedIndices.has(i);
-                      const fruitNum = i + 1;
+                      const fruitId = `left_${i}`;
+                      const isDemoCountingActive = demoCountingIndex === i;
+                      const isDemoBadge = demoMaxCountedIndex !== null && i <= demoMaxCountedIndex;
+                      const assignedCount = countedFruits[fruitId];
+                      const isUserCounted = assignedCount !== undefined;
+
+                      const isCountingActive = isDemoCountingActive;
+                      const showBadge = isDemonstrating ? isDemoBadge : (isUserCounted && !isFiveStreakActive);
+                      const fruitNum = isDemonstrating ? i + 1 : assignedCount;
+
+                      const { tapAnim, glowAnim } = getFruitAnims(fruitId);
+                      const glowOpacity = glowAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 0.6] });
+
                       return (
                         <TouchableOpacity
-                          key={i}
+                          key={fruitId}
                           onPress={() => handleTapLeftFruit(i)}
                           disabled={isDemonstrating}
                           activeOpacity={0.7}
                           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                         >
-                          <View
+                          <Animated.View
                             style={[
                               styles.doubleCheckFruitWrap,
                               isCountingActive && styles.doubleCheckFruitActive,
+                              isUserCounted && styles.doubleCheckFruitCounted,
+                              { transform: [{ scale: tapAnim }] },
                             ]}
                           >
                             <Text style={[styles.basketFruitEmoji, { fontSize: leftDim.emojiSize }]}>
                               {treeFruits[0]?.emoji ?? '🍎'}
                             </Text>
-                            {showBadge && (
+                            {showBadge && fruitNum !== undefined && (
                               <View style={styles.doubleCheckFruitBadge}>
                                 <Text style={styles.doubleCheckFruitBadgeText}>{fruitNum}</Text>
                               </View>
                             )}
-                          </View>
+                            <Animated.View style={[StyleSheet.absoluteFill, styles.fruitGlow, { opacity: glowOpacity }]} />
+                          </Animated.View>
                         </TouchableOpacity>
                       );
                     })}
@@ -1364,32 +1436,44 @@ export default function NumberBondsScreen({ navigation }: Props) {
                       <View style={[styles.fixedFruitsCluster, { maxWidth: rightDim.clusterMaxWidth }]}>
                         {droppedFruits.map((f, i) => {
                           const globalIdx = problem.num2 + i;
-                          const isCountingActive = demoCountingIndex === globalIdx || userActiveCountIndex === globalIdx;
-                          const showBadge = (demoMaxCountedIndex !== null && globalIdx <= demoMaxCountedIndex) || userCountedIndices.has(globalIdx);
-                          const fruitNum = globalIdx + 1;
+                          const isDemoCountingActive = demoCountingIndex === globalIdx;
+                          const isDemoBadge = demoMaxCountedIndex !== null && globalIdx <= demoMaxCountedIndex;
+                          const assignedCount = countedFruits[f.id];
+                          const isUserCounted = assignedCount !== undefined;
+
+                          const isCountingActive = isDemoCountingActive;
+                          const showBadge = isDemonstrating ? isDemoBadge : (isUserCounted && !isFiveStreakActive);
+                          const fruitNum = isDemonstrating ? globalIdx + 1 : assignedCount;
+
+                          const { tapAnim, glowAnim } = getFruitAnims(f.id);
+                          const glowOpacity = glowAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 0.6] });
+
                           return (
                             <TouchableOpacity
                               key={f.id}
-                              onPress={() => handleTapRightFruit(i)}
+                              onPress={() => handleTapRightFruit(f.id)}
                               onLongPress={() => handleRemoveFruit(f.id)}
                               delayLongPress={350}
                               disabled={isDemonstrating}
                               activeOpacity={0.7}
                               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                             >
-                              <View
+                              <Animated.View
                                 style={[
                                   styles.doubleCheckFruitWrap,
                                   isCountingActive && styles.doubleCheckFruitActive,
+                                  isUserCounted && styles.doubleCheckFruitCounted,
+                                  { transform: [{ scale: tapAnim }] },
                                 ]}
                               >
                                 <Text style={[styles.basketFruitEmoji, { fontSize: rightDim.emojiSize }]}>{f.emoji}</Text>
-                                {showBadge && (
+                                {showBadge && fruitNum !== undefined && (
                                   <View style={styles.doubleCheckFruitBadge}>
                                     <Text style={styles.doubleCheckFruitBadgeText}>{fruitNum}</Text>
                                   </View>
                                 )}
-                              </View>
+                                <Animated.View style={[StyleSheet.absoluteFill, styles.fruitGlow, { opacity: glowOpacity }]} />
+                              </Animated.View>
                             </TouchableOpacity>
                           );
                         })}
@@ -2026,11 +2110,15 @@ const styles = StyleSheet.create({
   },
   doubleCheckFruitWrap: {
     position: 'relative',
-    margin: 1,
-    padding: 1,
-    borderRadius: 8,
+    margin: 2,
+    padding: 2,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#E0F2F1',
+    overflow: 'visible',
   },
   doubleCheckFruitActive: {
     backgroundColor: '#FFF9C4',
@@ -2038,27 +2126,41 @@ const styles = StyleSheet.create({
     borderColor: '#FFD700',
     transform: [{ scale: 1.18 }],
   },
+  doubleCheckFruitCounted: {
+    backgroundColor: '#FFF9C4',
+    borderWidth: 2,
+    borderColor: '#FFB300',
+    shadowColor: '#FFA000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.35,
+    shadowRadius: 2,
+    elevation: 3,
+  },
   doubleCheckFruitBadge: {
     position: 'absolute',
-    top: -5,
-    right: -5,
-    backgroundColor: '#E65100',
-    borderRadius: 7,
-    borderWidth: 1,
+    top: -6,
+    right: -6,
+    backgroundColor: '#FF6F00',
+    borderRadius: 9,
+    borderWidth: 1.5,
     borderColor: '#FFF',
-    minWidth: 14,
-    height: 14,
+    minWidth: 18,
+    height: 18,
     paddingHorizontal: 2,
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 10,
-    elevation: 3,
+    elevation: 4,
   },
   doubleCheckFruitBadgeText: {
     color: '#FFF',
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: '900',
-    lineHeight: 11,
+    lineHeight: 12,
+  },
+  fruitGlow: {
+    backgroundColor: '#FFD700',
+    borderRadius: 14,
   },
   dropPromptText: {
     fontSize: 11,

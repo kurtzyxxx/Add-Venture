@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Animated,
-  PanResponder, SafeAreaView, Dimensions,
+  PanResponder, SafeAreaView, Dimensions, Vibration,
 } from 'react-native';
 import { GreatJobOverlay } from '../../components/GreatJobOverlay';
 import { HintConfirmModal } from '../../components/HintConfirmModal';
@@ -29,6 +29,7 @@ const MAX_WRONG_TRIES = 3;
 export default function CountAllScreen({ navigation }: Props) {
   const [problem, setProblem] = useState<Problem | null>(null);
   const [fruits, setFruits] = useState<{ id: string; emoji: string; dropped: boolean; group: 1 | 2 }[]>([]);
+  const [countedFruits, setCountedFruits] = useState<Record<string, number>>({});
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [options, setOptions] = useState<number[]>([]);
   const [dropCounter, setDropCounter] = useState(0);
@@ -213,6 +214,7 @@ export default function CountAllScreen({ navigation }: Props) {
     });
 
     setFruits(tutFruits);
+    setCountedFruits({});
     setDropCounter(0);
     setShowCounter(false);
     setSelectedAnswer(null);
@@ -429,6 +431,7 @@ export default function CountAllScreen({ navigation }: Props) {
     });
 
     setFruits(newFruits);
+    setCountedFruits({});
     setDropCounter(0);
     setShowCounter(false);
     setSelectedAnswer(null);
@@ -470,9 +473,8 @@ export default function CountAllScreen({ navigation }: Props) {
       AudioManager.stopSpeech();
       if (droppedCount === next.length) {
         if (verboseMode) {
-          AudioManager.speak(droppedCount.toString(), { rate: 0.95, pitch: 1.4 });
+          AudioManager.speak('Now tap each fruit in the basket to count them!', { rate: 0.92, pitch: 1.3 });
         }
-        AudioManager.speak('How many fruits in all?', { rate: 0.95, pitch: 1.4 });
       } else if (verboseMode) {
         AudioManager.speak(droppedCount.toString(), { rate: 0.95, pitch: 1.4 });
       }
@@ -483,6 +485,7 @@ export default function CountAllScreen({ navigation }: Props) {
   const resetDroppedFruits = () => {
     stopReadingAloud();
     setFruits(prev => prev.map(fruit => ({ ...fruit, dropped: false })));
+    setCountedFruits({});
     setDropCounter(0);
     setShowCounter(false);
     setSelectedAnswer(null);
@@ -492,11 +495,49 @@ export default function CountAllScreen({ navigation }: Props) {
 
   const handleBasketFruitTap = (fruit: { id: string; emoji: string }) => {
     stopReadingAloud();
-    const profile = GameManager.getInstance().saveSystem.getProfile();
-    if (profile.consecutiveCorrect < HINT_DISABLE_THRESHOLD) {
-      const position = fruits.filter(f => f.dropped).findIndex(f => f.id === fruit.id) + 1;
+
+    const allDropped = fruits.length > 0 && fruits.every(f => f.dropped);
+    if (!allDropped) {
       AudioManager.stopSpeech();
-      AudioManager.speak(`${position}`, { rate: 0.9, pitch: 1.3 });
+      AudioManager.speak('Drag all fruits to the basket first!', { rate: 0.92, pitch: 1.3 });
+      return;
+    }
+
+    try {
+      Vibration.vibrate(25);
+    } catch {}
+
+    const profile = GameManager.getInstance().saveSystem.getProfile();
+    const isFiveStreakActive = profile.consecutiveCorrect >= HINT_DISABLE_THRESHOLD;
+
+    const assignedCount = countedFruits[fruit.id];
+    let spokenNumber: number;
+
+    if (assignedCount !== undefined) {
+      spokenNumber = assignedCount;
+    } else {
+      const nextCount = Object.keys(countedFruits).length + 1;
+      spokenNumber = nextCount;
+      setCountedFruits(prev => ({
+        ...prev,
+        [fruit.id]: nextCount,
+      }));
+
+      // In normal mode, celebrate when all fruits are counted
+      if (!isFiveStreakActive && problem && nextCount === problem.correctAnswer) {
+        setTimeout(() => {
+          AudioManager.speak(`That's ${problem.correctAnswer} fruits in all! Tap the correct number below.`, {
+            rate: 0.88,
+            pitch: 1.3,
+          });
+        }, 800);
+      }
+    }
+
+    // Only narrate count if 5-streak independence mode is NOT active
+    if (!isFiveStreakActive) {
+      AudioManager.stopSpeech();
+      AudioManager.speak(`${spokenNumber}`, { rate: 0.95, pitch: 1.35 });
     }
 
     // Bounce animation
@@ -504,7 +545,7 @@ export default function CountAllScreen({ navigation }: Props) {
     const glowAnim = fruitGlowAnims.current[fruit.id];
     if (tapAnim) {
       Animated.sequence([
-        Animated.spring(tapAnim, { toValue: 1.45, friction: 3, useNativeDriver: true }),
+        Animated.spring(tapAnim, { toValue: 1.4, friction: 3, useNativeDriver: true }),
         Animated.spring(tapAnim, { toValue: 1, friction: 4, useNativeDriver: true }),
       ]).start();
     }
@@ -594,6 +635,7 @@ export default function CountAllScreen({ navigation }: Props) {
 
     // Reset fruits back to tree so demo starts clean
     setFruits(prev => prev.map(f => ({ ...f, dropped: false })));
+    setCountedFruits({});
     setDropCounter(0);
     setShowCounter(false);
     setSelectedAnswer(null);
@@ -704,6 +746,7 @@ export default function CountAllScreen({ navigation }: Props) {
 
     // Reset fruits back to tree for the learner
     setFruits(prev => prev.map(f => ({ ...f, dropped: false })));
+    setCountedFruits({});
     setDropCounter(0);
     setShowCounter(false);
     setSelectedAnswer(null);
@@ -762,9 +805,11 @@ export default function CountAllScreen({ navigation }: Props) {
 
   const droppedFruits = fruits.filter(f => f.dropped);
   const allDropped = fruits.length > 0 && fruits.every(f => f.dropped);
+  const totalCounted = Object.keys(countedFruits).length;
   const isGroup1Finished = fruits.filter(f => f.group === 1 && !f.dropped).length === 0;
   const profile = GameManager.getInstance().saveSystem.getProfile();
   const showRunningCounter = profile.consecutiveCorrect < HINT_DISABLE_THRESHOLD;
+  const isFiveStreakActive = profile.consecutiveCorrect >= HINT_DISABLE_THRESHOLD;
 
   const formatTime = (s: number) => {
     const m = Math.floor(s / 60).toString().padStart(2, '0');
@@ -893,7 +938,15 @@ export default function CountAllScreen({ navigation }: Props) {
             />
           </View>
           <Text style={styles.instructionText}>
-            Count and drag the fruits to the drop zone. You can submit any time!
+            {!allDropped
+              ? 'Count and drag the fruits to the drop zone.'
+              : isFiveStreakActive
+              ? totalCounted < fruits.length
+                ? 'Tap fruits to keep track as you count in your head!'
+                : 'All fruits counted! Tap your answer below.'
+              : totalCounted < fruits.length
+              ? `Tap each fruit in the basket to count! (${totalCounted}/${fruits.length})`
+              : `All ${fruits.length} fruits counted! Tap the matching number below.`}
           </Text>
         </View>
         <HintBox text={activeHint} onDismiss={() => setActiveHint(null)} />
@@ -1009,13 +1062,26 @@ export default function CountAllScreen({ navigation }: Props) {
           )}
           <View style={styles.fruitRow}>
             {droppedFruits.map((fruit, idx) => {
+              const assignedCount = countedFruits[fruit.id];
+              const isCounted = assignedCount !== undefined;
               const tapAnim = fruitTapAnims.current[fruit.id] ?? new Animated.Value(1);
               const glowAnim = fruitGlowAnims.current[fruit.id] ?? new Animated.Value(0);
               const glowOpacity = glowAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 0.6] });
               return (
                 <TouchableOpacity key={fruit.id} onPress={() => handleBasketFruitTap(fruit)} activeOpacity={0.8}>
-                  <Animated.View style={[styles.droppedFruitWrapper, { transform: [{ scale: tapAnim }] }]}>
+                  <Animated.View
+                    style={[
+                      styles.droppedFruitWrapper,
+                      isCounted && styles.droppedFruitCounted,
+                      { transform: [{ scale: tapAnim }] },
+                    ]}
+                  >
                     <Text style={styles.emoji}>{fruit.emoji}</Text>
+                    {isCounted && !isFiveStreakActive && (
+                      <View style={styles.countedFruitBadge}>
+                        <Text style={styles.countedFruitBadgeText}>{assignedCount}</Text>
+                      </View>
+                    )}
                     <Animated.View style={[StyleSheet.absoluteFill, styles.fruitGlow, { opacity: glowOpacity }]} />
                   </Animated.View>
                 </TouchableOpacity>
@@ -1296,8 +1362,50 @@ const styles = StyleSheet.create({
   emoji: { fontSize: 28 },
   dropZone: { flex: 1, backgroundColor: '#E1F5FE', borderRadius: 16, borderWidth: 3, borderColor: '#81D4FA', borderStyle: 'dashed', padding: 12, justifyContent: 'center', alignItems: 'center', zIndex: 1, marginTop: 4, minHeight: 80 },
   dropZoneHint: { color: '#81D4FA', fontSize: 14, fontWeight: 'bold', position: 'absolute' },
-  droppedFruitWrapper: { margin: 3, width: 48, height: 48, justifyContent: 'center', alignItems: 'center', borderRadius: 24, overflow: 'hidden' },
-  fruitGlow: { backgroundColor: '#FFD700', borderRadius: 24 },
+  droppedFruitWrapper: {
+    margin: 4,
+    width: 50,
+    height: 50,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 25,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    borderColor: '#B2EBF2',
+    position: 'relative',
+    overflow: 'visible',
+  },
+  droppedFruitCounted: {
+    backgroundColor: '#FFF9C4',
+    borderWidth: 2.5,
+    borderColor: '#FFB300',
+    shadowColor: '#FFA000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  countedFruitBadge: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    backgroundColor: '#FF6F00',
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#FFF',
+    zIndex: 10,
+    elevation: 4,
+  },
+  countedFruitBadgeText: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  fruitGlow: { backgroundColor: '#FFD700', borderRadius: 25 },
   dropResetButton: {
     position: 'absolute',
     top: 8,

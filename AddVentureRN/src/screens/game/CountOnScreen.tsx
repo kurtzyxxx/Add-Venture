@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Animated,
-  PanResponder, SafeAreaView, Dimensions, ScrollView, Modal,
+  PanResponder, SafeAreaView, Dimensions, ScrollView, Modal, Vibration,
 } from 'react-native';
 import Svg, { Circle, Ellipse, Line, Path, Rect, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg';
 import { GreatJobOverlay } from '../../components/GreatJobOverlay';
@@ -34,6 +34,7 @@ export default function CountOnScreen({ navigation }: Props) {
   const [baseN, setBaseN] = useState(0);
   const [extraM, setExtraM] = useState(0);
   const [fruits, setFruits] = useState<{ id: string; emoji: string; dropped: boolean }[]>([]);
+  const [countedFruits, setCountedFruits] = useState<Record<string, number>>({});
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [options, setOptions] = useState<number[]>([]);
   const [timeLeft, setTimeLeft] = useState(120);
@@ -60,6 +61,23 @@ export default function CountOnScreen({ navigation }: Props) {
   const [roundKey, setRoundKey] = useState(0);
 
   const isDemoCancelled = useRef(false);
+
+  // Fruit tap & glow animation tracking
+  const fruitTapAnims = useRef<Record<string, Animated.Value>>({});
+  const fruitGlowAnims = useRef<Record<string, Animated.Value>>({});
+
+  const getFruitAnims = (id: string) => {
+    if (!fruitTapAnims.current[id]) {
+      fruitTapAnims.current[id] = new Animated.Value(1);
+    }
+    if (!fruitGlowAnims.current[id]) {
+      fruitGlowAnims.current[id] = new Animated.Value(0);
+    }
+    return {
+      tapAnim: fruitTapAnims.current[id],
+      glowAnim: fruitGlowAnims.current[id],
+    };
+  };
 
   // Layout measurement refs for exact coordinate targeting
   const contentYRef = useRef(0);
@@ -209,6 +227,7 @@ export default function CountOnScreen({ navigation }: Props) {
       dropped: false,
     }));
     setFruits(tutFruits);
+    setCountedFruits({});
     setSelectedAnswer(null);
     setActiveHint(null);
     setCurrentTry(1);
@@ -421,6 +440,7 @@ export default function CountOnScreen({ navigation }: Props) {
     );
 
     setFruits(newFruits);
+    setCountedFruits({});
     setRoundKey(k => k + 1);
     setSelectedAnswer(null);
     setActiveHint(null);
@@ -453,6 +473,7 @@ export default function CountOnScreen({ navigation }: Props) {
   const handleDrop = (fruitId: string) => {
     stopReadingAloud();
     setBasketFeedback(null);
+    setCountedFruits({});
     setFruits(prev => {
       const next = prev.map(f => f.id === fruitId ? { ...f, dropped: true } : f);
       const droppedCount = next.filter(f => f.dropped).length;
@@ -471,6 +492,7 @@ export default function CountOnScreen({ navigation }: Props) {
   const handleRemoveFruit = (fruitId: string) => {
     stopReadingAloud();
     setBasketFeedback(null);
+    setCountedFruits({});
     setFruits(prev => {
       const next = prev.map(f => f.id === fruitId ? { ...f, dropped: false } : f);
       const droppedCount = next.filter(f => f.dropped).length;
@@ -491,9 +513,63 @@ export default function CountOnScreen({ navigation }: Props) {
     setBasketFeedback(null);
     setRoundKey(k => k + 1);
     setFruits(prev => prev.map(fruit => ({ ...fruit, dropped: false })));
+    setCountedFruits({});
     setSelectedAnswer(null);
     AudioManager.stopSpeech();
     AudioManager.speak('Fruits reset to tree.', { rate: 0.95, pitch: 1.25 });
+  };
+
+  // Sequential arbitrary-order basket fruit tap to count
+  const handleBasketFruitTap = (fruitId: string) => {
+    stopReadingAloud();
+
+    try {
+      Vibration.vibrate(25);
+    } catch {}
+
+    const profile = GameManager.getInstance().saveSystem.getProfile();
+    const isFiveStreakActive = profile.consecutiveCorrect >= HINT_DISABLE_THRESHOLD;
+
+    const currentTotalInBasket = baseN + fruits.filter(f => f.dropped).length;
+    const assignedCount = countedFruits[fruitId];
+    let spokenNumber: number;
+
+    if (assignedCount !== undefined) {
+      spokenNumber = assignedCount;
+    } else {
+      const nextCount = Object.keys(countedFruits).length + 1;
+      spokenNumber = nextCount;
+      setCountedFruits(prev => ({
+        ...prev,
+        [fruitId]: nextCount,
+      }));
+
+      // When all fruits currently in the basket are counted
+      if (!isFiveStreakActive && problem && nextCount === currentTotalInBasket) {
+        setTimeout(() => {
+          AudioManager.speak(`That's ${currentTotalInBasket} fruits in all! Choose your answer below!`, {
+            rate: 0.88,
+            pitch: 1.3,
+          });
+        }, 800);
+      }
+    }
+
+    if (!isFiveStreakActive) {
+      AudioManager.stopSpeech();
+      AudioManager.speak(`${spokenNumber}`, { rate: 0.95, pitch: 1.35 });
+    }
+
+    // Bounce and glow animation
+    const { tapAnim, glowAnim } = getFruitAnims(fruitId);
+    Animated.sequence([
+      Animated.spring(tapAnim, { toValue: 1.35, friction: 3, useNativeDriver: true }),
+      Animated.spring(tapAnim, { toValue: 1, friction: 4, useNativeDriver: true }),
+    ]).start();
+    Animated.sequence([
+      Animated.timing(glowAnim, { toValue: 1, duration: 150, useNativeDriver: true }),
+      Animated.timing(glowAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
+    ]).start();
   };
 
   // Open "View Basket" modal — checks that learner added the right number of fruits first!
@@ -599,6 +675,7 @@ export default function CountOnScreen({ navigation }: Props) {
     // Reset fruits back to tree so demo starts clean
     setShowViewBasket(false);
     setFruits(prev => prev.map(f => ({ ...f, dropped: false })));
+    setCountedFruits({});
     setSelectedAnswer(null);
     setHighlightedFruitId(null);
     setAnimatingFruitId(null);
@@ -738,6 +815,7 @@ export default function CountOnScreen({ navigation }: Props) {
     // Reset fruits back to tree for the learner
     setRoundKey(k => k + 1);
     setFruits(prev => prev.map(f => ({ ...f, dropped: false })));
+    setCountedFruits({});
     setSelectedAnswer(null);
     setOptions(prev => {
       const s = [...prev];
@@ -798,6 +876,11 @@ export default function CountOnScreen({ navigation }: Props) {
   const profile = GameManager.getInstance().saveSystem.getProfile();
   const masteryProgress = GameManager.getInstance().getMasteryProgress();
   const showClues = profile.consecutiveCorrect < HINT_DISABLE_THRESHOLD;
+  const isFiveStreakActive = profile.consecutiveCorrect >= HINT_DISABLE_THRESHOLD;
+  const allBasketFruits = [
+    ...Array.from({ length: baseN }, (_, i) => ({ id: `fixed_${i}`, emoji: fruitEmojiType })),
+    ...droppedFruits.map(f => ({ id: f.id, emoji: f.emoji })),
+  ];
 
   const optionColors = ['#FF5252', '#FF9800', '#FFCA28', '#66BB6A', '#29B6F6'];
   const displayedActivityCount = Math.min(activityCount + 1, MAX_ACTIVITIES_PER_SESSION);
@@ -972,36 +1055,78 @@ export default function CountOnScreen({ navigation }: Props) {
               {/* Inside basket: Fixed fruits + Dropped fruits */}
               <View style={styles.basketFruitsInsideContainer}>
                 {/* Starting Fixed Number Fruits */}
-                {Array.from({ length: baseN }).map((_, i) => (
-                  <View
-                    key={`fixed_${i}`}
-                    style={[
-                      styles.basketFixedFruitItem,
-                      highlightPhase === 'base' && styles.basketFixedFruitItemHighlighted,
-                    ]}
-                  >
-                    <Text style={styles.basketFruitEmoji}>{fruitEmojiType}</Text>
-                  </View>
-                ))}
+                {Array.from({ length: baseN }).map((_, i) => {
+                  const fruitId = `fixed_${i}`;
+                  const assignedCount = countedFruits[fruitId];
+                  const isCounted = assignedCount !== undefined;
+                  const { tapAnim, glowAnim } = getFruitAnims(fruitId);
+                  const glowOpacity = glowAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 0.6] });
+                  return (
+                    <TouchableOpacity
+                      key={fruitId}
+                      onPress={() => handleBasketFruitTap(fruitId)}
+                      disabled={isDemonstrating}
+                      activeOpacity={0.75}
+                    >
+                      <Animated.View
+                        style={[
+                          styles.basketFixedFruitItem,
+                          highlightPhase === 'base' && styles.basketFixedFruitItemHighlighted,
+                          isCounted && styles.basketFruitCounted,
+                          { transform: [{ scale: tapAnim }] },
+                        ]}
+                      >
+                        <Text style={styles.basketFruitEmoji}>{fruitEmojiType}</Text>
+                        {isCounted && !isFiveStreakActive && (
+                          <View style={styles.basketCountedBadge}>
+                            <Text style={styles.basketCountedBadgeText}>{assignedCount}</Text>
+                          </View>
+                        )}
+                        <Animated.View style={[StyleSheet.absoluteFill, styles.fruitGlow, { opacity: glowOpacity }]} />
+                      </Animated.View>
+                    </TouchableOpacity>
+                  );
+                })}
 
                 {/* Added / Dropped Fruits */}
-                {droppedFruits.map((f, idx) => (
-                  <TouchableOpacity
-                    key={f.id}
-                    onPress={() => handleRemoveFruit(f.id)}
-                    disabled={isDemonstrating}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.basketAddedFruitItem}>
-                      <Text style={styles.basketFruitEmoji}>{f.emoji}</Text>
-                      {showClues && (
-                        <View style={styles.addedBadgeDot}>
-                          <Text style={styles.addedBadgeText}>+{idx + 1}</Text>
-                        </View>
-                      )}
-                    </View>
-                  </TouchableOpacity>
-                ))}
+                {droppedFruits.map((f, idx) => {
+                  const assignedCount = countedFruits[f.id];
+                  const isCounted = assignedCount !== undefined;
+                  const { tapAnim, glowAnim } = getFruitAnims(f.id);
+                  const glowOpacity = glowAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 0.6] });
+                  return (
+                    <TouchableOpacity
+                      key={f.id}
+                      onPress={() => handleBasketFruitTap(f.id)}
+                      onLongPress={() => handleRemoveFruit(f.id)}
+                      delayLongPress={400}
+                      disabled={isDemonstrating}
+                      activeOpacity={0.75}
+                    >
+                      <Animated.View
+                        style={[
+                          styles.basketAddedFruitItem,
+                          isCounted && styles.basketFruitCounted,
+                          { transform: [{ scale: tapAnim }] },
+                        ]}
+                      >
+                        <Text style={styles.basketFruitEmoji}>{f.emoji}</Text>
+                        {isCounted && !isFiveStreakActive ? (
+                          <View style={styles.basketCountedBadge}>
+                            <Text style={styles.basketCountedBadgeText}>{assignedCount}</Text>
+                          </View>
+                        ) : (
+                          showClues && (
+                            <View style={styles.addedBadgeDot}>
+                              <Text style={styles.addedBadgeText}>+{idx + 1}</Text>
+                            </View>
+                          )
+                        )}
+                        <Animated.View style={[StyleSheet.absoluteFill, styles.fruitGlow, { opacity: glowOpacity }]} />
+                      </Animated.View>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
             </WickerBasketCard>
 
@@ -1199,38 +1324,44 @@ export default function CountOnScreen({ navigation }: Props) {
                 >
                   <View style={styles.zoomFruitsCluster}>
                     {/* All basket fruits (starting + added) */}
-                    {Array.from({ length: totalBasketFruitsCount }).map((_, i) => {
+                    {allBasketFruits.map((item, i) => {
                       const isCompact = totalBasketFruitsCount > 10;
                       const isDemoHighlighted = demoCountingIndex === i;
-                      const showIndexTag = showClues || (isDemonstrating && demoMaxCountedIndex !== null && i <= demoMaxCountedIndex);
+                      const assignedCount = countedFruits[item.id];
+                      const isCounted = assignedCount !== undefined;
+                      const { tapAnim, glowAnim } = getFruitAnims(item.id);
+                      const glowOpacity = glowAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 0.6] });
+                      const showIndexTag =
+                        (!isFiveStreakActive && isCounted) ||
+                        (isDemonstrating && demoMaxCountedIndex !== null && i <= demoMaxCountedIndex);
+                      const displayedTag = isDemonstrating ? i + 1 : assignedCount;
+
                       return (
                         <TouchableOpacity
-                          key={i}
-                          activeOpacity={0.7}
+                          key={item.id}
+                          activeOpacity={0.75}
                           disabled={isDemonstrating}
-                          onPress={() => {
-                            if (showClues) {
-                              AudioManager.stopSpeech();
-                              AudioManager.speak(`${i + 1}`, { rate: 0.9, pitch: 1.3 });
-                            }
-                          }}
+                          onPress={() => handleBasketFruitTap(item.id)}
                         >
-                          <View
+                          <Animated.View
                             style={[
                               styles.zoomFruitBadgeWrap,
                               isCompact && styles.zoomFruitBadgeWrapCompact,
                               isDemoHighlighted && styles.zoomFruitHighlighted,
+                              isCounted && styles.zoomFruitCounted,
+                              { transform: [{ scale: tapAnim }] },
                             ]}
                           >
                             <Text style={[styles.zoomFruitEmoji, isCompact && styles.zoomFruitEmojiCompact]}>
-                              {fruitEmojiType}
+                              {item.emoji}
                             </Text>
-                            {showIndexTag && (
+                            {showIndexTag && displayedTag !== undefined && (
                               <View style={styles.zoomFruitIndexTag}>
-                                <Text style={styles.zoomFruitIndexText}>{i + 1}</Text>
+                                <Text style={styles.zoomFruitIndexText}>{displayedTag}</Text>
                               </View>
                             )}
-                          </View>
+                            <Animated.View style={[StyleSheet.absoluteFill, styles.fruitGlow, { opacity: glowOpacity }]} />
+                          </Animated.View>
                         </TouchableOpacity>
                       );
                     })}
@@ -1862,15 +1993,64 @@ const styles = StyleSheet.create({
     maxWidth: 240,
   },
   basketFixedFruitItem: {
-    margin: 2.5,
+    margin: 3,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
+    position: 'relative',
+    overflow: 'visible',
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    borderWidth: 1.5,
+    borderColor: '#E0F2F1',
   },
   basketAddedFruitItem: {
     position: 'relative',
-    margin: 2.5,
+    margin: 3,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'visible',
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    borderWidth: 1.5,
+    borderColor: '#E0F2F1',
+  },
+  basketFruitCounted: {
+    backgroundColor: '#FFF9C4',
+    borderWidth: 2.5,
+    borderColor: '#FFB300',
+    shadowColor: '#FFA000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  basketCountedBadge: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
+    backgroundColor: '#FF6F00',
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#FFF',
+    zIndex: 10,
+    elevation: 4,
+  },
+  basketCountedBadgeText: {
+    color: '#FFF',
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  fruitGlow: {
+    backgroundColor: '#FFD700',
+    borderRadius: 22,
   },
   basketFruitEmoji: {
     fontSize: 24,
@@ -2124,12 +2304,32 @@ const styles = StyleSheet.create({
   },
   zoomFruitBadgeWrap: {
     position: 'relative',
-    margin: 4,
+    margin: 5,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    borderColor: '#B2EBF2',
+    overflow: 'visible',
   },
   zoomFruitBadgeWrapCompact: {
-    margin: 2.5,
+    margin: 3,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+  },
+  zoomFruitCounted: {
+    backgroundColor: '#FFF9C4',
+    borderWidth: 2.5,
+    borderColor: '#FFB300',
+    shadowColor: '#FFA000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 3,
+    elevation: 3,
   },
   zoomFruitEmoji: {
     fontSize: 30,
@@ -2139,17 +2339,21 @@ const styles = StyleSheet.create({
   },
   zoomFruitIndexTag: {
     position: 'absolute',
-    bottom: -2,
-    right: -2,
+    top: -6,
+    right: -6,
     backgroundColor: '#FF6F00',
-    borderRadius: 8,
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-    borderWidth: 1,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
     borderColor: '#FFF',
+    zIndex: 10,
+    elevation: 4,
   },
   zoomFruitIndexText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '900',
     color: '#FFF',
   },
