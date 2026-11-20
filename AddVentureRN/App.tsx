@@ -7,7 +7,6 @@ import { GameManager } from './src/core/GameManager';
 
 import SplashScreen from './src/screens/SplashScreen';
 import HomeScreen from './src/screens/HomeScreen';
-import AdventureMapScreen from './src/screens/AdventureMapScreen';
 import ProgressScreen from './src/screens/ProgressScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import CountAllScreen from './src/screens/game/CountAllScreen';
@@ -29,7 +28,6 @@ export type AdaptiveProblem = {
 export type RootStackParamList = {
   Splash: undefined;
   Home: undefined;
-  AdventureMap: undefined;
   Progress: undefined;
   Settings: undefined;
   CountAll: undefined;
@@ -78,7 +76,6 @@ export default function App() {
         <Stack.Navigator initialRouteName="Splash" screenOptions={{ headerShown: false }}>
           <Stack.Screen name="Splash" component={SplashScreen} />
           <Stack.Screen name="Home" component={HomeScreen} />
-          <Stack.Screen name="AdventureMap" component={AdventureMapScreen} />
           <Stack.Screen name="Progress" component={ProgressScreen} />
           <Stack.Screen name="Settings" component={SettingsScreen} />
           

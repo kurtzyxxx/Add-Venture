@@ -5,7 +5,6 @@ import {
 } from 'react-native';
 import { GreatJobOverlay } from '../../components/GreatJobOverlay';
 import { HintConfirmModal } from '../../components/HintConfirmModal';
-import { HintBox } from '../../components/HintBox';
 import { PulseView } from '../../components/animations/PulseView';
 import { DemonstrationBanner } from '../../components/tutorial/DemonstrationBanner';
 import { FiveStreakModal } from '../../components/FiveStreakModal';
