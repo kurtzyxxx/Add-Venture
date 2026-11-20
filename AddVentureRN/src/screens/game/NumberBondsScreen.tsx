@@ -58,6 +58,8 @@ export default function NumberBondsScreen({ navigation }: Props) {
   // In-UI automated demonstration states & refs
   const [isDemonstrating, setIsDemonstrating] = useState(false);
   const isDemonstratingRef = useRef(false);
+  const [isHintDemo, setIsHintDemo] = useState(false);
+  const isHintDemoRef = useRef(false);
   const [demoMessage, setDemoMessage] = useState('');
   const [highlightedFruitId, setHighlightedFruitId] = useState<string | null>(null);
   const [animatingFruitId, setAnimatingFruitId] = useState<string | null>(null);
@@ -882,13 +884,17 @@ export default function NumberBondsScreen({ navigation }: Props) {
     else loadNewProblem();
   };
 
-  const startAutomatedDemonstration = async (isTimeout = false) => {
+  const startAutomatedDemonstration = async (isTimeout = false, isHint = false) => {
     stopReadingAloud();
     if (!problem) return;
     isDemonstratingRef.current = true;
     setIsDemonstrating(true);
+    isHintDemoRef.current = isHint;
+    setIsHintDemo(isHint);
     isDemoCancelled.current = false;
-    setRemediationCycle(c => c + 1);
+    if (!isHint) {
+      setRemediationCycle(c => c + 1);
+    }
 
     // Reset dropped fruits so demonstration starts clean
     setSelectedFruitId(null);
@@ -1038,7 +1044,11 @@ export default function NumberBondsScreen({ navigation }: Props) {
     setUserCountedIndices(new Set());
     setUserActiveCountIndex(null);
     setCountedFruits({});
-    setCurrentTry(prev => prev + 1);
+    if (!isHintDemoRef.current) {
+      setCurrentTry(prev => prev + 1);
+    }
+    isHintDemoRef.current = false;
+    setIsHintDemo(false);
 
     // Clear right basket for the student
     setRoundKey(k => k + 1);
@@ -1051,11 +1061,10 @@ export default function NumberBondsScreen({ navigation }: Props) {
 
   const useHint = () => {
     stopReadingAloud();
-    if (!problem || hintsRemaining <= 0) return;
+    if (!problem || hintsRemaining <= 0 || isDemonstrating) return;
     const gm = GameManager.getInstance();
-    const hint = gm.getHint(problem);
-    setActiveHint(hint);
     gm.consumeSessionHint().then(setHintsRemaining);
+    startAutomatedDemonstration(false, true);
   };
 
   const confirmUseHint = (beforeConfirm?: () => void) => {
@@ -1128,12 +1137,13 @@ export default function NumberBondsScreen({ navigation }: Props) {
         </View>
       )}
 
-      {/* Guided Remediation Banner (during normal game after mistake) */}
+      {/* Guided Remediation / Hint Demo Banner (during normal game) */}
       {!isTutorialMode && isDemonstrating && (
         <DemonstrationBanner
           message={demoMessage}
           onSkip={endDemonstration}
-          allowSkip={remediationCycle > 0 || currentTry > 1}
+          allowSkip={isHintDemo || remediationCycle > 0 || currentTry > 1}
+          kicker={isHintDemo ? '💡 HINT DEMO' : 'GUIDED PRACTICE'}
         />
       )}
 
@@ -1205,9 +1215,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
           </View>
         )}
 
-        <View style={styles.hintBoxWrap}>
-          <HintBox text={activeHint} onDismiss={() => setActiveHint(null)} />
-        </View>
+
 
         {/* Instruction Card */}
         <View style={styles.instructionCard}>

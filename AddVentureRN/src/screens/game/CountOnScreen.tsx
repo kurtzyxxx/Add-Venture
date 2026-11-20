@@ -44,6 +44,8 @@ export default function CountOnScreen({ navigation }: Props) {
   const [activeHint, setActiveHint] = useState<string | null>(null);
   const [isDemonstrating, setIsDemonstrating] = useState(false);
   const isDemonstratingRef = useRef(false);
+  const [isHintDemo, setIsHintDemo] = useState(false);
+  const isHintDemoRef = useRef(false);
   const [highlightPhase, setHighlightPhase] = useState<'idle' | 'base' | 'extra' | 'total'>('idle');
   const readingTokenRef = useRef(0);
   const [demoMessage, setDemoMessage] = useState('');
@@ -696,13 +698,17 @@ export default function CountOnScreen({ navigation }: Props) {
     else loadNewProblem();
   };
 
-  const startAutomatedDemonstration = async (isTimeout = false) => {
+  const startAutomatedDemonstration = async (isTimeout = false, isHint = false) => {
     stopReadingAloud();
     if (!problem) return;
     isDemonstratingRef.current = true;
     setIsDemonstrating(true);
+    isHintDemoRef.current = isHint;
+    setIsHintDemo(isHint);
     isDemoCancelled.current = false;
-    setRemediationCycle(c => c + 1);
+    if (!isHint) {
+      setRemediationCycle(c => c + 1);
+    }
 
     // Reset fruits back to tree so demo starts clean
     setShowViewBasket(false);
@@ -842,7 +848,11 @@ export default function CountOnScreen({ navigation }: Props) {
     setIsBasketHighlighted(false);
     setDemoCountingIndex(null);
     setDemoMaxCountedIndex(null);
-    setCurrentTry(prev => prev + 1);
+    if (!isHintDemoRef.current) {
+      setCurrentTry(prev => prev + 1);
+    }
+    isHintDemoRef.current = false;
+    setIsHintDemo(false);
 
     // Reset fruits back to tree for the learner
     setRoundKey(k => k + 1);
@@ -863,11 +873,10 @@ export default function CountOnScreen({ navigation }: Props) {
 
   const useHint = () => {
     stopReadingAloud();
-    if (!problem || hintsRemaining <= 0) return;
+    if (!problem || hintsRemaining <= 0 || isDemonstrating) return;
     const gm = GameManager.getInstance();
-    const hint = gm.getHint(problem);
-    setActiveHint(hint);
     gm.consumeSessionHint().then(setHintsRemaining);
+    startAutomatedDemonstration(false, true);
   };
 
   const confirmUseHint = (beforeConfirm?: () => void) => {
@@ -939,12 +948,13 @@ export default function CountOnScreen({ navigation }: Props) {
         </View>
       )}
 
-      {/* Guided Remediation Banner (during normal game after mistake) */}
+      {/* Guided Remediation / Hint Demo Banner (during normal game) */}
       {!isTutorialMode && isDemonstrating && (
         <DemonstrationBanner
           message={demoMessage}
           onSkip={endDemonstration}
-          allowSkip={remediationCycle > 0 || currentTry > 1}
+          allowSkip={isHintDemo || remediationCycle > 0 || currentTry > 1}
+          kicker={isHintDemo ? '💡 HINT DEMO' : 'GUIDED PRACTICE'}
         />
       )}
 
@@ -1033,7 +1043,7 @@ export default function CountOnScreen({ navigation }: Props) {
             {basketFeedback || `Oliver already has ${baseN} fruits. Drag fruits from the tree to his basket!`}
           </Text>
         </View>
-        <HintBox text={activeHint} onDismiss={() => setActiveHint(null)} />
+
 
         {/* Equation */}
         <View style={styles.equationContainer}>

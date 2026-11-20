@@ -1,6 +1,6 @@
 import { SaveSystem, LearnerProfile, SessionRecord } from './SaveSystem';
 import { AdaptiveDifficultyEngine, TARGET_RESPONSE_MS } from './AdaptiveDifficultyEngine';
-import { HintManager } from './HintManager';
+import { HintManager, HintContext } from './HintManager';
 import { FeedbackManager } from './FeedbackManager';
 import {
   ProblemGenerator,
@@ -282,8 +282,8 @@ export class GameManager {
     };
   }
 
-  public getHint(problem: Problem): string {
-    return this.hintManager.getHint(this.currentStrategy, problem);
+  public getHint(problem: Problem, context?: HintContext): string {
+    return this.hintManager.getHint(this.currentStrategy, problem, context);
   }
 
   private async playSuccessSound() {
