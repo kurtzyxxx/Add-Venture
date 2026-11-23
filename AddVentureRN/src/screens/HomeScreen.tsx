@@ -248,6 +248,7 @@ export default function HomeScreen({ navigation }: Props) {
   }, [navigation]);
 
   const refreshData = useCallback(() => {
+    AudioManager.startBgm();
     const gm = GameManager.getInstance();
     const profile = gm.saveSystem.getProfile();
     const ss = gm.saveSystem;
@@ -272,12 +273,12 @@ export default function HomeScreen({ navigation }: Props) {
     if (coOk && !prevCoUnlocked.current) {
       setCoTrigger(t => t + 1);
       AudioManager.stopSpeech();
-      setTimeout(() => AudioManager.speak('Hooray! The Orange Grove is now unlocked! Great counting!', { rate: 0.88, pitch: 1.3 }), 350);
+      setTimeout(() => AudioManager.playVoiceClip('unlock_orange_grove'), 350);
     }
     if (nbOk && !prevNbUnlocked.current) {
       setNbTrigger(t => t + 1);
       AudioManager.stopSpeech();
-      setTimeout(() => AudioManager.speak('Amazing! The Harmony Tree is unlocked! You are a superstar!', { rate: 0.88, pitch: 1.3 }), 350);
+      setTimeout(() => AudioManager.playVoiceClip('unlock_harmony_tree'), 350);
     }
     prevCoUnlocked.current = coOk;
     prevNbUnlocked.current = nbOk;
@@ -313,17 +314,18 @@ export default function HomeScreen({ navigation }: Props) {
       Animated.spring(avatarBounce, { toValue: 1, friction: 3, useNativeDriver: true }),
     ]).start();
 
-    const greetings = [
-      `Hoot hoot! You have ${stars} stars! Let's pick some fruits!`,
+    const clipIdx = (Math.floor(Math.random() * 3) + 1) as 1 | 2 | 3;
+    const clipKey = `home_greeting_${clipIdx}` as const;
+    const greetingTexts = [
       "I'm Oliver! Tap a tree to start our adventure!",
       "Ready to count together? You're doing great!",
       "Tap Play Next to jump right into the game!",
     ];
-    const picked = greetings[Math.floor(Math.random() * greetings.length)];
+    const pickedText = greetingTexts[clipIdx - 1];
 
-    setOliverSpeech(picked.length > 32 ? 'Hoot! Let’s play math!' : picked);
+    setOliverSpeech(pickedText.length > 32 ? 'Hoot! Let’s play math!' : pickedText);
     AudioManager.stopSpeech();
-    AudioManager.speak(picked, { rate: 0.9, pitch: 1.3 });
+    AudioManager.playVoiceClip(clipKey);
 
     if (oliverSpeechTimeout.current) clearTimeout(oliverSpeechTimeout.current);
     oliverSpeechTimeout.current = setTimeout(() => setOliverSpeech(null), 3500);
@@ -331,6 +333,7 @@ export default function HomeScreen({ navigation }: Props) {
 
   // ── Game Launcher with friendly audio prompt ───────────────────────────────
   const startGame = (strategy: string, routeName: 'CountAll' | 'CountOn' | 'NumberBonds', announcement?: string) => {
+    AudioManager.playSfx('click');
     AudioManager.stopSpeech();
     if (announcement) {
       AudioManager.speak(announcement, { rate: 0.95, pitch: 1.3 });

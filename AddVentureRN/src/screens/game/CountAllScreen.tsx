@@ -537,6 +537,7 @@ export default function CountAllScreen({ navigation }: Props) {
   };
 
   const handleDrop = (fruitId: string) => {
+    AudioManager.playSfx('pop');
     stopReadingAloud();
     setFruits(prev => {
       const next = prev.map(f => f.id === fruitId ? { ...f, dropped: true } : f);
@@ -560,6 +561,7 @@ export default function CountAllScreen({ navigation }: Props) {
   };
 
   const resetDroppedFruits = () => {
+    AudioManager.playSfx('click');
     stopReadingAloud();
     setFruits(prev => prev.map(fruit => ({ ...fruit, dropped: false })));
     setCountedFruits({});
@@ -567,7 +569,7 @@ export default function CountAllScreen({ navigation }: Props) {
     setShowCounter(false);
     setSelectedAnswer(null);
     AudioManager.stopSpeech();
-    AudioManager.speak('Fruits reset.', { rate: 0.95, pitch: 1.25 });
+    AudioManager.playVoiceClip('fruits_reset');
   };
 
   const handleBasketFruitTap = (fruit: { id: string; emoji: string }) => {
@@ -576,13 +578,14 @@ export default function CountAllScreen({ navigation }: Props) {
     const allDropped = fruits.length > 0 && fruits.every(f => f.dropped);
     if (!allDropped) {
       AudioManager.stopSpeech();
-      AudioManager.speak('Drag all fruits to the basket first!', { rate: 0.92, pitch: 1.3 });
+      AudioManager.playVoiceClip('drag_all_fruits');
       return;
     }
 
     try {
       Vibration.vibrate(25);
     } catch {}
+    AudioManager.playSfx('pop');
 
     const profile = GameManager.getInstance().saveSystem.getProfile();
     const isFiveStreakActive = profile.consecutiveCorrect >= HINT_DISABLE_THRESHOLD;
@@ -614,7 +617,11 @@ export default function CountAllScreen({ navigation }: Props) {
     // Only narrate count if 5-streak independence mode is NOT active
     if (!isFiveStreakActive) {
       AudioManager.stopSpeech();
-      AudioManager.speak(`${spokenNumber}`, { rate: 0.95, pitch: 1.35 });
+      if (spokenNumber >= 1 && spokenNumber <= 10) {
+        AudioManager.playVoiceClip(`num_${spokenNumber}` as any);
+      } else {
+        AudioManager.speak(`${spokenNumber}`, { rate: 0.95, pitch: 1.35 });
+      }
     }
 
     // Bounce animation
@@ -654,6 +661,7 @@ export default function CountAllScreen({ navigation }: Props) {
     );
 
     if (isCorrect) {
+      AudioManager.playSfx('correct');
       let wasMastered = false;
       if (isMasteryProblem) {
         wasMastered = gm.recordMasteryCorrect(problem);
@@ -664,6 +672,7 @@ export default function CountAllScreen({ navigation }: Props) {
       setJustMastered(wasMastered);
       setShowGreatJob(true);
     } else {
+      AudioManager.playSfx('wrong');
       if (isMasteryProblem) {
         gm.recordMasteryIncorrect(problem);
       }
@@ -1216,6 +1225,7 @@ export default function CountAllScreen({ navigation }: Props) {
                     }
                     return;
                   }
+                  AudioManager.playSfx('click');
                   setSelectedAnswer(opt);
                 }}
                 activeOpacity={allDropped ? 0.8 : 1}

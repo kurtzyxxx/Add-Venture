@@ -593,6 +593,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
 
   // Tap-to-select fruit from canopy (Hybrid interaction FR-NB-02)
   const handleSelectFruit = (fruitId: string) => {
+    AudioManager.playSfx('pop');
     stopReadingAloud();
     if (isDemonstrating) return;
     try {
@@ -628,6 +629,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
 
   // Drag or Tap fruit from canopy into right basket with magnetic snap feedback
   const handleDropFruit = (fruitId: string) => {
+    AudioManager.playSfx('pop');
     stopReadingAloud();
     try {
       Vibration.vibrate(40);
@@ -786,6 +788,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
 
   // Tap fruit in right basket to return to tree (or long-press)
   const handleRemoveFruit = (fruitId: string) => {
+    AudioManager.playSfx('pop');
     stopReadingAloud();
     try {
       Vibration.vibrate(25);
@@ -810,6 +813,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
 
   // Reset right basket
   const handleResetRightBasket = () => {
+    AudioManager.playSfx('click');
     stopReadingAloud();
     try {
       Vibration.vibrate(25);
@@ -823,7 +827,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
     setTreeFruits(prev => prev.map(f => ({ ...f, dropped: false })));
     setSelectedOption(null);
     AudioManager.stopSpeech();
-    AudioManager.speak('Basket cleared.', { rate: 0.95, pitch: 1.25 });
+    AudioManager.playVoiceClip('fruits_reset');
   };
 
   // Reset all tree fruits and player answer selection
@@ -855,6 +859,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
     );
 
     if (isCorrect) {
+      AudioManager.playSfx('correct');
       let wasMastered = false;
       if (isMasteryProblem) wasMastered = gm.recordMasteryCorrect(problem);
       const newCount = gm.getSessionActivityCount();
@@ -863,6 +868,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
       setJustMastered(wasMastered);
       setShowGreatJob(true);
     } else {
+      AudioManager.playSfx('wrong');
       if (isMasteryProblem) gm.recordMasteryIncorrect(problem);
       setLastWrongAnswer(selectedOption);
       setIsTimeoutError(false);

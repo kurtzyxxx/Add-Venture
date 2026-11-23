@@ -56,11 +56,15 @@ export default function SplashScreen({ navigation }: Props) {
   const goToHome = () => {
     if (hasNavigated.current) return;
     hasNavigated.current = true;
+    AudioManager.stopIntroMusic();
     AudioManager.stopSpeech();
     navigation.replace('Home');
   };
 
   useEffect(() => {
+    // Play opening intro music (assets/intro.wav)
+    AudioManager.playIntroMusic();
+
     // 1. Loading progress bar (0% -> 100% over 4.8 seconds)
     const listenerId = loadingProgress.addListener(({ value }) => {
       setProgressPercent(Math.min(100, Math.round(value * 100)));
@@ -178,17 +182,9 @@ export default function SplashScreen({ navigation }: Props) {
       });
     });
 
-    // Friendly welcoming narration
-    const voiceTimeout = setTimeout(() => {
-      AudioManager.speak('Welcome to Add-Venture! Let us explore math together!', {
-        rate: 0.95,
-        pitch: 1.3,
-      });
-    }, 700);
-
     return () => {
       loadingProgress.removeListener(listenerId);
-      clearTimeout(voiceTimeout);
+      AudioManager.stopIntroMusic();
       AudioManager.stopSpeech();
     };
   }, []);

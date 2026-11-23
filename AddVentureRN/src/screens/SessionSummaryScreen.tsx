@@ -45,6 +45,11 @@ export default function SessionSummaryScreen({ route, navigation }: Props) {
     ]).start();
 
     const label = STRATEGY_LABELS[strategy] ?? strategy;
+    if (accuracyPct >= 70) {
+      AudioManager.playSfx('applause');
+    } else {
+      AudioManager.playSfx('correct');
+    }
     AudioManager.stopSpeech();
     setTimeout(() => {
       AudioManager.speak(

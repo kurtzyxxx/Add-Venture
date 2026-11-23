@@ -18,7 +18,7 @@ export function HintConfirmModal({
   useEffect(() => {
     if (!visible) return;
     AudioManager.stopSpeech();
-    AudioManager.speak('Want Oliver to show you how? Tap Show Me!', { rate: 0.9, pitch: 1.25 });
+    AudioManager.playVoiceClip('want_hint');
   }, [visible]);
 
   return (

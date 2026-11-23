@@ -52,12 +52,18 @@ export const GreatJobOverlay: React.FC<GreatJobOverlayProps> = ({
       a.scale.setValue(0);
     });
 
-    // TTS
-    const message = isMastery
-      ? 'Incredible! You mastered it! Amazing work!'
-      : `Amazing! You got it! ${stars} ${stars === 1 ? 'star' : 'stars'}!`;
+    // SFX & Pre-rendered Neural Voice Clip (Option 3)
+    AudioManager.playSfx('applause');
     AudioManager.stopSpeech();
-    AudioManager.speak(message, { rate: 0.9, pitch: 1.3 });
+    if (isMastery) {
+      AudioManager.playVoiceClip('mastery_completed');
+    } else if (stars === 3) {
+      AudioManager.playVoiceClip('great_job_3');
+    } else if (stars === 2) {
+      AudioManager.playVoiceClip('great_job_2');
+    } else {
+      AudioManager.playVoiceClip('great_job_1');
+    }
 
     // Animate burst stars (radiate outward)
     const angles = Array.from({ length: STAR_COUNT }, (_, i) => (i * 360) / STAR_COUNT);
