@@ -514,6 +514,7 @@ export default function CountOnScreen({ navigation }: Props) {
 
   // Drag fruit from tree into Oliver's basket
   const handleDrop = (fruitId: string) => {
+    AudioManager.playSfx('pop');
     stopReadingAloud();
     setBasketFeedback(null);
     setCountedFruits({});
@@ -552,6 +553,7 @@ export default function CountOnScreen({ navigation }: Props) {
 
   // Reset all dragged fruits back to tree
   const resetDroppedFruits = () => {
+    AudioManager.playSfx('click');
     stopReadingAloud();
     setBasketFeedback(null);
     setRoundKey(k => k + 1);
@@ -559,7 +561,7 @@ export default function CountOnScreen({ navigation }: Props) {
     setCountedFruits({});
     setSelectedAnswer(null);
     AudioManager.stopSpeech();
-    AudioManager.speak('Fruits reset to tree.', { rate: 0.95, pitch: 1.25 });
+    AudioManager.playVoiceClip('fruits_reset');
   };
 
   // Sequential arbitrary-order basket fruit tap to count
@@ -569,6 +571,7 @@ export default function CountOnScreen({ navigation }: Props) {
     try {
       Vibration.vibrate(25);
     } catch {}
+    AudioManager.playSfx('pop');
 
     const profile = GameManager.getInstance().saveSystem.getProfile();
     const isFiveStreakActive = profile.consecutiveCorrect >= HINT_DISABLE_THRESHOLD;
@@ -600,7 +603,11 @@ export default function CountOnScreen({ navigation }: Props) {
 
     if (!isFiveStreakActive) {
       AudioManager.stopSpeech();
-      AudioManager.speak(`${spokenNumber}`, { rate: 0.95, pitch: 1.35 });
+      if (spokenNumber >= 1 && spokenNumber <= 10) {
+        AudioManager.playVoiceClip(`num_${spokenNumber}` as any);
+      } else {
+        AudioManager.speak(`${spokenNumber}`, { rate: 0.95, pitch: 1.35 });
+      }
     }
 
     // Bounce and glow animation
@@ -667,6 +674,7 @@ export default function CountOnScreen({ navigation }: Props) {
     );
 
     if (isCorrect) {
+      AudioManager.playSfx('correct');
       let wasMastered = false;
       if (isMasteryProblem) wasMastered = gm.recordMasteryCorrect(problem);
       const newCount = gm.getSessionActivityCount();
@@ -676,6 +684,7 @@ export default function CountOnScreen({ navigation }: Props) {
       setShowViewBasket(false);
       setShowGreatJob(true);
     } else {
+      AudioManager.playSfx('wrong');
       if (isMasteryProblem) gm.recordMasteryIncorrect(problem);
       setShowViewBasket(false);
       setLastWrongAnswer(selectedAnswer);
@@ -1442,6 +1451,7 @@ export default function CountOnScreen({ navigation }: Props) {
                         isHighlighted && styles.zoomOptionBoxHighlighted,
                       ]}
                       onPress={() => {
+                        AudioManager.playSfx('click');
                         setSelectedAnswer(opt);
                         AudioManager.stopSpeech();
                         AudioManager.speak(`${opt}`, { rate: 0.9, pitch: 1.3 });

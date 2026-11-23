@@ -189,6 +189,7 @@ export default function AdaptiveModeScreen({ route, navigation }: Props) {
     if (!currentProblem || selectedAnswer === null || isDragIncomplete) return;
 
     if (selectedAnswer !== currentProblem.correctAnswer) {
+      AudioManager.playSfx('wrong');
       setFeedback('incorrect');
       setSelectedAnswer(null);
       setOptions(prev => shuffleOptions(prev));
@@ -201,12 +202,14 @@ export default function AdaptiveModeScreen({ route, navigation }: Props) {
     }
 
     setFeedback('correct');
+    AudioManager.playSfx('correct');
     AudioManager.stopSpeech();
     AudioManager.speak('Correct. Great review!', { rate: 0.95, pitch: 1.3 });
     setTimeout(handleNext, 700);
   };
 
   const handleDropFruit = (fruitId: string) => {
+    AudioManager.playSfx('pop');
     setReviewFruits(prev => {
       const next = prev.map(fruit =>
         fruit.id === fruitId ? { ...fruit, dropped: true } : fruit

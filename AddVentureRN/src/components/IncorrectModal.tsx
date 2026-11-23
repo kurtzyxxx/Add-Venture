@@ -70,19 +70,15 @@ export const IncorrectModal: React.FC<IncorrectModalProps> = ({
       Animated.timing(shakeAnim, { toValue: 0, duration: 70, useNativeDriver: true }),
     ]).start();
 
-    // Audio narration with 0.78x pacing (FR-CO-01, NFR-AC-01)
+    // Audio narration (Option 3 studio neural voice)
+    AudioManager.playSfx('wrong');
     AudioManager.stopSpeech();
-    const narration = isTimeout
-      ? "Time's up! That's okay! Let's solve it step-by-step together!"
-      : (userAnswer !== undefined && userAnswer !== null && userAnswer !== -1 && correctAnswer !== undefined && correctAnswer !== null)
-        ? `Let's check this together! You had ${userAnswer}, but we need ${correctAnswer}. Let's count them step-by-step!`
-        : "Oops! Not quite, but nice try! Let's solve it step-by-step together!";
-
     const timeout = setTimeout(() => {
-      AudioManager.speak(narration, {
-        rate: 0.78,
-        pitch: 1.25,
-      });
+      if (isTimeout) {
+        AudioManager.playVoiceClip('times_up');
+      } else {
+        AudioManager.playVoiceClip('oops_try_again');
+      }
     }, 200);
 
     return () => {

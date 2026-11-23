@@ -108,6 +108,7 @@ export class SaveSystem {
       settings: {
         musicEnabled: true,
         soundsEnabled: true,
+        voicePersona: 'oliver',
       },
       adaptiveReviewPending: {
         COUNT_ALL: false,

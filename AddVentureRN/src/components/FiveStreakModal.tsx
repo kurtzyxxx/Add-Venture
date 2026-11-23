@@ -48,13 +48,11 @@ export const FiveStreakModal: React.FC<FiveStreakModalProps> = ({
     );
     bounceLoop.start();
 
-    // Speak narrator reward message
+    // SFX & Pre-rendered Neural Voice Clip (Option 3)
+    AudioManager.playSfx('applause');
     AudioManager.stopSpeech();
     const timeout = setTimeout(() => {
-      AudioManager.speak('Wow! You are amazing! This time try counting on your own.', {
-        rate: 0.9,
-        pitch: 1.3,
-      });
+      AudioManager.playVoiceClip('five_streak');
     }, 200);
 
     return () => {
