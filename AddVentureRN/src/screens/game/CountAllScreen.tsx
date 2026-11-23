@@ -49,6 +49,7 @@ export default function CountAllScreen({ navigation }: Props) {
   const [isSubmitHighlighted, setIsSubmitHighlighted] = useState(false);
   const [isMasteryProblem, setIsMasteryProblem] = useState(false);
   const [remediationCycle, setRemediationCycle] = useState(0);
+  const [isNarrating, setIsNarrating] = useState(false);
 
   // Synchronized visual highlights when narrator dictates the equation
   const [highlightPhase, setHighlightPhase] = useState<'idle' | 'tree1' | 'tree2' | 'total'>('idle');
@@ -106,12 +107,17 @@ export default function CountAllScreen({ navigation }: Props) {
     readingTokenRef.current++;
     AudioManager.stopSpeech();
     setHighlightPhase('idle');
+    setIsNarrating(false);
   };
 
   const readProblemAloud = async (targetProblem: Problem | null = null) => {
     const p = targetProblem ?? currentProblemRef.current ?? problem;
-    if (!p || isDemonstratingRef.current || isTutorialModeRef.current) return;
+    if (!p || isDemonstratingRef.current || isTutorialModeRef.current) {
+      setIsNarrating(false);
+      return;
+    }
 
+    setIsNarrating(true);
     const token = ++readingTokenRef.current;
     AudioManager.stopSpeech();
 
@@ -156,6 +162,7 @@ export default function CountAllScreen({ navigation }: Props) {
     } finally {
       if (readingTokenRef.current === token) {
         setHighlightPhase('idle');
+        setIsNarrating(false);
       }
     }
   };
@@ -417,9 +424,9 @@ export default function CountAllScreen({ navigation }: Props) {
     setTimeLeft(limit);
   };
 
-  // Timer only runs when gameplay is actively running (not in tutorial or modals)
+  // Timer only runs when gameplay is actively running (waits until narrator finishes dictating the problem)
   useEffect(() => {
-    if (isTutorialMode || isDemonstrating || showGreatJob || showFiveStreak || showIncorrectModal || !problem) {
+    if (isTutorialMode || isDemonstrating || isNarrating || showGreatJob || showFiveStreak || showIncorrectModal || !problem) {
       if (timerRef.current) {
         clearInterval(timerRef.current);
         timerRef.current = null;
@@ -434,7 +441,7 @@ export default function CountAllScreen({ navigation }: Props) {
         timerRef.current = null;
       }
     };
-  }, [isTutorialMode, isDemonstrating, showGreatJob, showFiveStreak, showIncorrectModal, problem]);
+  }, [isTutorialMode, isDemonstrating, isNarrating, showGreatJob, showFiveStreak, showIncorrectModal, problem]);
 
   useEffect(() => {
     if (timeLeft === 0 && !isTutorialMode && !isDemonstrating && !showGreatJob && !showFiveStreak && !showIncorrectModal && problem && selectedAnswer === null) {
@@ -515,6 +522,7 @@ export default function CountAllScreen({ navigation }: Props) {
     setOptions(Array.from(opts).sort((a, b) => a - b));
 
     if (!silent) {
+      setIsNarrating(true);
       setTimeout(() => {
         if (isMastery) {
           AudioManager.speak('Keep going! Practice makes perfect.', { rate: 0.78, pitch: 1.3 });
@@ -523,6 +531,8 @@ export default function CountAllScreen({ navigation }: Props) {
           readProblemAloud(p);
         }
       }, 350);
+    } else {
+      setIsNarrating(false);
     }
   };
 
