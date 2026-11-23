@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  SafeAreaView, ScrollView, Share, Alert,
+  SafeAreaView, ScrollView, Share, Alert, Modal,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
@@ -127,43 +127,80 @@ export default function AdvancedAnalyticsScreen({ navigation }: Props) {
     setAllSessions(recent);
   };
 
-  // Export CSV / Printable Learner Summary Report (FR-PM-01)
-  const handleExportReport = async () => {
+  const [showReportModal, setShowReportModal] = useState(false);
+
+  // Generates clean, human-readable plain text export (AddVenture_Report.txt)
+  const generateReportText = (): string => {
+    const dateStr = new Date().toLocaleDateString();
+    const gm = GameManager.getInstance();
+    const profile = gm.saveSystem.getProfile();
+
+    let report = `==================================================\n`;
+    report += `ADD-VENTURE LEARNER DIAGNOSTIC REPORT\n`;
+    report += `Generated : ${dateStr}\n`;
+    report += `Learner   : ${profile.name || 'Learner'}\n`;
+    report += `Stars     : ${profile.totalStars} ⭐\n`;
+    report += `==================================================\n\n`;
+
+    report += `[1] CORE COMPETENCY PILLARS (FR-PM-01)\n`;
+    report += `--------------------------------------------------\n`;
+    pillars.forEach(p => {
+      report += `• ${p.name} (${p.strategyLabel}):\n`;
+      report += `  - Mastery Tier : ${p.tier}\n`;
+      report += `  - Accuracy     : ${p.accuracy}%\n`;
+      report += `  - Avg Speed    : ${p.avgResponseMs > 0 ? (p.avgResponseMs / 1000).toFixed(1) + 's' : '—'}\n`;
+      report += `  - Sessions     : ${p.recentSessions.length} recorded\n\n`;
+    });
+
+    report += `[2] IDENTIFIED LEARNING GAPS (failCount >= 2)\n`;
+    report += `--------------------------------------------------\n`;
+    if (misconceptions.length === 0) {
+      report += `None detected. All practiced combinations meet proficiency.\n\n`;
+    } else {
+      misconceptions.forEach(m => {
+        report += `• Combination ${m.combo} in ${m.strategy} (Failed ${m.failCount} times)\n`;
+        const advice = STRATEGY_DIAGNOSTICS[m.strategy]?.advice ?? '';
+        report += `  Pedagogical Advice: ${advice}\n\n`;
+      });
+    }
+
+    report += `[3] RECOMMENDED LEARNING PLAN\n`;
+    report += `--------------------------------------------------\n`;
+    if (pillars.some(p => p.tier === 'Needs Reinforcement')) {
+      const needs = pillars.filter(p => p.tier === 'Needs Reinforcement').map(p => p.name).join(', ');
+      report += `• Prioritize reinforcement on ${needs}.\n`;
+      report += `  Focus on physical manipulatives (blocks/beans) to ground abstract equations into tactile counts.\n\n`;
+    } else if (pillars.some(p => p.tier === 'In Progress')) {
+      report += `• Consistent progress is underway. Practice 1 daily 10-problem session to build counting-on speed and transition to mental anchors.\n\n`;
+    } else {
+      report += `• Outstanding work! Your learner has achieved mastery across all foundational single-digit addition pillars.\n\n`;
+    }
+
+    report += `[4] CSV DATA EXPORT\n`;
+    report += `--------------------------------------------------\n`;
+    report += `"Strategy","Accuracy_Pct","Avg_Response_Sec","Mastery_Tier"\n`;
+    pillars.forEach(p => {
+      report += `"${p.name}",${p.accuracy},${p.avgResponseMs > 0 ? (p.avgResponseMs / 1000).toFixed(1) : 0},"${p.tier}"\n`;
+    });
+    report += `==================================================\n`;
+
+    return report;
+  };
+
+  const handleShareFile = async () => {
     try {
-      const dateStr = new Date().toLocaleDateString();
-      let report = `ADD-VENTURE LEARNER DIAGNOSTIC REPORT\nGenerated: ${dateStr}\n\n`;
-      report += `=== COMPETENCY PILLARS SUMMARY ===\n`;
-
-      pillars.forEach(p => {
-        report += `• ${p.name} (${p.strategyLabel}):\n`;
-        report += `  - Mastery Tier: ${p.tier}\n`;
-        report += `  - Accuracy: ${p.accuracy}%\n`;
-        report += `  - Avg Speed: ${(p.avgResponseMs / 1000).toFixed(1)}s\n`;
-      });
-
-      report += `\n=== RECURRING LEARNING GAPS (failCount >= 2) ===\n`;
-      if (misconceptions.length === 0) {
-        report += `None detected. All practiced combinations meet proficiency.\n`;
-      } else {
-        misconceptions.forEach(m => {
-          report += `• Combination ${m.combo} in ${m.strategy}: Failed ${m.failCount} times\n`;
-          const advice = STRATEGY_DIAGNOSTICS[m.strategy]?.advice ?? '';
-          report += `  Guidance: ${advice}\n`;
-        });
-      }
-
-      report += `\n=== CSV FORMATTED EXPORT ===\n`;
-      report += `"Strategy","Accuracy_Pct","Avg_Response_Sec","Mastery_Tier"\n`;
-      pillars.forEach(p => {
-        report += `"${p.name}",${p.accuracy},${(p.avgResponseMs / 1000).toFixed(1)},"${p.tier}"\n`;
-      });
-
-      await Share.share({
-        title: 'Add-Venture Learner Diagnostic Summary',
-        message: report,
-      });
+      const report = generateReportText();
+      await Share.share(
+        {
+          title: 'AddVenture_Learner_Report.txt',
+          message: report,
+        },
+        {
+          dialogTitle: 'Save or Share AddVenture_Learner_Report.txt',
+        }
+      );
     } catch (err) {
-      Alert.alert('Export Error', 'Unable to export diagnostic summary.');
+      Alert.alert('Export Error', 'Unable to share diagnostic summary.');
     }
   };
 
@@ -175,8 +212,8 @@ export default function AdvancedAnalyticsScreen({ navigation }: Props) {
           <Text style={styles.backIcon}>{'<'}</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Learning Diagnostics</Text>
-        <TouchableOpacity style={styles.exportBtn} onPress={handleExportReport} activeOpacity={0.8}>
-          <Text style={styles.exportBtnText}>Export 📄</Text>
+        <TouchableOpacity style={styles.exportBtn} onPress={() => setShowReportModal(true)} activeOpacity={0.8}>
+          <Text style={styles.exportBtnText}>Export .txt 📄</Text>
         </TouchableOpacity>
       </View>
 
@@ -193,13 +230,13 @@ export default function AdvancedAnalyticsScreen({ navigation }: Props) {
             <View style={styles.pillarHeader}>
               <View style={styles.pillarTitleRow}>
                 <Text style={styles.pillarEmoji}>{pillar.emoji}</Text>
-                <View>
-                  <Text style={styles.pillarName}>{pillar.name}</Text>
+                <View style={styles.pillarTitleTextWrap}>
+                  <Text style={styles.pillarName} numberOfLines={2}>{pillar.name}</Text>
                   <Text style={styles.pillarStrategyLabel}>Strategy: {pillar.strategyLabel}</Text>
                 </View>
               </View>
               <View style={[styles.tierBadge, { backgroundColor: pillar.tierColor }]}>
-                <Text style={styles.tierBadgeText}>
+                <Text style={styles.tierBadgeText} numberOfLines={1}>
                   {pillar.tierEmoji} {pillar.tier}
                 </Text>
               </View>
@@ -319,6 +356,62 @@ export default function AdvancedAnalyticsScreen({ navigation }: Props) {
           )}
         </View>
       </ScrollView>
+
+      {/* ═══════════════════════════════════════════════════════════════════
+          EXPORT TEXT FILE MODAL & VIEWER (AddVenture_Report.txt)
+      ═══════════════════════════════════════════════════════════════════ */}
+      <Modal
+        visible={showReportModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowReportModal(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.modalTitle}>📄 Diagnostic Report</Text>
+                <Text style={styles.modalSubtitle}>Preview & Export (AddVenture_Report.txt)</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.modalCloseBtn}
+                onPress={() => setShowReportModal(false)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.modalCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalDocScroll} contentContainerStyle={styles.modalDocContent}>
+              <Text style={styles.modalDocText} selectable={true}>
+                {generateReportText()}
+              </Text>
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
+              <Text style={styles.modalHelpTip}>
+                💡 Select text above to copy, or tap below to save as a file to Downloads, Google Drive, or send via Email.
+              </Text>
+              <View style={styles.modalBtnRow}>
+                <TouchableOpacity
+                  style={styles.saveFileBtn}
+                  onPress={handleShareFile}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.saveFileBtnText}>💾 Save / Share .txt File</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.modalDismissBtn}
+                  onPress={() => setShowReportModal(false)}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.modalDismissBtnText}>Close</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -401,37 +494,48 @@ const styles = StyleSheet.create({
   pillarHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: 12,
+    gap: 8,
   },
   pillarTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
+    flex: 1,
+    flexShrink: 1,
+  },
+  pillarTitleTextWrap: {
+    flex: 1,
+    flexShrink: 1,
   },
   pillarEmoji: {
-    fontSize: 28,
+    fontSize: 26,
   },
   pillarName: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '900',
     color: '#2E1C14',
+    flexWrap: 'wrap',
   },
   pillarStrategyLabel: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#757575',
     fontWeight: '600',
   },
   tierBadge: {
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     paddingVertical: 5,
     borderRadius: 12,
+    flexShrink: 0,
+    alignSelf: 'flex-start',
+    maxWidth: '42%',
   },
   tierBadgeText: {
     color: '#FFF',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '900',
-    letterSpacing: 0.4,
+    letterSpacing: 0.2,
   },
   pillarMetricsRow: {
     flexDirection: 'row',
@@ -616,5 +720,111 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#311B92',
     lineHeight: 18,
+  },
+
+  // Export Modal Styles
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  modalCard: {
+    width: '100%',
+    maxHeight: '85%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 18,
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#2E1C14',
+  },
+  modalSubtitle: {
+    fontSize: 12,
+    color: '#757575',
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  modalCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#EEEEEE',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalCloseText: {
+    fontSize: 16,
+    color: '#424242',
+    fontWeight: 'bold',
+  },
+  modalDocScroll: {
+    backgroundColor: '#F7F7FA',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    maxHeight: 340,
+  },
+  modalDocContent: {
+    padding: 14,
+  },
+  modalDocText: {
+    fontFamily: 'monospace',
+    fontSize: 12,
+    color: '#333333',
+    lineHeight: 18,
+  },
+  modalFooter: {
+    marginTop: 14,
+  },
+  modalHelpTip: {
+    fontSize: 11,
+    color: '#666666',
+    textAlign: 'center',
+    marginBottom: 10,
+    lineHeight: 15,
+  },
+  modalBtnRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  saveFileBtn: {
+    flex: 2,
+    backgroundColor: '#2E7D32',
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    elevation: 2,
+  },
+  saveFileBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  modalDismissBtn: {
+    flex: 1,
+    backgroundColor: '#EEEEEE',
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  modalDismissBtnText: {
+    color: '#424242',
+    fontSize: 14,
+    fontWeight: 'bold',
   },
 });

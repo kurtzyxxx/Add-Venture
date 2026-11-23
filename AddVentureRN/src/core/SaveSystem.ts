@@ -108,6 +108,7 @@ export class SaveSystem {
       settings: {
         musicEnabled: true,
         soundsEnabled: true,
+        tutorialsEnabled: true,
         voicePersona: 'oliver',
       },
       adaptiveReviewPending: {
@@ -174,6 +175,14 @@ export class SaveSystem {
           ...this.createFreshSave().settings,
           ...(loaded as any).settings,
         };
+        if (loaded.settings) {
+          loaded.settings = {
+            musicEnabled: loaded.settings.musicEnabled ?? true,
+            soundsEnabled: true,
+            tutorialsEnabled: loaded.settings.tutorialsEnabled ?? true,
+            voicePersona: loaded.settings.voicePersona === 'teacher' ? 'teacher' : 'oliver',
+          };
+        }
         loaded.adaptiveReviewPending = {
           ...this.createFreshSave().adaptiveReviewPending,
           ...(loaded as any).adaptiveReviewPending,
@@ -222,9 +231,12 @@ export class SaveSystem {
     return this.data.settings;
   }
 
-  public async updateSettings(settings: AudioSettings): Promise<void> {
-    this.data.settings = settings;
-    AudioManager.hydrate(settings);
+  public async updateSettings(settings: Partial<AudioSettings>): Promise<void> {
+    this.data.settings = {
+      ...this.data.settings,
+      ...settings,
+    };
+    AudioManager.hydrate(this.data.settings);
     await this.save();
   }
 
@@ -570,6 +582,28 @@ export class SaveSystem {
   public async resetAllTutorials(): Promise<void> {
     this.data.tutorialsSeen = {};
     await this.save();
+  }
+
+  /** Whether game tutorials are globally enabled in settings. */
+  public isTutorialsEnabled(): boolean {
+    return this.data.settings.tutorialsEnabled !== false;
+  }
+
+  /** Sets whether game tutorials should be shown when entering modes. */
+  public async setTutorialsEnabled(enabled: boolean): Promise<void> {
+    this.data.settings.tutorialsEnabled = enabled;
+    if (!enabled) {
+      await this.setAllTutorialsSeen(true);
+    } else {
+      await this.resetAllTutorials();
+    }
+    await this.save();
+  }
+
+  /** Whether the tutorial should be launched for the given strategy. */
+  public shouldShowTutorial(strategy: string): boolean {
+    if (!this.isTutorialsEnabled()) return false;
+    return !this.hasSeenTutorial(strategy);
   }
 
   // ── Internals ─────────────────────────────────────────────────────────────

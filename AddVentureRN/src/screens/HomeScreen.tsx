@@ -269,16 +269,14 @@ export default function HomeScreen({ navigation }: Props) {
     const coOk = ss.isCountOnUnlocked();
     const nbOk = ss.isNumberBondsUnlocked();
 
-    // Detect new unlocks with Oliver voice celebration
+    // Trigger visual unlock particle burst & sound effect (narrations removed per request)
     if (coOk && !prevCoUnlocked.current) {
       setCoTrigger(t => t + 1);
-      AudioManager.stopSpeech();
-      setTimeout(() => AudioManager.playVoiceClip('unlock_orange_grove'), 350);
+      AudioManager.playSfx('applause');
     }
     if (nbOk && !prevNbUnlocked.current) {
       setNbTrigger(t => t + 1);
-      AudioManager.stopSpeech();
-      setTimeout(() => AudioManager.playVoiceClip('unlock_harmony_tree'), 350);
+      AudioManager.playSfx('applause');
     }
     prevCoUnlocked.current = coOk;
     prevNbUnlocked.current = nbOk;
@@ -331,13 +329,10 @@ export default function HomeScreen({ navigation }: Props) {
     oliverSpeechTimeout.current = setTimeout(() => setOliverSpeech(null), 3500);
   };
 
-  // ── Game Launcher with friendly audio prompt ───────────────────────────────
-  const startGame = (strategy: string, routeName: 'CountAll' | 'CountOn' | 'NumberBonds', announcement?: string) => {
+  // ── Game Launcher ──────────────────────────────────────────────────────────
+  const startGame = (strategy: string, routeName: 'CountAll' | 'CountOn' | 'NumberBonds') => {
     AudioManager.playSfx('click');
     AudioManager.stopSpeech();
-    if (announcement) {
-      AudioManager.speak(announcement, { rate: 0.95, pitch: 1.3 });
-    }
     const gm = GameManager.getInstance();
     gm.startSession(strategy);
     navigation.navigate(routeName as any);
@@ -350,7 +345,6 @@ export default function HomeScreen({ navigation }: Props) {
         strategy: 'NUMBER_BONDS',
         route: 'NumberBonds' as const,
         title: 'PLAY: HARMONY TREE 🌳',
-        announcement: 'Off to the Harmony Tree!',
       };
     }
     if (countOnUnlocked) {
@@ -358,14 +352,12 @@ export default function HomeScreen({ navigation }: Props) {
         strategy: 'COUNT_ON',
         route: 'CountOn' as const,
         title: 'PLAY: ORANGE GROVE 🍊',
-        announcement: 'Off to the Orange Grove!',
       };
     }
     return {
       strategy: 'COUNT_ALL',
       route: 'CountAll' as const,
       title: 'PLAY: APPLE ORCHARD 🍎',
-      announcement: 'Off to the Apple Orchard!',
     };
   };
 
@@ -504,7 +496,7 @@ export default function HomeScreen({ navigation }: Props) {
         <GlowRing color="#E53935" pulse={!countOnUnlocked} />
         <TouchableOpacity
           style={[styles.node, styles.appleNode]}
-          onPress={() => startGame('COUNT_ALL', 'CountAll', 'Welcome to the Apple Orchard!')}
+          onPress={() => startGame('COUNT_ALL', 'CountAll')}
           activeOpacity={0.82}
         >
           <Text style={styles.nodeIcon}>🍎</Text>
@@ -532,7 +524,7 @@ export default function HomeScreen({ navigation }: Props) {
             styles.node,
             countOnUnlocked ? styles.orangeNode : styles.nodeLocked,
           ]}
-          onPress={countOnUnlocked ? () => startGame('COUNT_ON', 'CountOn', 'Welcome to the Orange Grove!') : undefined}
+          onPress={countOnUnlocked ? () => startGame('COUNT_ON', 'CountOn') : undefined}
           disabled={!countOnUnlocked}
           activeOpacity={0.82}
         >
@@ -566,7 +558,7 @@ export default function HomeScreen({ navigation }: Props) {
             styles.node,
             numberBondsUnlocked ? styles.treeNode : styles.nodeLocked,
           ]}
-          onPress={numberBondsUnlocked ? () => startGame('NUMBER_BONDS', 'NumberBonds', 'Welcome to the Harmony Tree!') : undefined}
+          onPress={numberBondsUnlocked ? () => startGame('NUMBER_BONDS', 'NumberBonds') : undefined}
           disabled={!numberBondsUnlocked}
           activeOpacity={0.82}
         >
@@ -594,7 +586,7 @@ export default function HomeScreen({ navigation }: Props) {
         <Animated.View style={{ transform: [{ scale: playBtnPulse }], width: '100%', alignItems: 'center' }}>
           <TouchableOpacity
             style={styles.bigPlayButton}
-            onPress={() => startGame(nextTarget.strategy, nextTarget.route, nextTarget.announcement)}
+            onPress={() => startGame(nextTarget.strategy, nextTarget.route)}
             activeOpacity={0.85}
           >
             <Text style={styles.bigPlayButtonText}>{nextTarget.title}</Text>

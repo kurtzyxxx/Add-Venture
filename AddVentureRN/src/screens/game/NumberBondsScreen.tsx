@@ -119,8 +119,8 @@ export default function NumberBondsScreen({ navigation }: Props) {
   const currentProblemRef = useRef<Problem | null>(null);
 
   // In-game tutorial walkthrough mode
-  const [isTutorialMode, setIsTutorialMode] = useState(true);
-  const isTutorialModeRef = useRef(true);
+  const [isTutorialMode, setIsTutorialMode] = useState(() => GameManager.getInstance().saveSystem.shouldShowTutorial('NUMBER_BONDS'));
+  const isTutorialModeRef = useRef(isTutorialMode);
   const [tutorialMessage, setTutorialMessage] = useState('');
   const [tutorialFinished, setTutorialFinished] = useState(false);
   const [roundKey, setRoundKey] = useState(0);
@@ -246,6 +246,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
     setHighlightPhase('idle');
 
     const gm = GameManager.getInstance();
+    await gm.saveSystem.markTutorialSeen('NUMBER_BONDS', true);
     setTimeLeft(gm.sessionTimerLimit);
     loadNewProblem(false);
   };
