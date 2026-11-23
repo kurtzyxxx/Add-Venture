@@ -45,6 +45,7 @@ export default function CountOnScreen({ navigation }: Props) {
   const isDemonstratingRef = useRef(false);
   const [isHintDemo, setIsHintDemo] = useState(false);
   const isHintDemoRef = useRef(false);
+  const [isNarrating, setIsNarrating] = useState(false);
   const [highlightPhase, setHighlightPhase] = useState<'idle' | 'base' | 'extra' | 'total'>('idle');
   const readingTokenRef = useRef(0);
   const [demoMessage, setDemoMessage] = useState('');
@@ -119,12 +120,17 @@ export default function CountOnScreen({ navigation }: Props) {
     readingTokenRef.current++;
     AudioManager.stopSpeech();
     setHighlightPhase('idle');
+    setIsNarrating(false);
   };
 
   const readProblemAloud = async (targetProblem: Problem | null = null) => {
     const p = targetProblem ?? currentProblemRef.current ?? problem;
-    if (!p || isDemonstratingRef.current || isTutorialModeRef.current) return;
+    if (!p || isDemonstratingRef.current || isTutorialModeRef.current) {
+      setIsNarrating(false);
+      return;
+    }
 
+    setIsNarrating(true);
     const token = ++readingTokenRef.current;
     AudioManager.stopSpeech();
 
@@ -169,6 +175,7 @@ export default function CountOnScreen({ navigation }: Props) {
     } finally {
       if (readingTokenRef.current === token) {
         setHighlightPhase('idle');
+        setIsNarrating(false);
       }
     }
   };
@@ -395,9 +402,9 @@ export default function CountOnScreen({ navigation }: Props) {
     startTutorialWalkthrough();
   };
 
-  // Timer only runs during active gameplay
+  // Timer only runs during active gameplay (waits until narrator finishes dictating the problem)
   useEffect(() => {
-    if (isTutorialMode || isDemonstrating || showGreatJob || showFiveStreak || showIncorrectModal || !problem) {
+    if (isTutorialMode || isDemonstrating || isNarrating || showGreatJob || showFiveStreak || showIncorrectModal || !problem) {
       if (timerRef.current) {
         clearInterval(timerRef.current);
         timerRef.current = null;
@@ -412,7 +419,7 @@ export default function CountOnScreen({ navigation }: Props) {
         timerRef.current = null;
       }
     };
-  }, [isTutorialMode, isDemonstrating, showGreatJob, showFiveStreak, showIncorrectModal, problem]);
+  }, [isTutorialMode, isDemonstrating, isNarrating, showGreatJob, showFiveStreak, showIncorrectModal, problem]);
 
   useEffect(() => {
     if (timeLeft === 0 && !isTutorialMode && !isDemonstrating && !showGreatJob && !showFiveStreak && !showIncorrectModal && problem && selectedAnswer === null) {
@@ -491,6 +498,7 @@ export default function CountOnScreen({ navigation }: Props) {
     setOptions(Array.from(opts).sort((a, b) => a - b));
 
     if (!silent) {
+      setIsNarrating(true);
       setTimeout(() => {
         if (isMastery) {
           AudioManager.speak('Keep going! Practice makes perfect.', { rate: 0.78, pitch: 1.3 });
@@ -499,6 +507,8 @@ export default function CountOnScreen({ navigation }: Props) {
           readProblemAloud(p);
         }
       }, 350);
+    } else {
+      setIsNarrating(false);
     }
   };
 
@@ -2019,19 +2029,21 @@ const styles = StyleSheet.create({
     position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'visible',
   },
   basketInsideBowl: {
     position: 'absolute',
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'hidden',
+    overflow: 'visible',
   },
   basketFruitsInsideContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
     alignItems: 'center',
-    maxWidth: 240,
+    maxWidth: 250,
+    overflow: 'visible',
   },
   basketFixedFruitItem: {
     margin: 3,
@@ -2239,11 +2251,13 @@ const styles = StyleSheet.create({
     position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'visible',
   },
   topBasketInnerBowl: {
     position: 'absolute',
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'visible',
   },
   topBasketCountBadge: {
     position: 'absolute',

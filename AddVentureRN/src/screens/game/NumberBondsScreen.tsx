@@ -59,6 +59,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
   const isDemonstratingRef = useRef(false);
   const [isHintDemo, setIsHintDemo] = useState(false);
   const isHintDemoRef = useRef(false);
+  const [isNarrating, setIsNarrating] = useState(false);
   const [demoMessage, setDemoMessage] = useState('');
   const [highlightedFruitId, setHighlightedFruitId] = useState<string | null>(null);
   const [animatingFruitId, setAnimatingFruitId] = useState<string | null>(null);
@@ -155,12 +156,17 @@ export default function NumberBondsScreen({ navigation }: Props) {
     readingTokenRef.current++;
     AudioManager.stopSpeech();
     setHighlightPhase('idle');
+    setIsNarrating(false);
   };
 
   const readProblemAloud = async (targetProblem: Problem | null = null) => {
     const p = targetProblem ?? currentProblemRef.current ?? problem;
-    if (!p || isDemonstratingRef.current || isTutorialModeRef.current) return;
+    if (!p || isDemonstratingRef.current || isTutorialModeRef.current) {
+      setIsNarrating(false);
+      return;
+    }
 
+    setIsNarrating(true);
     const token = ++readingTokenRef.current;
     AudioManager.stopSpeech();
 
@@ -204,6 +210,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
     } finally {
       if (readingTokenRef.current === token) {
         setHighlightPhase('idle');
+        setIsNarrating(false);
       }
     }
   };
@@ -460,9 +467,9 @@ export default function NumberBondsScreen({ navigation }: Props) {
     startTutorialWalkthrough();
   };
 
-  // Timer only runs during active gameplay
+  // Timer only runs during active gameplay (waits until narrator finishes dictating the problem)
   useEffect(() => {
-    if (isTutorialMode || isDemonstrating || showGreatJob || showFiveStreak || showIncorrectModal || showTotalModal || !problem) {
+    if (isTutorialMode || isDemonstrating || isNarrating || showGreatJob || showFiveStreak || showIncorrectModal || showTotalModal || !problem) {
       if (timerRef.current) {
         clearInterval(timerRef.current);
         timerRef.current = null;
@@ -477,7 +484,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
         timerRef.current = null;
       }
     };
-  }, [isTutorialMode, isDemonstrating, showGreatJob, showFiveStreak, showIncorrectModal, showTotalModal, problem]);
+  }, [isTutorialMode, isDemonstrating, isNarrating, showGreatJob, showFiveStreak, showIncorrectModal, showTotalModal, problem]);
 
   useEffect(() => {
     if (timeLeft === 0 && !isTutorialMode && !isDemonstrating && !showGreatJob && !showFiveStreak && !showIncorrectModal && !showTotalModal && problem && selectedOption === null) {
@@ -570,6 +577,7 @@ export default function NumberBondsScreen({ navigation }: Props) {
     setTreeFruits(newTreeFruits);
 
     if (!silent) {
+      setIsNarrating(true);
       setTimeout(() => {
         if (isMastery) {
           AudioManager.speak('Keep going! Practice makes perfect.', { rate: 0.78, pitch: 1.3 });
@@ -578,6 +586,8 @@ export default function NumberBondsScreen({ navigation }: Props) {
           readProblemAloud(p);
         }
       }, 350);
+    } else {
+      setIsNarrating(false);
     }
   };
 
@@ -1632,15 +1642,16 @@ export default function NumberBondsScreen({ navigation }: Props) {
                   </View>
                   <View style={styles.totalFruitsCluster}>
                     {Array.from({ length: problem.num1 }).map((_, i) => (
-                      <Text
-                        key={i}
-                        style={[
-                          styles.totalFruitEmoji,
-                          problem.num1 > 6 && styles.totalFruitEmojiCompact,
-                        ]}
-                      >
-                        {treeFruits[0]?.emoji ?? '🍎'}
-                      </Text>
+                      <View key={i} style={styles.totalFruitPill}>
+                        <Text
+                          style={[
+                            styles.totalFruitEmoji,
+                            problem.num1 > 6 && styles.totalFruitEmojiCompact,
+                          ]}
+                        >
+                          {treeFruits[0]?.emoji ?? '🍎'}
+                        </Text>
+                      </View>
                     ))}
                   </View>
                   <Text style={styles.totalTapHintText}>🔍 Tap to count</Text>
@@ -2478,21 +2489,21 @@ const styles = StyleSheet.create({
     zIndex: 7,
   },
   totalFruitsBadge: {
-    backgroundColor: 'rgba(255, 111, 0, 0.70)',
+    backgroundColor: '#FF6F00',
     borderWidth: 3,
-    borderColor: 'rgba(255, 255, 255, 0.95)',
+    borderColor: '#FFFFFF',
     borderRadius: 22,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     paddingVertical: 6,
     alignItems: 'center',
     justifyContent: 'center',
-    elevation: 7,
+    elevation: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.28,
+    shadowOpacity: 0.35,
     shadowRadius: 5,
     minWidth: 112,
-    maxWidth: 195,
+    maxWidth: 200,
   },
   totalTapHintText: {
     fontSize: 9.5,
@@ -2698,16 +2709,33 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     justifyContent: 'center',
     alignItems: 'center',
-    maxWidth: 175,
+    maxWidth: 180,
+  },
+  totalFruitPill: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#FFE082',
+    paddingHorizontal: 3,
+    paddingVertical: 1,
+    marginHorizontal: 2.5,
+    marginVertical: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.25,
+    shadowRadius: 1.5,
+    elevation: 3,
   },
   totalFruitEmoji: {
-    fontSize: 22,
-    marginHorizontal: 2,
-    marginVertical: 1,
+    fontSize: 20,
+    textShadowColor: 'rgba(0, 0, 0, 0.35)',
+    textShadowOffset: { width: 0.5, height: 0.5 },
+    textShadowRadius: 1,
   },
   totalFruitEmojiCompact: {
-    fontSize: 17.5,
-    marginHorizontal: 1.5,
+    fontSize: 16,
   },
 
   // Actions Section
