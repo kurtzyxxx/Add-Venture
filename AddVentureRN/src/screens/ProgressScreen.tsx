@@ -222,18 +222,28 @@ function BadgeItem({ emoji, label, sublabel, unlocked }: { emoji: string; label:
   );
 }
 
-// ─── Progress Bar ─────────────────────────────────────────────────────────────
+// ─── Progress Bar with Mastery Tiers (FR-PM-01) ──────────────────────────────
 function ProgressBar({ label, emoji, progress, accuracy, completed, barColor, unlocked }: {
   label: string; emoji: string; progress: number; accuracy: number;
   completed: number; barColor: string; unlocked: boolean;
 }) {
+  const tier = accuracy >= 80 ? 'Mastered' : accuracy >= 50 ? 'In Progress' : 'Needs Reinforcement';
+  const tierColor = accuracy >= 80 ? '#4CAF50' : accuracy >= 50 ? '#FFA000' : '#E53935';
+
   return (
     <View style={pbStyles.row}>
       <Text style={pbStyles.emoji}>{unlocked ? emoji : '🔒'}</Text>
       <View style={pbStyles.info}>
         <View style={pbStyles.labelRow}>
           <Text style={pbStyles.label}>{label}</Text>
-          <Text style={pbStyles.accuracy}>{unlocked ? `${accuracy}%` : '—'}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            {unlocked && (
+              <View style={[pbStyles.tierBadge, { backgroundColor: tierColor }]}>
+                <Text style={pbStyles.tierBadgeText}>{tier}</Text>
+              </View>
+            )}
+            <Text style={pbStyles.accuracy}>{unlocked ? `${accuracy}%` : '—'}</Text>
+          </View>
         </View>
         <View style={pbStyles.track}>
           <View style={[pbStyles.fill, { width: `${unlocked ? Math.round(progress * 100) : 0}%`, backgroundColor: unlocked ? barColor : '#BDBDBD' }]} />
@@ -379,6 +389,16 @@ const pbStyles = StyleSheet.create({
   labelRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 },
   label: { fontSize: 14, fontWeight: '900', color: '#4E342E' },
   accuracy: { fontSize: 13, fontWeight: 'bold', color: '#757575' },
+  tierBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  tierBadgeText: {
+    color: '#FFF',
+    fontSize: 9,
+    fontWeight: '900',
+  },
   track: { height: 14, backgroundColor: '#E0E0E0', borderRadius: 7, overflow: 'hidden', marginBottom: 3 },
   fill: { height: '100%', borderRadius: 7 },
   completed: { fontSize: 10, color: '#9E9E9E', fontWeight: 'bold' },

@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { AudioManager } from '../core/AudioManager';
 
 interface HintConfirmModalProps {
   visible: boolean;
@@ -14,17 +15,23 @@ export function HintConfirmModal({
   onCancel,
   onConfirm,
 }: HintConfirmModalProps) {
+  useEffect(() => {
+    if (!visible) return;
+    AudioManager.stopSpeech();
+    AudioManager.speak('Want Oliver to show you how? Tap Show Me!', { rate: 0.9, pitch: 1.25 });
+  }, [visible]);
+
   return (
     <Modal visible={visible} transparent animationType="fade">
       <View style={styles.backdrop}>
         <View style={styles.card}>
           <View style={styles.iconBubble}>
-            <Text style={styles.icon}>💡</Text>
+            <Text style={styles.icon}>🦉</Text>
           </View>
 
-          <Text style={styles.title}>Use a hint?</Text>
+          <Text style={styles.title}>Watch Oliver? 💡</Text>
           <Text style={styles.message}>
-            You have {hintsRemaining} hint{hintsRemaining === 1 ? '' : 's'} left for this session.
+            Oliver will show you how to solve this step-by-step!
           </Text>
 
           <View style={styles.hintCounter}>
@@ -37,10 +44,10 @@ export function HintConfirmModal({
 
           <View style={styles.actions}>
             <TouchableOpacity style={styles.cancelButton} onPress={onCancel} activeOpacity={0.85}>
-              <Text style={styles.cancelText}>Cancel</Text>
+              <Text style={styles.cancelText}>Not Now</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.confirmButton} onPress={onConfirm} activeOpacity={0.85}>
-              <Text style={styles.confirmText}>Use Hint</Text>
+              <Text style={styles.confirmText}>Show Me! 🦉</Text>
             </TouchableOpacity>
           </View>
         </View>
