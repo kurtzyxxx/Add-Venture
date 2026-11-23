@@ -94,8 +94,8 @@ export default function CountOnScreen({ navigation }: Props) {
   const [showViewBasket, setShowViewBasket] = useState(false);
 
   // In-Game Live Tutorial Walkthrough State
-  const [isTutorialMode, setIsTutorialMode] = useState(true);
-  const isTutorialModeRef = useRef(true);
+  const [isTutorialMode, setIsTutorialMode] = useState(() => GameManager.getInstance().saveSystem.shouldShowTutorial('COUNT_ON'));
+  const isTutorialModeRef = useRef(isTutorialMode);
   const [tutorialFinished, setTutorialFinished] = useState(false);
   const [tutorialMessage, setTutorialMessage] = useState('Watch Oliver show you how to play!');
 
@@ -200,6 +200,7 @@ export default function CountOnScreen({ navigation }: Props) {
     setHighlightPhase('idle');
 
     const gm = GameManager.getInstance();
+    await gm.saveSystem.markTutorialSeen('COUNT_ON', true);
     setTimeLeft(gm.sessionTimerLimit);
     loadNewProblem(false);
   };

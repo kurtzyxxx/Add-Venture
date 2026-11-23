@@ -386,8 +386,8 @@ const pbStyles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 16 },
   emoji: { fontSize: 26, marginRight: 10, marginTop: 2 },
   info: { flex: 1 },
-  labelRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 },
-  label: { fontSize: 14, fontWeight: '900', color: '#4E342E' },
+  labelRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5, gap: 6 },
+  label: { fontSize: 14, fontWeight: '900', color: '#4E342E', flex: 1, flexShrink: 1 },
   accuracy: { fontSize: 13, fontWeight: 'bold', color: '#757575' },
   tierBadge: {
     paddingHorizontal: 6,

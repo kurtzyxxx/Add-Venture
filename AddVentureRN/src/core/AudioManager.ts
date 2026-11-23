@@ -1,7 +1,7 @@
 import { Audio } from 'expo-av';
 import * as Speech from 'expo-speech';
 
-export type VoicePersona = 'oliver' | 'teacher' | 'storyteller';
+export type VoicePersona = 'oliver' | 'teacher';
 
 export interface PersonaConfig {
   id: VoicePersona;
@@ -35,21 +35,12 @@ export const VOICE_PERSONAS: Record<VoicePersona, PersonaConfig> = {
     rate: 0.78,
     samplePhrase: "Hello! You are doing amazing work in math today. Let's practice!",
   },
-  storyteller: {
-    id: 'storyteller',
-    name: 'Storyteller',
-    icon: '📖',
-    subtitle: 'Calm & Soothing Guide',
-    description: 'Relaxed, melodic enunciation for quiet focus',
-    pitch: 1.05,
-    rate: 0.75,
-    samplePhrase: "Step by step, we count together through the apple orchard.",
-  },
 };
 
 export interface AudioSettings {
   musicEnabled: boolean;
   soundsEnabled: boolean;
+  tutorialsEnabled?: boolean;
   voicePersona?: VoicePersona;
 }
 
@@ -158,7 +149,7 @@ async function ensureAudioMode(): Promise<void> {
     await Audio.setAudioModeAsync({
       playsInSilentModeIOS: true,
       staysActiveInBackground: false,
-      shouldDuckAndroid: true,
+      shouldDuckAndroid: false,
     });
     audioModeConfigured = true;
   } catch (_) {
@@ -166,43 +157,67 @@ async function ensureAudioMode(): Promise<void> {
   }
 }
 
+let isBgmLoading = false;
+
 async function internalStartBgm(): Promise<void> {
   if (!settings.musicEnabled) return;
+  if (bgmSound || isBgmLoading) {
+    if (bgmSound) {
+      try {
+        const status = await bgmSound.getStatusAsync();
+        if (status.isLoaded && !status.isPlaying) {
+          await bgmSound.playAsync();
+          isBgmPlaying = true;
+        }
+      } catch (_) {}
+    }
+    return;
+  }
+
+  isBgmLoading = true;
   await ensureAudioMode();
   try {
-    if (!bgmSound) {
-      const { sound } = await Audio.Sound.createAsync(
-        SOUND_ASSETS.bgm,
-        {
-          isLooping: true,
-          volume: isDucked ? BGM_DUCKED_VOL : BGM_NORMAL_VOL,
-          shouldPlay: true,
-        }
-      );
-      bgmSound = sound;
-      isBgmPlaying = true;
-    } else {
-      const status = await bgmSound.getStatusAsync();
-      if (status.isLoaded && !status.isPlaying) {
-        await bgmSound.playAsync();
-        isBgmPlaying = true;
+    const { sound } = await Audio.Sound.createAsync(
+      SOUND_ASSETS.bgm,
+      {
+        isLooping: true,
+        volume: isDucked ? BGM_DUCKED_VOL : BGM_NORMAL_VOL,
+        shouldPlay: settings.musicEnabled,
       }
+    );
+
+    // If music was turned off while sound was loading, discard immediately
+    if (!settings.musicEnabled) {
+      await sound.stopAsync().catch(() => {});
+      await sound.unloadAsync().catch(() => {});
+      isBgmLoading = false;
+      return;
     }
+
+    // Guard against race conditions
+    if (bgmSound) {
+      await sound.stopAsync().catch(() => {});
+      await sound.unloadAsync().catch(() => {});
+      isBgmLoading = false;
+      return;
+    }
+
+    bgmSound = sound;
+    isBgmPlaying = true;
   } catch (err) {
     console.warn('[AudioManager] startBgm failed:', err);
+  } finally {
+    isBgmLoading = false;
   }
 }
 
 async function internalPauseBgm(): Promise<void> {
-  try {
-    if (bgmSound) {
-      const status = await bgmSound.getStatusAsync();
-      if (status.isLoaded && status.isPlaying) {
-        await bgmSound.pauseAsync();
-      }
-      isBgmPlaying = false;
-    }
-  } catch (_) {}
+  isBgmPlaying = false;
+  if (bgmSound) {
+    try {
+      await bgmSound.pauseAsync();
+    } catch (_) {}
+  }
 }
 
 async function internalResumeBgm(): Promise<void> {
@@ -212,23 +227,32 @@ async function internalResumeBgm(): Promise<void> {
   } else {
     try {
       const status = await bgmSound.getStatusAsync();
-      if (status.isLoaded && !status.isPlaying) {
-        await bgmSound.playAsync();
+      if (status.isLoaded) {
+        if (!status.isPlaying) {
+          await bgmSound.playAsync();
+        }
         isBgmPlaying = true;
+      } else {
+        await internalStopBgm();
+        await internalStartBgm();
       }
-    } catch (_) {}
+    } catch (_) {
+      await internalStopBgm();
+      await internalStartBgm();
+    }
   }
 }
 
 async function internalStopBgm(): Promise<void> {
-  try {
-    if (bgmSound) {
-      await bgmSound.stopAsync();
-      await bgmSound.unloadAsync();
-      bgmSound = null;
-      isBgmPlaying = false;
-    }
-  } catch (_) {}
+  const sound = bgmSound;
+  bgmSound = null;
+  isBgmPlaying = false;
+  if (sound) {
+    try {
+      await sound.stopAsync();
+      await sound.unloadAsync();
+    } catch (_) {}
+  }
 }
 
 async function internalDuckBgm(): Promise<void> {
@@ -302,13 +326,9 @@ export const AudioManager = {
   hydrate(nextSettings: AudioSettings) {
     const prevMusic = settings.musicEnabled;
     settings.musicEnabled = nextSettings.musicEnabled;
-    settings.soundsEnabled = nextSettings.soundsEnabled;
-    settings.voicePersona = nextSettings.voicePersona ?? 'oliver';
-
-    if (!settings.soundsEnabled) {
-      this.stopSpeech();
-      internalUnduckBgm();
-    }
+    settings.soundsEnabled = true; // Sounds must always be enabled per user specification
+    settings.tutorialsEnabled = nextSettings.tutorialsEnabled ?? true;
+    settings.voicePersona = nextSettings.voicePersona === 'teacher' ? 'teacher' : 'oliver';
 
     if (!settings.musicEnabled) {
       internalPauseBgm();

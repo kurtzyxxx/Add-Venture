@@ -19,12 +19,13 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
 export default function SettingsScreen({ navigation }: Props) {
   const gm = GameManager.getInstance();
   const [settings, setSettings] = useState<AudioSettings>(gm.saveSystem.getSettings());
-  const [tutorialsEnabled, setTutorialsEnabled] = useState<boolean>(!gm.saveSystem.areAllTutorialsSeen());
+  const [tutorialsEnabled, setTutorialsEnabled] = useState<boolean>(gm.saveSystem.isTutorialsEnabled());
   const [isResetting, setIsResetting] = useState(false);
 
   const updateSetting = useCallback(
     async <K extends keyof AudioSettings>(key: K, value: AudioSettings[K]) => {
-      const next = { ...settings, [key]: value };
+      AudioManager.playSfx('click');
+      const next = { ...settings, [key]: value, soundsEnabled: true };
       setSettings(next);
       await gm.saveSystem.updateSettings(next);
     },
@@ -33,12 +34,10 @@ export default function SettingsScreen({ navigation }: Props) {
 
   const handleTutorialsToggle = useCallback(
     async (enabled: boolean) => {
+      AudioManager.playSfx('click');
       setTutorialsEnabled(enabled);
-      if (enabled) {
-        await gm.saveSystem.resetAllTutorials();
-      } else {
-        await gm.saveSystem.setAllTutorialsSeen(true);
-      }
+      await gm.saveSystem.setTutorialsEnabled(enabled);
+      setSettings(prev => ({ ...prev, tutorialsEnabled: enabled }));
     },
     [gm]
   );
@@ -81,7 +80,7 @@ export default function SettingsScreen({ navigation }: Props) {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Audio Toggles Panel */}
+        {/* Settings Toggles Panel */}
         <View style={styles.panel}>
           <SettingToggle
             icon="🎵"
@@ -89,16 +88,6 @@ export default function SettingsScreen({ navigation }: Props) {
             description="Background music preference"
             enabled={settings.musicEnabled}
             onChange={value => updateSetting('musicEnabled', value)}
-          />
-
-          <View style={styles.divider} />
-
-          <SettingToggle
-            icon="🔊"
-            title="Sounds"
-            description="Voice prompts and feedback sounds"
-            enabled={settings.soundsEnabled}
-            onChange={value => updateSetting('soundsEnabled', value)}
           />
 
           <View style={styles.divider} />
@@ -231,14 +220,18 @@ function SettingToggle({
       <View style={styles.toggleGroup}>
         <TouchableOpacity
           style={[styles.toggleButton, enabled && styles.toggleOn]}
-          onPress={() => onChange(true)}
+          onPress={() => {
+            if (!enabled) onChange(true);
+          }}
           activeOpacity={0.85}
         >
           <Text style={[styles.toggleText, enabled && styles.toggleTextActive]}>On</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.toggleButton, !enabled && styles.toggleOff]}
-          onPress={() => onChange(false)}
+          onPress={() => {
+            if (enabled) onChange(false);
+          }}
           activeOpacity={0.85}
         >
           <Text style={[styles.toggleText, !enabled && styles.toggleTextActive]}>Off</Text>

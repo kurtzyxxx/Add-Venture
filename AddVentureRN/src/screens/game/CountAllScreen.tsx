@@ -72,8 +72,8 @@ export default function CountAllScreen({ navigation }: Props) {
   const dropZoneViewRef = useRef<View>(null);
 
   // In-Game Live Tutorial Walkthrough State (FR-CA-01, FR-ON-01)
-  const [isTutorialMode, setIsTutorialMode] = useState(true);
-  const isTutorialModeRef = useRef(true);
+  const [isTutorialMode, setIsTutorialMode] = useState(() => GameManager.getInstance().saveSystem.shouldShowTutorial('COUNT_ALL'));
+  const isTutorialModeRef = useRef(isTutorialMode);
   const [tutorialFinished, setTutorialFinished] = useState(false);
   const [tutorialMessage, setTutorialMessage] = useState('Watch Oliver show you how to play!');
 
@@ -184,6 +184,7 @@ export default function CountAllScreen({ navigation }: Props) {
     setHighlightPhase('idle');
 
     const gm = GameManager.getInstance();
+    await gm.saveSystem.markTutorialSeen('COUNT_ALL', true);
     resetTimer(gm.sessionTimerLimit);
     loadNewProblem(false);
   };
